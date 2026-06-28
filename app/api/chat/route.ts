@@ -57,6 +57,9 @@ export async function POST(request: Request) {
 
   if (attachments?.length) {
     for (const att of attachments) {
+      if (!att.storage_path.startsWith(`${user.id}/`)) {
+        return NextResponse.json({ error: "Invalid attachment path" }, { status: 403 });
+      }
       await supabase.from("attachments").insert({
         conversation_id: convId,
         storage_path: att.storage_path,
@@ -105,7 +108,7 @@ export async function POST(request: Request) {
             userId: user.id,
             agentId,
             conversationId: convId,
-            supabase: serviceClient,
+            supabase,
           },
           onText: (text) => {
             fullContent += text;
