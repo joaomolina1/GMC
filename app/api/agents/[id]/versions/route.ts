@@ -12,7 +12,7 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { system_prompt, model, temperature, skills } = body;
+  const { system_prompt, model, temperature, skills, tools } = body;
 
   const { data: latest } = await supabase
     .from("agent_versions")
@@ -33,6 +33,7 @@ export async function POST(
       model: model ?? "claude-sonnet-4-20250514",
       temperature: temperature ?? 0.7,
       skills: skills ?? ["web_search", "read_document", "vision", "knowledge_search"],
+      tools: tools ?? {},
       status: "draft",
       created_by: user.id,
     })

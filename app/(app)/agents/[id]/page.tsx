@@ -18,6 +18,9 @@ import {
   Trash2,
   RefreshCw,
   ScanText,
+  Globe,
+  Database,
+  Code,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -35,6 +38,7 @@ interface AgentVersion {
   model: string;
   temperature: number;
   skills: string[];
+  tools?: Record<string, Record<string, unknown>>;
   status: string;
   published_at: string | null;
 }
@@ -67,6 +71,20 @@ const SKILL_META: Record<string, { label: string; desc: string; icon: typeof Sea
 
 const CORE_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
 
+const PLUGIN_SKILLS = ["http_request", "sql_query", "run_code"];
+
+const PLUGIN_SKILL_META: Record<string, { label: string; desc: string; icon: typeof Globe; tone: string }> = {
+  http_request: { label: "HTTP Request", desc: "Chamadas REST a APIs externas", icon: Globe, tone: "bg-indigo-50 text-indigo-600" },
+  sql_query: { label: "SQL Query", desc: "Queries SELECT read-only na BD GMC", icon: Database, tone: "bg-cyan-50 text-cyan-600" },
+  run_code: { label: "Run Code", desc: "JavaScript sandboxed para cálculos", icon: Code, tone: "bg-orange-50 text-orange-600" },
+};
+
+const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, unknown>> = {
+  http_request: { allowed_hosts: ["*.mediacapital.pt"], timeout_ms: 10000 },
+  sql_query: { max_rows: 100 },
+  run_code: { timeout_ms: 5000 },
+};
+
 const docTone: Record<string, "success" | "warning" | "danger"> = {
   ready: "success",
   error: "danger",
@@ -86,6 +104,7 @@ export default function AgentBuilderPage() {
   const [model, setModel] = useState("claude-sonnet-4-20250514");
   const [temperature, setTemperature] = useState(0.7);
   const [skills, setSkills] = useState<string[]>(CORE_SKILLS);
+  const [toolConfigs, setToolConfigs] = useState<Record<string, Record<string, unknown>>>(DEFAULT_TOOL_CONFIGS);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [docs, setDocs] = useState<
     Array<{
@@ -128,6 +147,10 @@ export default function AgentBuilderPage() {
       setModel(current.model);
       setTemperature(Number(current.temperature));
       setSkills(current.skills ?? CORE_SKILLS);
+      setToolConfigs({
+        ...DEFAULT_TOOL_CONFIGS,
+        ...(current.tools as Record<string, Record<string, unknown>> | undefined),
+      });
     }
     setVersions(data.agent_versions ?? []);
   }, [id]);
@@ -143,7 +166,7 @@ export default function AgentBuilderPage() {
     await fetch(`/api/agents/${id}/versions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system_prompt: systemPrompt, model, temperature, skills }),
+      body: JSON.stringify({ system_prompt: systemPrompt, model, temperature, skills, tools: toolConfigs }),
     });
     await fetch(`/api/agents/${id}`, {
       method: "PATCH",
@@ -440,43 +463,118 @@ export default function AgentBuilderPage() {
         )}
 
         {tab === "skills" && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {CORE_SKILLS.map((skill) => {
-              const meta = SKILL_META[skill];
-              const Icon = meta.icon;
-              const checked = skills.includes(skill);
-              return (
-                <button
-                  key={skill}
-                  type="button"
-                  onClick={() =>
-                    setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Skills Core</h3>
+              <p className="mt-1 text-xs text-slate-500">Funcionalidades base incluídas na Fase 1–2.</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {CORE_SKILLS.map((skill) => {
+                  const meta = SKILL_META[skill];
+                  const Icon = meta.icon;
+                  const checked = skills.includes(skill);
+                  return (
+                    <button
+                      key={skill}
+                      type="button"
+                      onClick={() =>
+                        setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
+                      }
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                        checked
+                          ? "border-brand-300 bg-brand-50/50 ring-1 ring-brand-200"
+                          : "border-line hover:border-slate-300 hover:bg-slate-50"
+                      )}
+                    >
+                      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
+                        <Icon size={18} />
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                        <p className="text-xs text-slate-500">{meta.desc}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                          checked ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300"
+                        )}
+                      >
+                        {checked && <Check size={14} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border-t border-line pt-6">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-800">Plugins (Fase 4)</h3>
+                <Badge tone="brand">Novo</Badge>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                HTTP, SQL read-only e execução de código JavaScript sandboxed.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {PLUGIN_SKILLS.map((skill) => {
+                  const meta = PLUGIN_SKILL_META[skill];
+                  const Icon = meta.icon;
+                  const checked = skills.includes(skill);
+                  return (
+                    <button
+                      key={skill}
+                      type="button"
+                      onClick={() =>
+                        setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
+                      }
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                        checked
+                          ? "border-brand-300 bg-brand-50/50 ring-1 ring-brand-200"
+                          : "border-line hover:border-slate-300 hover:bg-slate-50"
+                      )}
+                    >
+                      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
+                        <Icon size={18} />
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                        <p className="text-xs text-slate-500">{meta.desc}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                          checked ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300"
+                        )}
+                      >
+                        {checked && <Check size={14} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {skills.includes("http_request") && (
+                <Input
+                  label="HTTP — hosts permitidos"
+                  hint="Separados por vírgula (ex: api.example.com, *.mediacapital.pt)"
+                  value={((toolConfigs.http_request?.allowed_hosts as string[]) ?? []).join(", ")}
+                  onChange={(e) =>
+                    setToolConfigs({
+                      ...toolConfigs,
+                      http_request: {
+                        ...toolConfigs.http_request,
+                        allowed_hosts: e.target.value
+                          .split(",")
+                          .map((h) => h.trim())
+                          .filter(Boolean),
+                      },
+                    })
                   }
-                  className={cn(
-                    "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                    checked
-                      ? "border-brand-300 bg-brand-50/50 ring-1 ring-brand-200"
-                      : "border-line hover:border-slate-300 hover:bg-slate-50"
-                  )}
-                >
-                  <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
-                    <Icon size={18} />
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
-                    <p className="text-xs text-slate-500">{meta.desc}</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-                      checked ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300"
-                    )}
-                  >
-                    {checked && <Check size={14} />}
-                  </span>
-                </button>
-              );
-            })}
+                  className="mt-4"
+                />
+              )}
+            </div>
           </div>
         )}
 

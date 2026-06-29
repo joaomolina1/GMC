@@ -1,6 +1,7 @@
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import type { ChatMessage, ToolCall } from "@lib/ai/types";
-import { resolveAgentSkills, getSkill } from "./registry";
+import { logAudit } from "@lib/audit";
+import { resolveAgentSkills, getSkill, PLUGIN_SKILL_KEYS } from "./registry";
 import { toToolDefinition, type SkillContext } from "./types";
 
 export interface AgentRunConfig {
@@ -8,6 +9,7 @@ export interface AgentRunConfig {
   systemPrompt: string;
   temperature: number;
   skills: Array<string | { key: string; enabled?: boolean }>;
+  skillConfigs?: Record<string, Record<string, unknown>>;
 }
 
 export interface RunAgentOptions {
@@ -27,6 +29,10 @@ export interface RunAgentResult {
 
 export async function runAgentLoop(options: RunAgentOptions): Promise<RunAgentResult> {
   const { config, messages, ctx, maxIterations = 10, onText } = options;
+  const enrichedCtx: SkillContext = {
+    ...ctx,
+    skillConfigs: config.skillConfigs ?? ctx.skillConfigs,
+  };
   const skills = resolveAgentSkills(config.skills);
   const tools = skills.map(toToolDefinition);
   const provider = getProvider(config.model);
@@ -51,7 +57,7 @@ export async function runAgentLoop(options: RunAgentOptions): Promise<RunAgentRe
 
     if (result.toolCalls && result.toolCalls.length > 0) {
       for (const tc of result.toolCalls) {
-        const skillResult = await executeToolCall(tc, ctx);
+        const skillResult = await executeToolCall(tc, enrichedCtx);
         toolCallLog.push({ name: tc.name, input: tc.input, result: skillResult });
         currentMessages.push({
           role: "assistant",
@@ -91,6 +97,10 @@ export async function* streamAgentLoop(
   | { type: "done"; usage: { promptTokens: number; completionTokens: number }; costEur: number }
 > {
   const { config, messages, ctx, maxIterations = 10 } = options;
+  const enrichedCtx: SkillContext = {
+    ...ctx,
+    skillConfigs: config.skillConfigs ?? ctx.skillConfigs,
+  };
   const skills = resolveAgentSkills(config.skills);
   const tools = skills.map(toToolDefinition);
   const provider = getProvider(config.model);
@@ -125,7 +135,7 @@ export async function* streamAgentLoop(
 
     if (toolCalls.length > 0) {
       for (const tc of toolCalls) {
-        const result = await executeToolCall(tc, ctx);
+        const result = await executeToolCall(tc, enrichedCtx);
         yield { type: "tool", name: tc.name, result };
         currentMessages.push({ role: "assistant", content: `[Used tool: ${tc.name}]` });
         currentMessages.push({ role: "user", content: `Tool result for ${tc.name}:\n${result}` });
@@ -149,7 +159,20 @@ async function executeToolCall(
   const skill = getSkill(toolCall.name);
   if (!skill) return `Unknown skill: ${toolCall.name}`;
   try {
-    return await skill.execute(toolCall.input, ctx);
+    const result = await skill.execute(toolCall.input, ctx);
+    if (PLUGIN_SKILL_KEYS.includes(toolCall.name)) {
+      await logAudit(ctx.supabase, {
+        actorId: ctx.userId,
+        action: `skill.${toolCall.name}`,
+        entityType: "agent",
+        entityId: ctx.agentId,
+        metadata: {
+          conversationId: ctx.conversationId,
+          inputKeys: Object.keys(toolCall.input),
+        },
+      });
+    }
+    return result;
   } catch (err) {
     return `Skill error: ${err instanceof Error ? err.message : "Unknown error"}`;
   }

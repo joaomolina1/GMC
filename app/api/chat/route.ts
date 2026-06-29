@@ -88,6 +88,8 @@ export async function POST(request: Request) {
     ? (version.skills as string[])
     : ["web_search", "read_document", "vision", "knowledge_search"];
 
+  const skillConfigs = (version.tools as Record<string, Record<string, unknown>>) ?? {};
+
   const encoder = new TextEncoder();
   let fullContent = "";
   let finalUsage = { promptTokens: 0, completionTokens: 0 };
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
             systemPrompt,
             temperature: Number(version.temperature),
             skills,
+            skillConfigs,
           },
           messages,
           ctx: {

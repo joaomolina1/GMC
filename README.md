@@ -42,6 +42,14 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Página de detalhe** — stats, skills, criador, ações rápidas
 - **Agent Builder** — visibilidade, categoria e tags para publicação
 
+## Fase 4 — Skills Plugins ✅
+
+- **HTTP Request** — chamadas REST com proteção SSRF, timeout e allowlist de hosts
+- **SQL Query** — queries SELECT read-only via RPC `execute_readonly_sql`
+- **Run Code** — JavaScript sandboxed (vm) para cálculos e transformações
+- **Agent Builder** — secção Plugins com configuração de hosts permitidos
+- **Auditoria** — invocações de plugins registadas em `audit_logs`
+
 ## Setup
 
 ```bash
@@ -97,6 +105,6 @@ lib/flows/        → Flow Engine (Fase 5)
 ## Roadmap
 
 - **Fase 3** — Marketplace ✅
-- **Fase 4** — Skills plugins (HTTP, SQL, Run Code)
+- **Fase 4** — Skills plugins (HTTP, SQL, Run Code) ✅
 - **Fase 5** — Flow Builder
 - **Fase 6** — Enterprise (Entra ID, quotas, auditoria)

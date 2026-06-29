@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
-import { listAllSkills } from "@lib/skills/registry";
+import { listAllSkills, listCoreSkills, listPluginSkills } from "@lib/skills/registry";
 
 export async function GET() {
   const supabase = await createClient();
@@ -18,5 +18,7 @@ export async function GET() {
       description: s.description,
       inputSchema: s.inputSchema,
     })),
+    core: listCoreSkills().map((s) => s.key),
+    plugins: listPluginSkills().map((s) => s.key),
   });
 }

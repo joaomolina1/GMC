@@ -5,6 +5,7 @@ export interface SkillContext {
   agentId: string;
   conversationId?: string;
   supabase: SupabaseClient;
+  skillConfigs?: Record<string, Record<string, unknown>>;
 }
 
 export interface SkillDefinition {
