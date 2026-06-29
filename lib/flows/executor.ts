@@ -1,4 +1,5 @@
 import { runAgent } from "@lib/chat/agent";
+import { buildAgentRuntimeConfig, persistAgentGeneratedFiles } from "@lib/agents/runtime";
 import { executeFlowCode } from "./code-runner";
 import type {
   FlowGraph,
@@ -105,17 +106,23 @@ async function executeNode(
           input: state.lastOutput,
         });
 
-        const result = await runAgent(
-          {
-            model: version.model,
-            systemPrompt: version.system_prompt,
-            temperature: version.temperature != null ? Number(version.temperature) : undefined,
-            effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
-            thinkingEnabled: Boolean(version.thinking_enabled),
-            webSearch: true,
-          },
-          [{ role: "user", content: prompt }]
-        );
+        const runtimeConfig = await buildAgentRuntimeConfig({
+          supabase: ctx.supabase,
+          agentId,
+          version,
+          userMessage: prompt,
+        });
+
+        const result = await runAgent(runtimeConfig, [{ role: "user", content: prompt }]);
+
+        let generatedFiles: Awaited<ReturnType<typeof persistAgentGeneratedFiles>> = [];
+        if (result.anthropicFileIds?.length) {
+          generatedFiles = await persistAgentGeneratedFiles({
+            fileIds: result.anthropicFileIds,
+            userId: ctx.userId,
+            supabase: ctx.supabase,
+          });
+        }
 
         state.lastOutput = result.content;
         return {
@@ -123,7 +130,11 @@ async function executeNode(
           nodeType: node.type,
           status: "completed",
           input: { ...input, prompt, agentId },
-          output: { text: result.content, costEur: result.costEur },
+          output: {
+            text: result.content,
+            costEur: result.costEur,
+            files: generatedFiles,
+          },
         };
       }
 

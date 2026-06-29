@@ -5,11 +5,16 @@ import { Bot, Eraser, Paperclip, Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Avatar } from "@/_design_system/Avatar";
 import { ChatMessageContent } from "@/_components/ChatMessageContent";
+import {
+  GeneratedFilesList,
+  type GeneratedFileView,
+} from "@/_components/GeneratedFilesList";
 import { cn } from "@lib/utils";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  files?: GeneratedFileView[];
 }
 
 interface AgentChatPanelProps {
@@ -69,6 +74,7 @@ export function AgentChatPanel({
     setStreaming(true);
 
     let assistantContent = "";
+    let assistantFiles: GeneratedFileView[] = [];
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -112,7 +118,9 @@ export function AgentChatPanel({
             text?: string;
             message?: string;
             name?: string;
+            label?: string;
             conversationId?: string;
+            files?: GeneratedFileView[];
           };
           try {
             data = JSON.parse(payload);
@@ -127,15 +135,47 @@ export function AgentChatPanel({
             assistantContent += data.text;
             setMessages((prev) => {
               const updated = [...prev];
-              updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: assistantContent,
+                files: assistantFiles,
+              };
               return updated;
             });
           }
           if (data.type === "done" && data.conversationId) {
             setConversationId(data.conversationId);
           }
-          if (data.type === "server_tool" && data.name) {
-            assistantContent += `\n\n🔍 *A pesquisar na web…*\n`;
+          if (data.type === "server_tool") {
+            const label =
+              data.label ??
+              (data.name === "code_execution"
+                ? "A gerar documento…"
+                : data.name === "web_search"
+                  ? "A pesquisar na web…"
+                  : data.name);
+            assistantContent += `\n\n⚙️ *${label}*\n`;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: assistantContent,
+                files: assistantFiles,
+              };
+              return updated;
+            });
+          }
+          if (data.type === "files" && Array.isArray(data.files)) {
+            assistantFiles = data.files;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: assistantContent,
+                files: assistantFiles,
+              };
+              return updated;
+            });
           }
         }
       }
@@ -160,8 +200,12 @@ export function AgentChatPanel({
   }
 
   const suggestions = compact
-    ? ["Olá!", "Resume este texto", "Pesquisa na web"]
-    : ["Resume este documento", "Pesquisa as últimas notícias", "O que vês nesta imagem?"];
+    ? ["Olá!", "Cria um PPTX de 3 slides", "Pesquisa na web"]
+    : [
+        "Cria uma apresentação PowerPoint sobre o tema X",
+        "Gera um Excel com os dados",
+        "Pesquisa as últimas notícias",
+      ];
 
   const isError =
     messages.length > 0 &&
@@ -272,7 +316,12 @@ export function AgentChatPanel({
                         <span className="ml-1 text-xs">A pensar…</span>
                       </span>
                     ) : (
-                      <ChatMessageContent content={msg.content} role={msg.role} />
+                      <>
+                        <ChatMessageContent content={msg.content} role={msg.role} />
+                        {msg.role === "assistant" && msg.files && msg.files.length > 0 && (
+                          <GeneratedFilesList files={msg.files} />
+                        )}
+                      </>
                     )}
                   </div>
                   {msg.content && !isStreamingEmpty && (

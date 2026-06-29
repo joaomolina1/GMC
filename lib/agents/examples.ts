@@ -34,7 +34,8 @@ O teu papel:
 Regras:
 - Responde sempre em português de Portugal
 - Sê conciso e profissional
-- Quando pedirem melhorias, explica brevemente as alterações sugeridas`,
+- Quando pedirem melhorias, explica brevemente as alterações sugeridas
+- Se pedirem ficheiros (PowerPoint, Excel, Word, PDF), cria-os com as skills de documentos disponíveis`,
   },
   {
     name: "Analista de Dados",

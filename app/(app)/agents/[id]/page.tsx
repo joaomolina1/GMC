@@ -17,6 +17,7 @@ import {
   Database,
   Code,
   Sparkles,
+  FileOutput,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
@@ -27,6 +28,7 @@ import { AgentChatPanel } from "@/_components/AgentChatPanel";
 import { cn } from "@lib/utils";
 import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
+import { TOOL_CREATE_DOCUMENTS } from "@lib/agents/agent-tools";
 import { MARKETPLACE_CATEGORIES } from "@lib/marketplace/constants";
 
 type Tab = "general" | "knowledge" | "tools" | "skills" | "versions";
@@ -96,9 +98,21 @@ const TOOL_META: Record<string, { label: string; desc: string; icon: LucideIcon;
     icon: Library,
     tone: "bg-emerald-50 text-emerald-600",
   },
+  [TOOL_CREATE_DOCUMENTS]: {
+    label: "Criar documentos",
+    desc: "PowerPoint, Excel, Word e PDF via skills nativas Anthropic (API)",
+    icon: FileOutput,
+    tone: "bg-amber-50 text-amber-700",
+  },
 };
 
-const CORE_TOOLS = ["web_search", "read_document", "vision", "knowledge_search"];
+const CORE_TOOLS = [
+  "web_search",
+  TOOL_CREATE_DOCUMENTS,
+  "read_document",
+  "vision",
+  "knowledge_search",
+];
 
 const PLUGIN_TOOLS = ["http_request", "sql_query", "run_code"];
 
@@ -792,7 +806,8 @@ function AdvancedTabContent({
     return (
       <div className="space-y-4">
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Tools são capacidades técnicas do agente (pesquisa web, leitura de documentos, etc.).
+          Tools são capacidades técnicas do agente. <strong>Criar documentos</strong> activa
+          PowerPoint, Excel, Word e PDF via API Anthropic (requer code execution na conta).
         </p>
         <div className="grid grid-cols-1 gap-2">
           {CORE_TOOLS.map((tool) => {

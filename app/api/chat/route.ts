@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@lib/supabase/server";
+import { createClient, tryCreateServiceClient } from "@lib/supabase/server";
 import { logUsage } from "@lib/audit";
-import { streamAgent } from "@lib/chat/agent";
+import {
+  buildAgentRuntimeConfig,
+  persistAgentGeneratedFiles,
+  streamAgent,
+} from "@lib/agents/runtime";
 import { buildChatMessages } from "@lib/chat/messages";
-import { buildKnowledgeContext } from "@lib/chat/rag";
-import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
+import type { GeneratedFileRef } from "@lib/chat/agent";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const start = Date.now();
@@ -102,65 +105,78 @@ export async function POST(request: Request) {
     .limit(50);
 
   const messages = await buildChatMessages(history ?? [], supabase);
-
-  const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
-  let skillsPrompt = "";
-  if (skillPackageIds.length > 0) {
-    const { data: skillPackages } = await supabase
-      .from("agent_skill_packages")
-      .select("id, name, description, skill_md, extra_files")
-      .in("id", skillPackageIds);
-    if (skillPackages?.length) {
-      skillsPrompt = buildAgentSkillsPrompt(skillPackages);
-    }
-  }
-
-  const knowledgeContext = await buildKnowledgeContext(supabase, agentId, message);
-  const systemPrompt = [version.system_prompt, skillsPrompt, knowledgeContext]
-    .filter(Boolean)
-    .join("");
+  const runtimeConfig = await buildAgentRuntimeConfig({
+    supabase,
+    agentId,
+    version,
+    userMessage: message,
+  });
 
   const encoder = new TextEncoder();
   let fullContent = "";
   let finalUsage = { promptTokens: 0, completionTokens: 0 };
   let finalCost = 0;
+  let generatedFiles: GeneratedFileRef[] = [];
+  const fileStorage = (await tryCreateServiceClient()) ?? supabase;
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of streamAgent(
-          {
-            model: version.model,
-            systemPrompt,
-            temperature: version.temperature != null ? Number(version.temperature) : undefined,
-            effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
-            thinkingEnabled: Boolean(version.thinking_enabled),
-            webSearch: true,
-          },
-          messages
-        )) {
+        let pendingFileIds: string[] = [];
+
+        for await (const chunk of streamAgent(runtimeConfig, messages)) {
           if (chunk.type === "text") {
             fullContent += chunk.text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk.text })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk.text })}\n\n`)
+            );
           }
           if (chunk.type === "server_tool") {
+            const label =
+              chunk.name === "code_execution"
+                ? "A gerar documento…"
+                : chunk.name === "web_search"
+                  ? "A pesquisar na web…"
+                  : chunk.name;
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name, label })}\n\n`)
             );
+          }
+          if (chunk.type === "anthropic_file_ids") {
+            pendingFileIds = chunk.fileIds;
           }
           if (chunk.type === "done") {
             finalUsage = chunk.usage;
             finalCost = chunk.costEur;
+          }
+        }
+
+        if (pendingFileIds.length > 0) {
+          generatedFiles = await persistAgentGeneratedFiles({
+            fileIds: pendingFileIds,
+            userId: user.id,
+            supabase: fileStorage,
+          });
+          if (generatedFiles.length > 0) {
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "done", conversationId: convId })}\n\n`)
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "files", files: generatedFiles })}\n\n`
+              )
             );
           }
         }
 
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "done", conversationId: convId })}\n\n`)
+        );
+
         await supabase.from("messages").insert({
           conversation_id: convId,
           role: "assistant",
-          content: { text: fullContent },
+          content: {
+            text: fullContent,
+            generated_files: generatedFiles,
+          },
           tokens_prompt: finalUsage.promptTokens,
           tokens_completion: finalUsage.completionTokens,
           model: version.model,
@@ -175,7 +191,11 @@ export async function POST(request: Request) {
           completionTokens: finalUsage.completionTokens,
           costEur: finalCost,
           latencyMs: Date.now() - start,
-          metadata: { agentId, conversationId: convId },
+          metadata: {
+            agentId,
+            conversationId: convId,
+            generatedFiles: generatedFiles.length,
+          },
         });
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

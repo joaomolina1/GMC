@@ -14,7 +14,7 @@ import {
 } from "@lib/agents/execute-agent";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function POST(
   request: Request,
@@ -71,6 +71,7 @@ export async function POST(
       agentId,
       input: body.input,
       apiKeyId: auth.ctx.keyId,
+      fileStorage: supabase,
     });
     return NextResponse.json(result);
   } catch (err) {

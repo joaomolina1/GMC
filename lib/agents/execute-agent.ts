@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatMessage } from "@lib/ai/types";
-import { runAgent } from "@lib/chat/agent";
-import { buildKnowledgeContext } from "@lib/chat/rag";
-import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
 import { logUsage } from "@lib/audit";
+import {
+  buildAgentRuntimeConfig,
+  persistAgentGeneratedFiles,
+  runAgent,
+} from "@lib/agents/runtime";
 
 export function normalizeApiInput(input: unknown): string {
   if (input == null) {
@@ -70,10 +72,11 @@ export interface RunAgentApiOptions {
   agentId: string;
   input: unknown;
   apiKeyId?: string;
+  fileStorage?: SupabaseClient;
 }
 
 export async function runAgentViaApi(options: RunAgentApiOptions) {
-  const { supabase, userId, agentId, input, apiKeyId } = options;
+  const { supabase, userId, agentId, input, apiKeyId, fileStorage } = options;
   const message = normalizeApiInput(input);
   const start = Date.now();
 
@@ -102,36 +105,25 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
     throw new Error(modelCheck.message);
   }
 
-  const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
-  let skillsPrompt = "";
-  if (skillPackageIds.length > 0) {
-    const { data: skillPackages } = await supabase
-      .from("agent_skill_packages")
-      .select("id, name, description, skill_md, extra_files")
-      .in("id", skillPackageIds);
-    if (skillPackages?.length) {
-      skillsPrompt = buildAgentSkillsPrompt(skillPackages);
-    }
-  }
-
-  const knowledgeContext = await buildKnowledgeContext(supabase, agentId, message);
-  const systemPrompt = [version.system_prompt, skillsPrompt, knowledgeContext]
-    .filter(Boolean)
-    .join("");
+  const runtimeConfig = await buildAgentRuntimeConfig({
+    supabase,
+    agentId,
+    version,
+    userMessage: message,
+  });
 
   const messages: ChatMessage[] = [{ role: "user", content: message }];
 
-  const result = await runAgent(
-    {
-      model: version.model,
-      systemPrompt,
-      temperature: version.temperature != null ? Number(version.temperature) : undefined,
-      effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
-      thinkingEnabled: Boolean(version.thinking_enabled),
-      webSearch: true,
-    },
-    messages
-  );
+  const result = await runAgent(runtimeConfig, messages);
+
+  let files: Awaited<ReturnType<typeof persistAgentGeneratedFiles>> = [];
+  if (result.anthropicFileIds?.length && fileStorage) {
+    files = await persistAgentGeneratedFiles({
+      fileIds: result.anthropicFileIds,
+      userId,
+      supabase: fileStorage,
+    });
+  }
 
   await logUsage(supabase, {
     userId,
@@ -145,6 +137,7 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
       agentId,
       apiKeyId,
       source: "api_v1",
+      generatedFiles: files.length,
     },
   });
 
@@ -155,6 +148,7 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
       completion_tokens: result.usage.completionTokens,
     },
     cost_eur: result.costEur,
+    files,
     tool_calls: [],
   };
 }
