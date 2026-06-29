@@ -59,9 +59,10 @@ export function TopBar({ user }: TopBarProps) {
 
   const displayName = user?.full_name ?? user?.email ?? "Utilizador";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] ?? user.role : null;
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-line bg-surface/80 px-5 backdrop-blur-sm sm:px-7">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-line bg-white px-5 sm:px-7">
       <div className="min-w-0">
         <h1 className="truncate text-lg font-semibold text-slate-900">{meta.title}</h1>
         <p className="hidden truncate text-sm text-slate-500 sm:block">{meta.subtitle}</p>
@@ -69,9 +70,11 @@ export function TopBar({ user }: TopBarProps) {
 
       <div className="flex items-center gap-2 sm:gap-3">
         <button
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-          title="Notificações"
+          className="relative flex h-10 w-10 cursor-not-allowed items-center justify-center rounded-xl text-slate-400"
+          title="Notificações — em breve"
           type="button"
+          disabled
+          aria-label="Notificações (em breve)"
         >
           <Bell size={19} />
         </button>
@@ -93,19 +96,21 @@ export function TopBar({ user }: TopBarProps) {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full z-20 mt-2 w-56 origin-top-right animate-fade-in rounded-xl border border-line bg-white p-1.5 shadow-[var(--shadow-card-hover)]">
+            <div className="absolute right-0 top-full z-50 mt-2 w-56 origin-top-right animate-fade-in rounded-xl border border-line bg-white p-1.5 shadow-[var(--shadow-card-hover)]">
               <div className="border-b border-line px-3 py-2.5">
                 <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
                 {user?.email && <p className="truncate text-xs text-slate-400">{user.email}</p>}
               </div>
-              <Link
-                href="/admin"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-              >
-                <Settings size={16} />
-                Backoffice
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <Settings size={16} />
+                  Backoffice
+                </Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"

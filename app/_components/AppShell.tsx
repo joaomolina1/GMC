@@ -23,8 +23,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               : undefined
           }
         />
-        <main className="flex-1 overflow-auto px-5 py-6 sm:px-7 sm:py-8">
-          <div className="mx-auto max-w-7xl animate-rise">{children}</div>
+        <main className="relative z-0 flex-1 overflow-auto px-5 py-6 sm:px-7 sm:py-8">
+          <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
     </div>
