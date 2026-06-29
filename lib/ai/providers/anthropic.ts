@@ -137,11 +137,14 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async embed(options: EmbedOptions): Promise<EmbedResult> {
-    // Anthropic doesn't have embeddings — use Voyage via simple hash fallback for Phase 1
+    const { getVoyageProvider, pseudoEmbedding } = await import("./voyage");
+    const voyage = getVoyageProvider();
+    if (voyage.isConfigured) {
+      return voyage.embed(options);
+    }
     const inputs = Array.isArray(options.input) ? options.input : [options.input];
-    const embeddings = inputs.map((text) => simpleEmbedding(text, 1536));
     return {
-      embeddings,
+      embeddings: inputs.map((text) => pseudoEmbedding(text, 1536)),
       usage: { totalTokens: inputs.join("").length / 4 },
     };
   }
@@ -170,13 +173,3 @@ export class AnthropicProvider implements AIProvider {
   }
 }
 
-/** Deterministic pseudo-embedding for Phase 1 when no embedding API is configured */
-function simpleEmbedding(text: string, dims: number): number[] {
-  const vec = new Array(dims).fill(0);
-  for (let i = 0; i < text.length; i++) {
-    const idx = (text.charCodeAt(i) * (i + 1)) % dims;
-    vec[idx] += Math.sin(text.charCodeAt(i) * 0.1);
-  }
-  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
-  return vec.map((v) => v / norm);
-}

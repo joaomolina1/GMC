@@ -15,6 +15,9 @@ import {
   Library,
   Check,
   FileCheck2,
+  Trash2,
+  RefreshCw,
+  ScanText,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -56,9 +59,9 @@ const TABS: { id: Tab; label: string }[] = [
 
 const SKILL_META: Record<string, { label: string; desc: string; icon: typeof Search; tone: string }> = {
   web_search: { label: "Web Search", desc: "Pesquisa na internet em tempo real", icon: Search, tone: "bg-sky-50 text-sky-600" },
-  read_document: { label: "Read Document", desc: "Lê PDF, Word, Excel e CSV", icon: FileText, tone: "bg-rose-50 text-rose-600" },
-  vision: { label: "Vision", desc: "Analisa e interpreta imagens", icon: Eye, tone: "bg-violet-50 text-violet-600" },
-  knowledge_search: { label: "Knowledge Search", desc: "RAG semântico sobre documentos", icon: Library, tone: "bg-emerald-50 text-emerald-600" },
+  read_document: { label: "Read Document", desc: "PDF, Word, Excel, PowerPoint, CSV + OCR", icon: FileText, tone: "bg-rose-50 text-rose-600" },
+  vision: { label: "Vision", desc: "Análise multimodal de imagens e scans", icon: Eye, tone: "bg-violet-50 text-violet-600" },
+  knowledge_search: { label: "Knowledge Search", desc: "RAG semântico com embeddings Voyage", icon: Library, tone: "bg-emerald-50 text-emerald-600" },
 };
 
 const CORE_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
@@ -80,9 +83,28 @@ export default function AgentBuilderPage() {
   const [temperature, setTemperature] = useState(0.7);
   const [skills, setSkills] = useState<string[]>(CORE_SKILLS);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
-  const [docs, setDocs] = useState<Array<{ id: string; filename: string; status: string }>>([]);
+  const [docs, setDocs] = useState<
+    Array<{
+      id: string;
+      filename: string;
+      status: string;
+      metadata?: {
+        ocr_used?: boolean;
+        char_count?: number;
+        chunk_count?: number;
+        embedding_model?: string;
+      };
+    }>
+  >([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [docAction, setDocAction] = useState<string | null>(null);
+
+  const loadDocs = useCallback(async () => {
+    const res = await fetch(`/api/knowledge/upload?agentId=${id}`);
+    const d = await res.json();
+    setDocs(Array.isArray(d) ? d : []);
+  }, [id]);
 
   const loadAgent = useCallback(async () => {
     const res = await fetch(`/api/agents/${id}`);
@@ -105,11 +127,8 @@ export default function AgentBuilderPage() {
 
   useEffect(() => {
     loadAgent();
-    fetch(`/api/knowledge/upload?agentId=${id}`)
-      .then((r) => r.json())
-      .then((d) => setDocs(Array.isArray(d) ? d : []))
-      .catch(() => {});
-  }, [id, loadAgent]);
+    loadDocs();
+  }, [id, loadAgent, loadDocs]);
 
   async function saveNewVersion() {
     setSaving(true);
@@ -151,12 +170,32 @@ export default function AgentBuilderPage() {
   async function uploadKnowledge(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setDocAction("upload");
     const form = new FormData();
     form.append("file", file);
     form.append("agentId", id);
     await fetch("/api/knowledge/upload", { method: "POST", body: form });
-    const res = await fetch(`/api/knowledge/upload?agentId=${id}`);
-    setDocs(await res.json());
+    await loadDocs();
+    setDocAction(null);
+    e.target.value = "";
+  }
+
+  async function deleteDoc(docId: string) {
+    setDocAction(docId);
+    await fetch(`/api/knowledge/upload?id=${docId}`, { method: "DELETE" });
+    await loadDocs();
+    setDocAction(null);
+  }
+
+  async function reindexDoc(docId: string) {
+    setDocAction(`reindex-${docId}`);
+    await fetch("/api/knowledge/reindex", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId: docId }),
+    });
+    await loadDocs();
+    setDocAction(null);
   }
 
   if (!agent) {
@@ -266,14 +305,20 @@ export default function AgentBuilderPage() {
                 <Upload size={22} />
               </span>
               <span className="text-sm font-medium text-slate-700">Carregar documento</span>
-              <span className="text-xs text-slate-400">PDF, DOCX, TXT, MD, CSV</span>
+              <span className="text-xs text-slate-400">
+                PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, PNG, JPG
+              </span>
               <input
                 type="file"
                 className="hidden"
                 onChange={uploadKnowledge}
-                accept=".pdf,.docx,.txt,.md,.csv"
+                accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp"
+                disabled={docAction === "upload"}
               />
             </label>
+            {docAction === "upload" && (
+              <p className="text-center text-sm text-brand-600">A processar documento...</p>
+            )}
             {docs.length > 0 ? (
               <ul className="space-y-2">
                 {docs.map((doc) => (
@@ -281,11 +326,44 @@ export default function AgentBuilderPage() {
                     key={doc.id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3"
                   >
-                    <span className="flex min-w-0 items-center gap-2.5 text-sm text-slate-700">
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
                       <FileCheck2 size={18} className="shrink-0 text-slate-400" />
-                      <span className="truncate">{doc.filename}</span>
-                    </span>
-                    <Badge tone={docTone[doc.status] ?? "warning"}>{doc.status}</Badge>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-700">{doc.filename}</p>
+                        {doc.metadata && (
+                          <p className="text-xs text-slate-400">
+                            {doc.metadata.chunk_count != null && `${doc.metadata.chunk_count} chunks`}
+                            {doc.metadata.char_count != null && ` · ${doc.metadata.char_count.toLocaleString()} chars`}
+                            {doc.metadata.ocr_used && (
+                              <span className="ml-1 inline-flex items-center gap-0.5 text-violet-500">
+                                <ScanText size={10} /> OCR
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge tone={docTone[doc.status] ?? "warning"}>{doc.status}</Badge>
+                      {doc.status === "ready" && (
+                        <button
+                          onClick={() => reindexDoc(doc.id)}
+                          disabled={docAction === `reindex-${doc.id}`}
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600"
+                          title="Reindexar"
+                        >
+                          <RefreshCw size={15} className={docAction === `reindex-${doc.id}` ? "animate-spin" : ""} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteDoc(doc.id)}
+                        disabled={docAction === doc.id}
+                        className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

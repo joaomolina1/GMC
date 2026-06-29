@@ -234,7 +234,7 @@ export default function AgentChatPage() {
               type="file"
               className="hidden"
               onChange={handleFileUpload}
-              accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+              accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.xlsx,.pptx"
             />
           </label>
           <input

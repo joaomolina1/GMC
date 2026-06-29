@@ -64,7 +64,7 @@ export default async function DashboardPage() {
     { icon: Search, name: "Web Search", desc: "Pesquisa na internet em tempo real", tone: "bg-sky-50 text-sky-600" },
     { icon: FileText, name: "Read Document", desc: "PDF, Word, Excel e CSV", tone: "bg-rose-50 text-rose-600" },
     { icon: Eye, name: "Vision", desc: "Análise e interpretação de imagens", tone: "bg-violet-50 text-violet-600" },
-    { icon: Library, name: "Knowledge Search", desc: "RAG semântico sobre documentos", tone: "bg-emerald-50 text-emerald-600" },
+    { icon: Library, name: "Knowledge Search", desc: "RAG semântico com embeddings Voyage AI", tone: "bg-emerald-50 text-emerald-600" },
   ];
 
   const quickActions = [
@@ -168,7 +168,7 @@ export default async function DashboardPage() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Skills Core (Fase 1)</CardTitle>
+            <CardTitle>Skills Core (Fase 1–2)</CardTitle>
           </CardHeader>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {skills.map(({ icon: Icon, name, desc, tone }) => (

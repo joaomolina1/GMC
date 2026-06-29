@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@lib/supabase/server";
 import { processKnowledgeDocument } from "@lib/ai/embeddings";
+import { extractDocument } from "@lib/documents/extract";
 
 export const runtime = "nodejs";
+
+const ACCEPTED_EXTENSIONS = ["pdf", "docx", "xlsx", "xls", "pptx", "txt", "md", "csv", "png", "jpg", "jpeg", "webp", "gif"];
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,6 +19,13 @@ export async function POST(request: Request) {
 
   if (!file || !agentId) {
     return NextResponse.json({ error: "file and agentId required" }, { status: 400 });
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+    return NextResponse.json({
+      error: `Formato não suportado: .${ext}. Aceites: ${ACCEPTED_EXTENSIONS.join(", ")}`,
+    }, { status: 400 });
   }
 
   const storagePath = `${user.id}/${agentId}/${Date.now()}-${file.name}`;
@@ -38,50 +48,58 @@ export async function POST(request: Request) {
       mime: file.type,
       status: "processing",
       uploaded_by: user.id,
+      metadata: { source: "upload" },
     })
     .select()
     .single();
 
   if (docError) return NextResponse.json({ error: docError.message }, { status: 500 });
 
-  // Extract text
-  let text = "";
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   try {
-    if (ext === "pdf") {
-      const pdfParse = (await import("pdf-parse")).default;
-      const parsed = await pdfParse(buffer);
-      text = parsed.text;
-    } else if (ext === "docx") {
-      const mammoth = await import("mammoth");
-      const result = await mammoth.extractRawText({ buffer });
-      text = result.value;
-    } else if (["txt", "md", "csv"].includes(ext)) {
-      text = buffer.toString("utf-8");
-    } else {
-      text = buffer.toString("utf-8").slice(0, 100000);
-    }
-  } catch {
-    await serviceClient
-      .from("knowledge_documents")
-      .update({ status: "error" })
-      .eq("id", doc.id);
-    return NextResponse.json({ error: "Failed to extract text" }, { status: 500 });
-  }
+    const extracted = await extractDocument(buffer, file.name, file.type);
 
-  try {
-    await processKnowledgeDocument(serviceClient, doc.id, agentId, text);
+    if (extracted.charCount === 0) {
+      await serviceClient
+        .from("knowledge_documents")
+        .update({ status: "error", metadata: { error: "No text extracted", ocr_used: false } })
+        .eq("id", doc.id);
+      return NextResponse.json({ error: "No text could be extracted from this file" }, { status: 422 });
+    }
+
+    const { chunkCount } = await processKnowledgeDocument(
+      serviceClient,
+      doc.id,
+      agentId,
+      extracted.text,
+      {
+        filename: file.name,
+        mime: extracted.mime,
+        ocrUsed: extracted.extractionMethod === "ocr",
+        charCount: extracted.charCount,
+        pageCount: extracted.pageCount,
+        pages: extracted.pages,
+      }
+    );
+
+    const { data: updated } = await supabase
+      .from("knowledge_documents")
+      .select("*")
+      .eq("id", doc.id)
+      .single();
+
+    return NextResponse.json({ ...updated, chunk_count: chunkCount });
   } catch (err) {
     await serviceClient
       .from("knowledge_documents")
-      .update({ status: "error" })
+      .update({
+        status: "error",
+        metadata: { error: err instanceof Error ? err.message : "Processing failed" },
+      })
       .eq("id", doc.id);
     return NextResponse.json({
-      error: err instanceof Error ? err.message : "Embedding failed",
+      error: err instanceof Error ? err.message : "Processing failed",
     }, { status: 500 });
   }
-
-  return NextResponse.json(doc);
 }
 
 export async function GET(request: Request) {
@@ -100,4 +118,29 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const serviceClient = await createServiceClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const docId = new URL(request.url).searchParams.get("id");
+  if (!docId) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { data: doc } = await supabase
+    .from("knowledge_documents")
+    .select("storage_path")
+    .eq("id", docId)
+    .single();
+
+  if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+
+  await supabase.storage.from("knowledge").remove([doc.storage_path]);
+  await serviceClient.from("knowledge_chunks").delete().eq("document_id", docId);
+  const { error } = await supabase.from("knowledge_documents").delete().eq("id", docId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }
