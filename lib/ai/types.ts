@@ -15,11 +15,16 @@ export interface ToolDefinition {
   input_schema: Record<string, unknown>;
 }
 
+export type EffortLevel = "low" | "medium" | "high" | "max";
+
 export interface GenerateOptions {
   model: string;
   messages: ChatMessage[];
   system?: string;
+  /** @deprecated Prefer effort on supported models */
   temperature?: number;
+  effort?: EffortLevel;
+  thinkingEnabled?: boolean;
   maxTokens?: number;
   /** Client-executed skills (GMC runs these). */
   tools?: ToolDefinition[];
