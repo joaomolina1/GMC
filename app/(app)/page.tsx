@@ -11,7 +11,6 @@ import {
   FileText,
   Eye,
   Library,
-  Sparkles,
   Store,
 } from "lucide-react";
 import Link from "next/link";
