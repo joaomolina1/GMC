@@ -12,6 +12,9 @@ import {
   MessageSquare,
   Zap,
   Store,
+  Key,
+  Copy,
+  Trash2,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/_design_system/Card";
 import { Badge } from "@/_design_system/Badge";
@@ -31,7 +34,23 @@ import {
   type ConversationListItem,
 } from "@/_components/AdminConversationDetail";
 
-type Tab = "users" | "roles" | "conversations" | "audit" | "costs" | "rate-limits";
+type Tab = "users" | "roles" | "conversations" | "audit" | "costs" | "rate-limits" | "api-keys";
+
+interface ApiKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  scopes: string[];
+  allowed_agent_ids: string[] | null;
+  allowed_flow_ids: string[] | null;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
 
 interface UserRow {
   id: string;
@@ -71,6 +90,12 @@ export default function AdminPage() {
   const [conversationSearch, setConversationSearch] = useState("");
   const [openConversationId, setOpenConversationId] = useState<string | null>(null);
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyUserId, setNewKeyUserId] = useState("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
 
   async function loadRoles() {
     const res = await fetch("/api/admin/roles");
@@ -119,9 +144,21 @@ export default function AdminPage() {
     setLoading(false);
   }
 
+  async function loadApiKeys() {
+    const res = await fetch("/api/admin/platform-api-keys");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data)) setApiKeys(data);
+  }
+
   useEffect(() => {
     loadAll();
+    setApiBaseUrl(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    if (tab === "api-keys") loadApiKeys();
+  }, [tab]);
 
   async function updateRole(userId: string, role: string) {
     await fetch("/api/admin/users", {
@@ -146,10 +183,47 @@ export default function AdminPage() {
   const totalCost = costs.reduce((s, row) => s + Number(row.cost_eur ?? 0), 0);
   const activePolicy = rolePolicies.find((p) => p.role === selectedRole);
 
+  async function createApiKey() {
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    setCreatedSecret(null);
+    const res = await fetch("/api/admin/platform-api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newKeyName.trim(),
+        user_id: newKeyUserId || undefined,
+      }),
+    });
+    const data = await res.json();
+    setCreatingKey(false);
+    if (res.ok && data.secret) {
+      setCreatedSecret(data.secret);
+      setNewKeyName("");
+      setNewKeyUserId("");
+      await loadApiKeys();
+    }
+  }
+
+  async function revokeApiKey(id: string) {
+    if (!confirm("Revogar esta API key? Aplicações que a usam deixarão de funcionar.")) return;
+    await fetch("/api/admin/platform-api-keys", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action: "revoke" }),
+    });
+    await loadApiKeys();
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text);
+  }
+
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: "users", label: "Utilizadores", icon: Users },
     { id: "roles", label: "Roles & limites", icon: Gauge },
     { id: "conversations", label: "Conversas", icon: MessageSquare },
+    { id: "api-keys", label: "API Keys", icon: Key },
     { id: "rate-limits", label: "Rate Limits", icon: Shield },
     { id: "audit", label: "Auditoria", icon: ScrollText },
     { id: "costs", label: "Custos", icon: Euro },
@@ -374,6 +448,160 @@ export default function AdminPage() {
               onSave={saveRolePolicy}
             />
           )}
+        </div>
+      )}
+
+      {tab === "api-keys" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>API externa — agentes e flows</CardTitle>
+            </CardHeader>
+            <p className="mb-4 text-sm text-slate-500">
+              Aplicações externas podem executar agentes ou flows com uma API key. Autenticação via{" "}
+              <code className="rounded bg-slate-100 px-1">Authorization: Bearer gmc_live_...</code>{" "}
+              ou header <code className="rounded bg-slate-100 px-1">X-API-Key</code>.
+            </p>
+            <div className="space-y-3 rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
+              <div>
+                <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
+                  Executar agente
+                </p>
+                <p>POST {apiBaseUrl}/api/v1/agents/{"{agent_id}"}/run</p>
+              </div>
+              <div>
+                <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
+                  Executar flow
+                </p>
+                <p>POST {apiBaseUrl}/api/v1/flows/{"{flow_id}"}/run</p>
+              </div>
+              <div>
+                <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
+                  Corpo (JSON)
+                </p>
+                <pre className="whitespace-pre-wrap">{`{ "input": "mensagem" }
+// ou
+{ "input": { "message": "...", "context": { ... } } }`}</pre>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Criar API key</CardTitle>
+            </CardHeader>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Input
+                label="Nome"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="Integração CRM"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Titular (opcional)
+                </label>
+                <Select
+                  value={newKeyUserId}
+                  onChange={(e) => setNewKeyUserId(e.target.value)}
+                  className="h-10 w-full"
+                >
+                  <option value="">Eu (admin atual)</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button onClick={createApiKey} disabled={creatingKey || !newKeyName.trim()}>
+                  {creatingKey ? "A criar..." : "Gerar chave"}
+                </Button>
+              </div>
+            </div>
+            {createdSecret && (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-medium text-emerald-800">
+                  Chave criada — copie agora, não será mostrada novamente:
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="flex-1 break-all rounded bg-white px-3 py-2 text-xs text-slate-800">
+                    {createdSecret}
+                  </code>
+                  <Button variant="outline" size="sm" onClick={() => copyText(createdSecret)}>
+                    <Copy size={14} />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card padding="none">
+            <div className="px-6 pt-5">
+              <CardHeader>
+                <CardTitle>Chaves existentes</CardTitle>
+              </CardHeader>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-line bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <th className="px-6 py-3 font-medium">Nome</th>
+                    <th className="px-6 py-3 font-medium">Prefixo</th>
+                    <th className="px-6 py-3 font-medium">Titular</th>
+                    <th className="px-6 py-3 font-medium">Scopes</th>
+                    <th className="px-6 py-3 font-medium">Último uso</th>
+                    <th className="px-6 py-3 font-medium">Estado</th>
+                    <th className="px-6 py-3 font-medium" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {apiKeys.map((k) => (
+                    <tr key={k.id} className="hover:bg-slate-50/60">
+                      <td className="px-6 py-3 font-medium text-slate-800">{k.name}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-slate-600">{k.key_prefix}…</td>
+                      <td className="px-6 py-3 text-slate-600">{k.user_email ?? "—"}</td>
+                      <td className="px-6 py-3 text-xs text-slate-500">
+                        {(k.scopes ?? []).join(", ")}
+                      </td>
+                      <td className="px-6 py-3 text-slate-500">
+                        {k.last_used_at
+                          ? new Date(k.last_used_at).toLocaleString("pt-PT")
+                          : "—"}
+                      </td>
+                      <td className="px-6 py-3">
+                        {k.revoked_at ? (
+                          <Badge tone="neutral">Revogada</Badge>
+                        ) : (
+                          <Badge tone="brand">Ativa</Badge>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        {!k.revoked_at && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => revokeApiKey(k.id)}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {apiKeys.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                        Nenhuma API key criada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )}
 
