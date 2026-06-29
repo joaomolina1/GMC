@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { listAllSkills, listCoreSkills, listPluginSkills } from "@lib/skills/registry";
+import { getSkillStatuses } from "@lib/skills/skill-status";
 
 export async function GET() {
   const supabase = await createClient();
@@ -20,5 +21,6 @@ export async function GET() {
     })),
     core: listCoreSkills().map((s) => s.key),
     plugins: listPluginSkills().map((s) => s.key),
+    status: getSkillStatuses(),
   });
 }

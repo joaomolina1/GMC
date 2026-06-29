@@ -22,7 +22,7 @@ export const visionSkill: SkillDefinition = {
   },
   async execute(params, ctx) {
     const prompt = String(params.prompt ?? "Describe this image in detail.");
-    const model = String(params.model ?? "claude-sonnet-4-20250514");
+    const model = String(params.model ?? "claude-sonnet-4-6");
 
     const paths: string[] = [];
     if (params.storage_paths && Array.isArray(params.storage_paths)) {

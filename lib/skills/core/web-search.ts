@@ -4,7 +4,7 @@ export const webSearchSkill: SkillDefinition = {
   key: "web_search",
   name: "Web Search",
   description:
-    "Search the internet for current information. Use when the user asks about recent events, news, or facts you are unsure about.",
+    "Search the internet for current information. Use when the user asks about recent events, news, or facts you are unsure about. Only works when TAVILY_API_KEY is configured on the server.",
   inputSchema: {
     type: "object",
     properties: {
@@ -17,26 +17,55 @@ export const webSearchSkill: SkillDefinition = {
     const query = String(params.query);
     const maxResults = Number(params.max_results ?? 5);
 
-    // Try Tavily fallback if configured
-    const tavilyKey = process.env.TAVILY_API_KEY;
-    if (tavilyKey) {
-      const res = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: tavilyKey, query, max_results: maxResults }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const results = (data.results ?? []) as Array<{ title: string; url: string; content: string }>;
-        return results
-          .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.content}`)
-          .join("\n\n");
-      }
+    const tavilyKey = process.env.TAVILY_API_KEY?.trim();
+    if (!tavilyKey) {
+      return [
+        "ERRO: Web Search indisponível.",
+        "O servidor não tem TAVILY_API_KEY configurada.",
+        "Peça ao administrador para adicionar a chave em Vercel → Environment Variables (Production).",
+        "Obtenha uma chave em https://tavily.com",
+        "",
+        `Query pedida: "${query}"`,
+      ].join("\n");
     }
 
-    // Simulated search for demo when no API key
-    return `Web search results for "${query}" (${maxResults} results):\n\n` +
-      `Note: Configure TAVILY_API_KEY for live web search. ` +
-      `For production, Anthropic's native web_search tool is preferred when available on the model.`;
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: tavilyKey,
+        query,
+        max_results: maxResults,
+        include_answer: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return `ERRO Tavily (${res.status}): ${errText.slice(0, 500) || res.statusText}`;
+    }
+
+    const data = (await res.json()) as {
+      answer?: string;
+      results?: Array<{ title: string; url: string; content: string }>;
+    };
+
+    const parts: string[] = [];
+    if (data.answer) {
+      parts.push(`**Resumo:** ${data.answer}`);
+    }
+
+    const results = data.results ?? [];
+    if (results.length === 0) {
+      parts.push(`Sem resultados para "${query}".`);
+    } else {
+      parts.push(
+        results
+          .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.content}`)
+          .join("\n\n")
+      );
+    }
+
+    return parts.join("\n\n");
   },
 };

@@ -63,10 +63,30 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const SKILL_META: Record<string, { label: string; desc: string; icon: typeof Search; tone: string }> = {
-  web_search: { label: "Web Search", desc: "Pesquisa na internet em tempo real", icon: Search, tone: "bg-sky-50 text-sky-600" },
-  read_document: { label: "Read Document", desc: "PDF, Word, Excel, PowerPoint, CSV + OCR", icon: FileText, tone: "bg-rose-50 text-rose-600" },
-  vision: { label: "Vision", desc: "Análise multimodal de imagens e scans", icon: Eye, tone: "bg-violet-50 text-violet-600" },
-  knowledge_search: { label: "Knowledge Search", desc: "RAG semântico com embeddings Voyage", icon: Library, tone: "bg-emerald-50 text-emerald-600" },
+  web_search: {
+    label: "Web Search",
+    desc: "Notícias e factos recentes via Tavily (requer TAVILY_API_KEY no servidor)",
+    icon: Search,
+    tone: "bg-sky-50 text-sky-600",
+  },
+  read_document: {
+    label: "Read Document",
+    desc: "PDF, Word, Excel, PowerPoint, CSV + OCR em imagens",
+    icon: FileText,
+    tone: "bg-rose-50 text-rose-600",
+  },
+  vision: {
+    label: "Vision",
+    desc: "Análise multimodal de imagens (requer ANTHROPIC_API_KEY)",
+    icon: Eye,
+    tone: "bg-violet-50 text-violet-600",
+  },
+  knowledge_search: {
+    label: "Knowledge Search",
+    desc: "RAG no Knowledge do agente (melhor com VOYAGE_API_KEY)",
+    icon: Library,
+    tone: "bg-emerald-50 text-emerald-600",
+  },
 };
 
 const CORE_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
@@ -89,6 +109,13 @@ const docTone: Record<string, "success" | "warning" | "danger"> = {
   ready: "success",
   error: "danger",
 };
+
+function skillStatusBadge(readiness?: string) {
+  if (readiness === "ready") return { tone: "success" as const, label: "Operacional" };
+  if (readiness === "degraded") return { tone: "warning" as const, label: "Degradado" };
+  if (readiness === "unavailable") return { tone: "danger" as const, label: "Indisponível" };
+  return null;
+}
 
 export default function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>();
@@ -128,6 +155,9 @@ export default function AgentBuilderPage() {
   const [activeVersion, setActiveVersion] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [docAction, setDocAction] = useState<string | null>(null);
+  const [skillStatuses, setSkillStatuses] = useState<
+    Record<string, { readiness: string; note: string; requirement?: string }>
+  >({});
 
   const loadDocs = useCallback(async () => {
     const res = await fetch(`/api/knowledge/upload?agentId=${id}`);
@@ -179,6 +209,22 @@ export default function AgentBuilderPage() {
               status: m.status,
             }))
           );
+        }
+      });
+    fetch("/api/skills")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.status)) {
+          const map: Record<string, { readiness: string; note: string; requirement?: string }> = {};
+          for (const s of data.status as Array<{
+            key: string;
+            readiness: string;
+            note: string;
+            requirement?: string;
+          }>) {
+            map[s.key] = { readiness: s.readiness, note: s.note, requirement: s.requirement };
+          }
+          setSkillStatuses(map);
         }
       });
   }, []);
@@ -541,12 +587,16 @@ export default function AgentBuilderPage() {
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-semibold text-slate-800">Skills Core</h3>
-              <p className="mt-1 text-xs text-slate-500">Funcionalidades base incluídas na Fase 1–2.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Estado verificado no servidor. Skills «Indisponível» precisam de variáveis de ambiente na Vercel.
+              </p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {CORE_SKILLS.map((skill) => {
                   const meta = SKILL_META[skill];
                   const Icon = meta.icon;
                   const checked = skills.includes(skill);
+                  const st = skillStatuses[skill];
+                  const badge = skillStatusBadge(st?.readiness);
                   return (
                     <button
                       key={skill}
@@ -564,9 +614,15 @@ export default function AgentBuilderPage() {
                       <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
                         <Icon size={18} />
                       </span>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                          {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
+                        </div>
                         <p className="text-xs text-slate-500">{meta.desc}</p>
+                        {st?.note && (
+                          <p className="mt-1 text-xs text-slate-400 leading-relaxed">{st.note}</p>
+                        )}
                       </div>
                       <span
                         className={cn(
@@ -595,6 +651,8 @@ export default function AgentBuilderPage() {
                   const meta = PLUGIN_SKILL_META[skill];
                   const Icon = meta.icon;
                   const checked = skills.includes(skill);
+                  const st = skillStatuses[skill];
+                  const badge = skillStatusBadge(st?.readiness);
                   return (
                     <button
                       key={skill}
@@ -612,9 +670,15 @@ export default function AgentBuilderPage() {
                       <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
                         <Icon size={18} />
                       </span>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                          {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
+                        </div>
                         <p className="text-xs text-slate-500">{meta.desc}</p>
+                        {st?.note && (
+                          <p className="mt-1 text-xs text-slate-400 leading-relaxed">{st.note}</p>
+                        )}
                       </div>
                       <span
                         className={cn(

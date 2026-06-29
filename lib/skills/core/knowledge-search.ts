@@ -33,7 +33,7 @@ export const knowledgeSearchSkill: SkillDefinition = {
     }
 
     if (!data || data.length === 0) {
-      return "No relevant knowledge found for this query.";
+      return "Nenhum documento relevante encontrado na base de conhecimento deste agente. Carregue ficheiros no separador Knowledge.";
     }
 
     const chunks = data as Array<{

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseEnv } from "@lib/supabase/env";
 import { getVoyageProvider } from "@lib/ai/providers/voyage";
+import { getSkillStatuses } from "@lib/skills/skill-status";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,10 @@ export async function GET() {
     supabase: supabaseConfigured,
     serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    tavily: Boolean(process.env.TAVILY_API_KEY),
     voyage: voyage.isConfigured,
     embeddings: voyage.isConfigured ? "voyage-3" : "pseudo-hash (configure VOYAGE_API_KEY)",
+    skills: getSkillStatuses(),
     timestamp: new Date().toISOString(),
   });
 }
