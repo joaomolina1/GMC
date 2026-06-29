@@ -31,9 +31,20 @@ export const FLOW_NODE_TYPES: {
   {
     type: "transform",
     label: "Transformar",
-    desc: "Aplica template ao output anterior",
+    desc: "Reformata o texto anterior com um template (variável {{input}})",
     tone: "bg-violet-50 text-violet-600 border-violet-200",
     defaultData: { label: "Transformar", template: "{{input}}" },
+  },
+  {
+    type: "code",
+    label: "Correr código",
+    desc: "Executa JavaScript ou Python sobre o output anterior",
+    tone: "bg-orange-50 text-orange-600 border-orange-200",
+    defaultData: {
+      label: "Código",
+      language: "javascript",
+      code: "// `input` contém o texto do nó anterior\nreturn input;",
+    },
   },
   {
     type: "output",

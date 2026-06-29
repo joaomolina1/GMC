@@ -1,4 +1,5 @@
 import { runAgentLoop } from "@lib/skills/runner";
+import { executeFlowCode } from "./code-runner";
 import type {
   FlowGraph,
   FlowNode,
@@ -164,6 +165,22 @@ async function executeNode(
           nodeType: node.type,
           status: "completed",
           input,
+          output: { text },
+        };
+      }
+
+      case "code": {
+        const language = String(node.data.language ?? "javascript") as
+          | "javascript"
+          | "python";
+        const code = String(node.data.code ?? "return input;");
+        const text = await executeFlowCode(language, code, state.lastOutput);
+        state.lastOutput = text;
+        return {
+          nodeId: node.id,
+          nodeType: node.type,
+          status: "completed",
+          input: { ...input, language },
           output: { text },
         };
       }
