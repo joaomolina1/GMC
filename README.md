@@ -58,6 +58,14 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Versionamento** — `flow_versions` com graph JSONB, publicar versões
 - **Histórico** — `flow_runs` com status e steps detalhados
 
+## Fase 6 — Enterprise ✅
+
+- **Entra ID SSO** — login Microsoft via Supabase Azure provider (`NEXT_PUBLIC_ENTRA_ENABLED`)
+- **Quotas mensais** — limites de tokens e custo por utilizador, enforced em chat e flows
+- **Rate limiting** — req/min por endpoint via `rate_limit_buckets`
+- **Auditoria** — backoffice com logs, gestão de roles e quotas
+- **Cost rollups** — função `compute_cost_rollups` para agregação mensal
+
 ## Setup
 
 ```bash
@@ -117,4 +125,4 @@ lib/flows/        → Flow Engine (Fase 5)
 - **Fase 3** — Marketplace ✅
 - **Fase 4** — Skills plugins (HTTP, SQL, Run Code) ✅
 - **Fase 5** — Flow Builder ✅
-- **Fase 6** — Enterprise (Entra ID, quotas, auditoria)
+- **Fase 6** — Enterprise (Entra ID, quotas, auditoria) ✅

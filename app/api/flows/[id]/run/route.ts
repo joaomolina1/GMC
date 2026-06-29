@@ -3,6 +3,8 @@ import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
 import { runFlow } from "@lib/flows/server";
 import type { FlowGraph } from "@lib/flows/types";
+import { assertQuotaAvailable } from "@lib/enterprise/quotas";
+import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const maxDuration = 60;
 
@@ -16,6 +18,16 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateCheck = await assertRateLimit(supabase, "/api/flows/run", user.id);
+  if (!rateCheck.ok) {
+    return NextResponse.json({ error: rateCheck.message }, { status: 429 });
+  }
+
+  const quotaCheck = await assertQuotaAvailable(supabase, user.id);
+  if (!quotaCheck.ok) {
+    return NextResponse.json({ error: quotaCheck.message }, { status: 402 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const inputText = body.input as string | undefined;

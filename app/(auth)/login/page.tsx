@@ -7,6 +7,7 @@ import { createClient } from "@lib/supabase/client";
 import { Logo } from "@/_components/Logo";
 import { Button } from "@/_design_system/Button";
 import { Input } from "@/_design_system/Input";
+import { isEntraConfigured, getAzureTenantId } from "@lib/enterprise/entra";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const entraEnabled = isEntraConfigured();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +45,31 @@ export default function LoginPage() {
       setError(err instanceof Error ? err.message : "Erro de autenticação");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleEntraLogin() {
+    setError("");
+    setSsoLoading(true);
+    const supabase = createClient();
+    const tenantId = getAzureTenantId();
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "azure",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: "email profile openid",
+          queryParams: {
+            prompt: "select_account",
+            ...(tenantId ? { tenant: tenantId } : {}),
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao iniciar SSO");
+      setSsoLoading(false);
     }
   }
 
@@ -80,7 +108,7 @@ export default function LoginPage() {
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-white/60">© Grupo Media Capital · Fase 2</p>
+        <p className="relative text-xs text-white/60">© Grupo Media Capital · Fase 6</p>
       </div>
 
       {/* Form panel */}
@@ -132,10 +160,33 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            <Button type="submit" size="lg" className="w-full" disabled={loading || ssoLoading}>
               {loading ? "A processar..." : isSignUp ? "Registar" : "Entrar"}
             </Button>
           </form>
+
+          {entraEnabled && !isSignUp && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-line" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-canvas px-2 text-slate-400">ou</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                disabled={ssoLoading || loading}
+                onClick={handleEntraLogin}
+              >
+                {ssoLoading ? "A redirecionar..." : "Entrar com Microsoft (Entra ID)"}
+              </Button>
+            </>
+          )}
 
           <p className="mt-6 text-center text-sm text-slate-500">
             {isSignUp ? "Já tem conta?" : "Não tem conta?"}{" "}

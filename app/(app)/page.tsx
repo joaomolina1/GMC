@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatCost } from "@lib/utils";
+import { QuotaWidget } from "@/_components/QuotaWidget";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -117,6 +118,8 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <QuotaWidget />
 
       {/* Quick actions */}
       <Card>

@@ -3,6 +3,8 @@ import { createClient, createServiceClient } from "@lib/supabase/server";
 import { logUsage } from "@lib/audit";
 import { streamAgentLoop } from "@lib/skills/runner";
 import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
+import { assertQuotaAvailable } from "@lib/enterprise/quotas";
+import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,6 +16,16 @@ export async function POST(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateCheck = await assertRateLimit(supabase, "/api/chat", user.id);
+  if (!rateCheck.ok) {
+    return NextResponse.json({ error: rateCheck.message }, { status: 429 });
+  }
+
+  const quotaCheck = await assertQuotaAvailable(supabase, user.id);
+  if (!quotaCheck.ok) {
+    return NextResponse.json({ error: quotaCheck.message }, { status: 402 });
+  }
 
   const body = await request.json();
   const { agentId, conversationId, message, attachments } = body as {
