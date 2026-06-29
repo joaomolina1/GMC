@@ -2,11 +2,34 @@ import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
 import { runFlow } from "@lib/flows/server";
-import type { FlowGraph } from "@lib/flows/types";
+import type { FlowGraph, FlowStepResult } from "@lib/flows/types";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const maxDuration = 60;
+
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+async function persistSteps(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  runId: string,
+  steps: FlowStepResult[]
+) {
+  for (const step of steps) {
+    await supabase.from("flow_run_steps").insert({
+      run_id: runId,
+      node_id: step.nodeId,
+      status: step.status === "skipped" ? "completed" : step.status,
+      input: step.input,
+      output: step.output,
+      error: step.error,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    });
+  }
+}
 
 export async function POST(
   request: Request,
@@ -31,6 +54,7 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const inputText = body.input as string | undefined;
+  const stream = body.stream === true;
 
   const { data: flow } = await supabase
     .from("flows")
@@ -66,27 +90,79 @@ export async function POST(
   }
 
   const graph = version.graph as FlowGraph;
-
-  const result = await runFlow(graph, {
+  const ctx = {
     userId: user.id,
     flowId,
     runId: run.id,
     supabase,
     input: { text: inputText },
-  });
+  };
 
-  for (const step of result.steps) {
-    await supabase.from("flow_run_steps").insert({
-      run_id: run.id,
-      node_id: step.nodeId,
-      status: step.status === "skipped" ? "completed" : step.status,
-      input: step.input,
-      output: step.output,
-      error: step.error,
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
+  if (stream) {
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(sseEvent(event, data)));
+        };
+
+        try {
+          const result = await runFlow(graph, ctx, {
+            onStepStart: (nodeId, nodeType) => {
+              send("step_start", { nodeId, nodeType });
+            },
+            onStepComplete: (step) => {
+              send("step_complete", step);
+            },
+          });
+
+          await persistSteps(supabase, run.id, result.steps);
+
+          await supabase
+            .from("flow_runs")
+            .update({
+              status: result.status === "completed" ? "completed" : "failed",
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", run.id);
+
+          await logAudit(supabase, {
+            actorId: user.id,
+            action: "flow.run",
+            entityType: "flow_run",
+            entityId: run.id,
+            metadata: { flowId, status: result.status },
+          });
+
+          send("done", {
+            runId: run.id,
+            status: result.status,
+            output: result.output,
+            steps: result.steps,
+            error: result.error,
+          });
+        } catch (err) {
+          send("error", {
+            error: err instanceof Error ? err.message : "Erro na execução",
+          });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   }
+
+  const result = await runFlow(graph, ctx);
+
+  await persistSteps(supabase, run.id, result.steps);
 
   await supabase
     .from("flow_runs")

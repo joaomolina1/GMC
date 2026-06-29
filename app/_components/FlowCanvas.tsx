@@ -1,16 +1,23 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Check, Loader2, Minus } from "lucide-react";
 import { cn } from "@lib/utils";
 import { FLOW_NODE_TYPES } from "@lib/flows/constants";
-import type { FlowEdge, FlowGraph, FlowNode, FlowNodeType } from "@lib/flows/types";
+import type {
+  FlowEdge,
+  FlowGraph,
+  FlowNode,
+  FlowNodeExecutionStatus,
+  FlowNodeType,
+} from "@lib/flows/types";
 
 interface FlowCanvasProps {
   graph: FlowGraph;
   onChange: (graph: FlowGraph) => void;
   selectedNodeId: string | null;
   onSelectNode: (id: string | null) => void;
+  nodeExecutionState?: Record<string, FlowNodeExecutionStatus>;
 }
 
 const NODE_W = 176;
@@ -49,6 +56,7 @@ export function FlowCanvas({
   onChange,
   selectedNodeId,
   onSelectNode,
+  nodeExecutionState = {},
 }: FlowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
@@ -283,14 +291,23 @@ export function FlowCanvas({
           {graph.nodes.map((node) => {
             const meta = nodeMeta(node.type);
             const selected = selectedNodeId === node.id;
+            const execStatus = nodeExecutionState[node.id];
 
             return (
               <div
                 key={node.id}
                 className={cn(
-                  "absolute select-none rounded-xl border-2 bg-white shadow-sm transition-shadow",
+                  "absolute select-none rounded-xl border-2 bg-white transition-all duration-300",
                   meta.tone,
-                  selected && "ring-2 ring-brand-400 ring-offset-1 shadow-md"
+                  selected && "ring-2 ring-brand-400 ring-offset-1",
+                  execStatus === "running" &&
+                    "z-20 scale-[1.03] border-brand-400 shadow-lg shadow-brand-200/60 ring-2 ring-brand-300 ring-offset-1",
+                  execStatus === "completed" &&
+                    "z-10 scale-[1.02] border-emerald-400 bg-emerald-50/40 shadow-md shadow-emerald-200/50",
+                  execStatus === "failed" &&
+                    "z-10 scale-[1.02] border-rose-400 bg-rose-50/40 shadow-md shadow-rose-200/50",
+                  execStatus === "skipped" && "opacity-40 scale-[0.98]",
+                  !execStatus && "shadow-sm"
                 )}
                 style={{
                   left: node.position.x,
@@ -362,6 +379,28 @@ export function FlowCanvas({
                       {String(node.data.label ?? meta.label)}
                     </p>
                   </div>
+                  {execStatus === "running" && (
+                    <Loader2
+                      size={16}
+                      className="shrink-0 animate-spin text-brand-500"
+                      aria-label="A executar"
+                    />
+                  )}
+                  {execStatus === "completed" && (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                  )}
+                  {execStatus === "failed" && (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white text-xs font-bold shadow-sm">
+                      !
+                    </span>
+                  )}
+                  {execStatus === "skipped" && (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-300 text-white shadow-sm">
+                      <Minus size={12} strokeWidth={3} />
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => {

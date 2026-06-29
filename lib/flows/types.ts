@@ -53,3 +53,14 @@ export interface FlowRunContext {
   supabase: import("@supabase/supabase-js").SupabaseClient;
   input: FlowRunInput;
 }
+
+export type FlowNodeExecutionStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface FlowRunCallbacks {
+  onStepStart?: (nodeId: string, nodeType: FlowNodeType) => void;
+  onStepComplete?: (step: FlowStepResult) => void;
+}

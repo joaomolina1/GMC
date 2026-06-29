@@ -3,6 +3,7 @@ import { executeFlowCode } from "./code-runner";
 import type {
   FlowGraph,
   FlowNode,
+  FlowRunCallbacks,
   FlowRunContext,
   FlowRunResult,
   FlowStepResult,
@@ -249,7 +250,8 @@ function shouldSkipNode(
 
 export async function runFlow(
   graph: FlowGraph,
-  ctx: FlowRunContext
+  ctx: FlowRunContext,
+  callbacks?: FlowRunCallbacks
 ): Promise<FlowRunResult> {
   const order = topologicalOrder(graph);
   const steps: FlowStepResult[] = [];
@@ -263,18 +265,22 @@ export async function runFlow(
   for (const node of order) {
     if (shouldSkipNode(node, graph, state.variables, skippedNodeIds)) {
       skippedNodeIds.add(node.id);
-      steps.push({
+      const skipped: FlowStepResult = {
         nodeId: node.id,
         nodeType: node.type,
         status: "skipped",
         input: {},
         output: {},
-      });
+      };
+      steps.push(skipped);
+      callbacks?.onStepComplete?.(skipped);
       continue;
     }
 
+    callbacks?.onStepStart?.(node.id, node.type);
     const step = await executeNode(node, graph, ctx, state);
     steps.push(step);
+    callbacks?.onStepComplete?.(step);
 
     if (step.status === "failed") {
       return {
