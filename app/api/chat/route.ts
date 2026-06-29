@@ -3,6 +3,7 @@ import { createClient } from "@lib/supabase/server";
 import { logUsage } from "@lib/audit";
 import { streamAgentLoop } from "@lib/skills/runner";
 import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
+import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
@@ -101,10 +102,26 @@ export async function POST(request: Request) {
 
   const messages = await buildChatMessages(history ?? [], supabase);
 
+  const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
+  let skillsPrompt = "";
+  if (skillPackageIds.length > 0) {
+    const { data: skillPackages } = await supabase
+      .from("agent_skill_packages")
+      .select("id, name, description, skill_md, extra_files")
+      .in("id", skillPackageIds);
+    if (skillPackages?.length) {
+      skillsPrompt = buildAgentSkillsPrompt(skillPackages);
+    }
+  }
+
   const attachmentHint = buildAttachmentHint(attachments);
-  const systemPrompt = attachmentHint
-    ? `${version.system_prompt}${attachmentHint}`
-    : version.system_prompt;
+  const systemPrompt = [
+    version.system_prompt,
+    skillsPrompt,
+    attachmentHint,
+  ]
+    .filter(Boolean)
+    .join("");
 
   const skills = (version.skills as string[])?.length
     ? (version.skills as string[])
