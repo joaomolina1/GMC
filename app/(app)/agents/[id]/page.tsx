@@ -101,9 +101,9 @@ export default function AgentBuilderPage() {
   const [category, setCategory] = useState("geral");
   const [tagsInput, setTagsInput] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [model, setModel] = useState("claude-sonnet-4-20250514");
+  const [model, setModel] = useState("claude-sonnet-4-6");
   const [availableModels, setAvailableModels] = useState<
-    Array<{ id: string; display_name: string }>
+    Array<{ id: string; display_name: string; status?: string }>
   >([]);
   const [temperature, setTemperature] = useState(0.7);
   const [skills, setSkills] = useState<string[]>(CORE_SKILLS);
@@ -169,9 +169,10 @@ export default function AgentBuilderPage() {
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setAvailableModels(
-            data.map((m: { id: string; display_name: string }) => ({
+            data.map((m: { id: string; display_name: string; status?: string }) => ({
               id: m.id,
               display_name: m.display_name,
+              status: m.status,
             }))
           );
         }
@@ -602,12 +603,13 @@ export default function AgentBuilderPage() {
               {(availableModels.length > 0
                 ? availableModels
                 : [
-                    { id: "claude-sonnet-4-20250514", display_name: "Claude Sonnet 4" },
-                    { id: "claude-3-5-haiku-20241022", display_name: "Claude 3.5 Haiku" },
+                    { id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6" },
+                    { id: "claude-haiku-4-5", display_name: "Claude Haiku 4.5" },
                   ]
               ).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.display_name}
+                  {m.status === "deprecated" ? " ⚠" : m.status === "legacy" ? " ·" : ""}
                 </option>
               ))}
             </Select>

@@ -30,7 +30,7 @@ export async function POST(
       agent_id: agentId,
       version: nextVersion,
       system_prompt: system_prompt ?? "",
-      model: model ?? "claude-sonnet-4-20250514",
+      model: model ?? "claude-sonnet-4-6",
       temperature: temperature ?? 0.7,
       skills: skills ?? ["web_search", "read_document", "vision", "knowledge_search"],
       tools: tools ?? {},

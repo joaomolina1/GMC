@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       agent_id: agent.id,
       version: 1,
       system_prompt: system_prompt ?? "És um assistente útil do Grupo Media Capital.",
-      model: model ?? "claude-sonnet-4-20250514",
+      model: model ?? "claude-sonnet-4-6",
       skills: skills ?? ["web_search", "read_document", "vision", "knowledge_search"],
       status: "draft",
       created_by: user.id,
