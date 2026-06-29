@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("*, teams(name), departments(name), user_quotas!user_quotas_user_id_fkey(monthly_token_limit, monthly_cost_limit_eur)")
+    .select("*, teams(name), departments(name)")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

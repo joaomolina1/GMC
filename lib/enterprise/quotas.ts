@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface QuotaStatus {
+  role?: string;
   tokens_used: number;
   cost_used_eur: number;
   monthly_token_limit: number | null;

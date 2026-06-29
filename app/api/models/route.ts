@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { LATEST_TIER_MODEL_IDS } from "@lib/ai/anthropic-catalog";
+import { getAllowedModelIdsForUser } from "@lib/enterprise/role-policies";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -34,16 +35,9 @@ export async function GET(request: Request) {
   }
 
   if (!isAdmin) {
-    const { data: allowed } = await supabase
-      .from("user_allowed_models")
-      .select("model_id")
-      .eq("user_id", user.id);
-
-    if (allowed && allowed.length > 0) {
-      query = query.in(
-        "id",
-        allowed.map((a) => a.model_id)
-      );
+    const allowedIds = await getAllowedModelIdsForUser(supabase, user.id);
+    if (allowedIds && allowedIds.length > 0) {
+      query = query.in("id", allowedIds);
     }
   }
 

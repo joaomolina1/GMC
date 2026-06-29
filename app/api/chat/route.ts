@@ -5,6 +5,7 @@ import { streamAgentLoop } from "@lib/skills/runner";
 import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
+import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -53,6 +54,11 @@ export async function POST(request: Request) {
       { error: "Agente sem versão configurada. Guarde uma versão no Builder primeiro." },
       { status: 400 }
     );
+  }
+
+  const modelCheck = await assertModelAllowedForUser(supabase, user.id, version.model);
+  if (!modelCheck.ok) {
+    return NextResponse.json({ error: modelCheck.message }, { status: 403 });
   }
 
   let convId = conversationId;
