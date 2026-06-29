@@ -83,16 +83,20 @@ async function executeNode(
 
         const { data: agent } = await ctx.supabase
           .from("agents")
-          .select("*, agent_versions!agent_versions_agent_id_fkey(*)")
+          .select("id, current_version_id")
           .eq("id", agentId)
           .single();
 
         if (!agent) throw new Error("Agente não encontrado");
+        if (!agent.current_version_id) {
+          throw new Error("Agente sem versão guardada — abra o Builder e guarde o agente primeiro");
+        }
 
-        const version =
-          agent.agent_versions?.find(
-            (v: { id: string }) => v.id === agent.current_version_id
-          ) ?? agent.agent_versions?.[0];
+        const { data: version } = await ctx.supabase
+          .from("agent_versions")
+          .select("*")
+          .eq("id", agent.current_version_id)
+          .single();
 
         if (!version) throw new Error("Versão do agente não encontrada");
 
@@ -210,22 +214,37 @@ async function executeNode(
   }
 }
 
-function shouldSkipNode(node: FlowNode, graph: FlowGraph, state: Record<string, unknown>): boolean {
+function isEdgeActive(
+  edge: FlowGraph["edges"][number],
+  graph: FlowGraph,
+  state: Record<string, unknown>,
+  skippedNodeIds: Set<string>
+): boolean {
+  const source = graph.nodes.find((n) => n.id === edge.source);
+  if (!source || skippedNodeIds.has(source.id)) return false;
+
+  if (source.type === "condition") {
+    const branch = state[`__branch_${source.id}`] as string | undefined;
+    if (branch && edge.data?.branch && edge.data.branch !== branch) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function shouldSkipNode(
+  node: FlowNode,
+  graph: FlowGraph,
+  state: Record<string, unknown>,
+  skippedNodeIds: Set<string>
+): boolean {
   if (node.type === "trigger") return false;
 
   const incoming = graph.edges.filter((e) => e.target === node.id);
   if (incoming.length === 0) return true;
 
-  for (const edge of incoming) {
-    const source = graph.nodes.find((n) => n.id === edge.source);
-    if (source?.type === "condition") {
-      const branch = state[`__branch_${source.id}`] as string | undefined;
-      if (branch && edge.data?.branch && edge.data.branch !== branch) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return !incoming.some((edge) => isEdgeActive(edge, graph, state, skippedNodeIds));
 }
 
 export async function runFlow(
@@ -239,8 +258,11 @@ export async function runFlow(
     variables: { ...(ctx.input.variables ?? {}) } as Record<string, unknown>,
   };
 
+  const skippedNodeIds = new Set<string>();
+
   for (const node of order) {
-    if (shouldSkipNode(node, graph, state.variables)) {
+    if (shouldSkipNode(node, graph, state.variables, skippedNodeIds)) {
+      skippedNodeIds.add(node.id);
       steps.push({
         nodeId: node.id,
         nodeType: node.type,

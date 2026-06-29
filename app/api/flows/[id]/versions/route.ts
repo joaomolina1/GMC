@@ -35,7 +35,33 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { graph } = body;
+  const { graph, updateInPlace } = body;
+
+  const { data: flow } = await supabase
+    .from("flows")
+    .select("id, current_version_id")
+    .eq("id", flowId)
+    .single();
+
+  if (!flow) return NextResponse.json({ error: "Flow não encontrado" }, { status: 404 });
+
+  if (updateInPlace && flow.current_version_id) {
+    const { data: version, error } = await supabase
+      .from("flow_versions")
+      .update({ graph: graph ?? { nodes: [], edges: [] } })
+      .eq("id", flow.current_version_id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await supabase
+      .from("flows")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", flowId);
+
+    return NextResponse.json(version);
+  }
 
   const { data: latest } = await supabase
     .from("flow_versions")
