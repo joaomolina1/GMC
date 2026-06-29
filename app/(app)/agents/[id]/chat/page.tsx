@@ -120,6 +120,9 @@ export default function AgentChatPage() {
           if (data.type === "tool" && data.name) {
             assistantContent += `\n\n\u{1F527} *A usar skill: ${data.name}*\n`;
           }
+          if (data.type === "server_tool" && data.name) {
+            assistantContent += `\n\n\u{1F50D} *A pesquisar na web…*\n`;
+          }
         }
       }
 

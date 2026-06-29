@@ -139,6 +139,9 @@ export async function POST(request: Request) {
           if (chunk.type === "tool") {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool", name: chunk.name })}\n\n`));
           }
+          if (chunk.type === "server_tool") {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name })}\n\n`));
+          }
           if (chunk.type === "done") {
             finalUsage = chunk.usage;
             finalCost = chunk.costEur;

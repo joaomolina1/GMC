@@ -16,18 +16,17 @@ function envReady(key: string): boolean {
 /** Server-side readiness for each runtime skill (env + platform constraints). */
 export function getSkillStatuses(): SkillStatus[] {
   const anthropic = envReady("ANTHROPIC_API_KEY");
-  const tavily = envReady("TAVILY_API_KEY");
   const voyage = getVoyageProvider().isConfigured;
   const serviceRole = envReady("SUPABASE_SERVICE_ROLE_KEY");
 
   return [
     {
       key: "web_search",
-      readiness: tavily ? "ready" : "unavailable",
-      requirement: "TAVILY_API_KEY",
-      note: tavily
-        ? "Pesquisa na internet via Tavily (notícias, factos recentes)."
-        : "Indisponível: defina TAVILY_API_KEY nas variáveis de ambiente (Vercel → Production).",
+      readiness: anthropic ? "ready" : "unavailable",
+      requirement: "ANTHROPIC_API_KEY",
+      note: anthropic
+        ? "Pesquisa web nativa da API Anthropic (executada nos servidores da Anthropic)."
+        : "Indisponível: defina ANTHROPIC_API_KEY nas variáveis de ambiente (Vercel → Production).",
     },
     {
       key: "read_document",

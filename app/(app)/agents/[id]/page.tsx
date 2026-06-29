@@ -65,7 +65,7 @@ const TABS: { id: Tab; label: string }[] = [
 const SKILL_META: Record<string, { label: string; desc: string; icon: typeof Search; tone: string }> = {
   web_search: {
     label: "Web Search",
-    desc: "Notícias e factos recentes via Tavily (requer TAVILY_API_KEY no servidor)",
+    desc: "Pesquisa web nativa da API Anthropic (server-side, incluída na conta)",
     icon: Search,
     tone: "bg-sky-50 text-sky-600",
   },

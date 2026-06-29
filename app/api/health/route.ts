@@ -24,7 +24,6 @@ export async function GET() {
     supabase: supabaseConfigured,
     serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    tavily: Boolean(process.env.TAVILY_API_KEY),
     voyage: voyage.isConfigured,
     embeddings: voyage.isConfigured ? "voyage-3" : "pseudo-hash (configure VOYAGE_API_KEY)",
     skills: getSkillStatuses(),
