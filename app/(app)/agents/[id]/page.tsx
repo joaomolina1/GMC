@@ -3,10 +3,24 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare, Save, Upload, History } from "lucide-react";
+import {
+  MessageSquare,
+  Save,
+  Upload,
+  History,
+  ArrowLeft,
+  Search,
+  FileText,
+  Eye,
+  Library,
+  Check,
+  FileCheck2,
+} from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
-import { Input, Textarea } from "@/_design_system/Input";
+import { Input, Textarea, Select } from "@/_design_system/Input";
+import { Badge } from "@/_design_system/Badge";
+import { cn } from "@lib/utils";
 
 type Tab = "general" | "prompt" | "knowledge" | "skills" | "model" | "versions";
 
@@ -40,7 +54,19 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "versions", label: "Versões" },
 ];
 
+const SKILL_META: Record<string, { label: string; desc: string; icon: typeof Search; tone: string }> = {
+  web_search: { label: "Web Search", desc: "Pesquisa na internet em tempo real", icon: Search, tone: "bg-sky-50 text-sky-600" },
+  read_document: { label: "Read Document", desc: "Lê PDF, Word, Excel e CSV", icon: FileText, tone: "bg-rose-50 text-rose-600" },
+  vision: { label: "Vision", desc: "Analisa e interpreta imagens", icon: Eye, tone: "bg-violet-50 text-violet-600" },
+  knowledge_search: { label: "Knowledge Search", desc: "RAG semântico sobre documentos", icon: Library, tone: "bg-emerald-50 text-emerald-600" },
+};
+
 const CORE_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
+
+const docTone: Record<string, "success" | "warning" | "danger"> = {
+  ready: "success",
+  error: "danger",
+};
 
 export default function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +82,7 @@ export default function AgentBuilderPage() {
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [docs, setDocs] = useState<Array<{ id: string; filename: string; status: string }>>([]);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const loadAgent = useCallback(async () => {
     const res = await fetch(`/api/agents/${id}`);
@@ -63,9 +90,9 @@ export default function AgentBuilderPage() {
     setAgent(data);
     setName(data.name);
     setDescription(data.description ?? "");
-    const current = data.agent_versions?.find(
-      (v: AgentVersion) => v.id === data.current_version_id
-    ) ?? data.agent_versions?.[0];
+    const current =
+      data.agent_versions?.find((v: AgentVersion) => v.id === data.current_version_id) ??
+      data.agent_versions?.[0];
     if (current) {
       setSystemPrompt(current.system_prompt);
       setModel(current.model);
@@ -79,12 +106,13 @@ export default function AgentBuilderPage() {
     loadAgent();
     fetch(`/api/knowledge/upload?agentId=${id}`)
       .then((r) => r.json())
-      .then(setDocs)
+      .then((d) => setDocs(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, [id, loadAgent]);
 
   async function saveNewVersion() {
     setSaving(true);
+    setSaved(false);
     await fetch(`/api/agents/${id}/versions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -97,6 +125,8 @@ export default function AgentBuilderPage() {
     });
     await loadAgent();
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
   }
 
   async function publishVersion(versionId: string) {
@@ -128,19 +158,34 @@ export default function AgentBuilderPage() {
     setDocs(await res.json());
   }
 
-  if (!agent) return <p className="text-gray-500">A carregar...</p>;
+  if (!agent) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-slate-100" />
+        <Card className="h-64 animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{name}</h2>
-          <p className="text-gray-500">Agent Builder</p>
+      <button
+        onClick={() => router.push("/agents")}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
+      >
+        <ArrowLeft size={16} />
+        Agentes
+      </button>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
+          <Badge tone={agent.status === "published" ? "success" : "warning"}>{agent.status}</Badge>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={saveNewVersion} disabled={saving}>
-            <Save size={16} />
-            {saving ? "A guardar..." : "Guardar v+"}
+          <Button variant="outline" onClick={saveNewVersion} disabled={saving}>
+            {saved ? <Check size={16} /> : <Save size={16} />}
+            {saving ? "A guardar..." : saved ? "Guardado" : "Guardar v+"}
           </Button>
           <Link href={`/agents/${id}/chat`}>
             <Button>
@@ -151,16 +196,18 @@ export default function AgentBuilderPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200">
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-white p-1 shadow-sm">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={cn(
+              "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               tab === t.id
-                ? "border-b-2 border-[#0066B3] text-[#0066B3]"
-                : "text-gray-500 hover:text-gray-900"
-            }`}
+                ? "bg-brand-500 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            )}
           >
             {t.label}
           </button>
@@ -169,79 +216,116 @@ export default function AgentBuilderPage() {
 
       <Card>
         {tab === "general" && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
-            <Textarea label="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Textarea
+              label="Descrição"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
         )}
 
         {tab === "prompt" && (
           <Textarea
             label="System Prompt"
+            hint="Define a personalidade, o tom e as regras do agente."
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
-            className="min-h-[300px] font-mono text-sm"
+            className="min-h-[320px] font-mono text-xs leading-relaxed"
           />
         )}
 
         {tab === "knowledge" && (
-          <div className="space-y-4">
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 p-6 hover:border-[#0066B3]">
-              <Upload size={20} className="text-gray-400" />
-              <span className="text-sm text-gray-600">Carregar documento (PDF, DOCX, TXT, MD, CSV)</span>
-              <input type="file" className="hidden" onChange={uploadKnowledge} accept=".pdf,.docx,.txt,.md,.csv" />
+          <div className="space-y-5">
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 py-10 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-500">
+                <Upload size={22} />
+              </span>
+              <span className="text-sm font-medium text-slate-700">Carregar documento</span>
+              <span className="text-xs text-slate-400">PDF, DOCX, TXT, MD, CSV</span>
+              <input
+                type="file"
+                className="hidden"
+                onChange={uploadKnowledge}
+                accept=".pdf,.docx,.txt,.md,.csv"
+              />
             </label>
-            <ul className="space-y-2">
-              {docs.map((doc) => (
-                <li key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 text-sm">
-                  <span>{doc.filename}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${
-                    doc.status === "ready" ? "bg-green-100 text-green-700" :
-                    doc.status === "error" ? "bg-red-100 text-red-700" :
-                    "bg-yellow-100 text-yellow-700"
-                  }`}>{doc.status}</span>
-                </li>
-              ))}
-            </ul>
+            {docs.length > 0 ? (
+              <ul className="space-y-2">
+                {docs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3"
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5 text-sm text-slate-700">
+                      <FileCheck2 size={18} className="shrink-0 text-slate-400" />
+                      <span className="truncate">{doc.filename}</span>
+                    </span>
+                    <Badge tone={docTone[doc.status] ?? "warning"}>{doc.status}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-center text-sm text-slate-400">Sem documentos carregados.</p>
+            )}
           </div>
         )}
 
         {tab === "skills" && (
-          <div className="space-y-3">
-            {CORE_SKILLS.map((skill) => (
-              <label key={skill} className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-                <input
-                  type="checkbox"
-                  checked={skills.includes(skill)}
-                  onChange={(e) => {
-                    if (e.target.checked) setSkills([...skills, skill]);
-                    else setSkills(skills.filter((s) => s !== skill));
-                  }}
-                  className="h-4 w-4 rounded border-gray-300 text-[#0066B3]"
-                />
-                <span className="text-sm font-medium text-gray-900">{skill}</span>
-              </label>
-            ))}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {CORE_SKILLS.map((skill) => {
+              const meta = SKILL_META[skill];
+              const Icon = meta.icon;
+              const checked = skills.includes(skill);
+              return (
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() =>
+                    setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
+                  }
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                    checked
+                      ? "border-brand-300 bg-brand-50/50 ring-1 ring-brand-200"
+                      : "border-line hover:border-slate-300 hover:bg-slate-50"
+                  )}
+                >
+                  <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", meta.tone)}>
+                    <Icon size={18} />
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                    <p className="text-xs text-slate-500">{meta.desc}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                      checked ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300"
+                    )}
+                  >
+                    {checked && <Check size={14} />}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
         {tab === "model" && (
-          <div className="space-y-4">
+          <div className="max-w-md space-y-6">
+            <Select label="Modelo" value={model} onChange={(e) => setModel(e.target.value)}>
+              <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+              <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+            </Select>
             <div>
-              <label className="text-sm font-medium text-gray-700">Modelo</label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Temperature: {temperature}
-              </label>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700">Temperature</label>
+                <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-600">
+                  {temperature.toFixed(1)}
+                </span>
+              </div>
               <input
                 type="range"
                 min="0"
@@ -249,31 +333,49 @@ export default function AgentBuilderPage() {
                 step="0.1"
                 value={temperature}
                 onChange={(e) => setTemperature(Number(e.target.value))}
-                className="mt-1 w-full"
+                className="w-full accent-brand-500"
               />
+              <div className="mt-1 flex justify-between text-xs text-slate-400">
+                <span>Preciso</span>
+                <span>Criativo</span>
+              </div>
             </div>
           </div>
         )}
 
         {tab === "versions" && (
           <div className="space-y-3">
+            {versions.length === 0 && (
+              <p className="text-center text-sm text-slate-400">Ainda não existem versões.</p>
+            )}
             {versions.map((v) => (
-              <div key={v.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+              <div
+                key={v.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
+              >
                 <div className="flex items-center gap-3">
-                  <History size={16} className="text-gray-400" />
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                    <History size={18} />
+                  </span>
                   <div>
-                    <p className="font-medium text-gray-900">v{v.version}</p>
-                    <p className="text-xs text-gray-500">
-                      {v.status} {v.published_at ? `· ${new Date(v.published_at).toLocaleDateString("pt-PT")}` : ""}
+                    <p className="flex items-center gap-2 font-medium text-slate-800">
+                      v{v.version}
+                      {v.status === "published" && <Badge tone="success">ativa</Badge>}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {v.status}
+                      {v.published_at ? ` · ${new Date(v.published_at).toLocaleDateString("pt-PT")}` : ""}
                     </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   {v.status !== "published" && (
-                    <Button size="sm" onClick={() => publishVersion(v.id)}>Publicar</Button>
+                    <Button size="sm" onClick={() => publishVersion(v.id)}>
+                      Publicar
+                    </Button>
                   )}
                   {v.status === "archived" && (
-                    <Button size="sm" variant="secondary" onClick={() => rollbackVersion(v.id)}>
+                    <Button size="sm" variant="outline" onClick={() => rollbackVersion(v.id)}>
                       Rollback
                     </Button>
                   )}

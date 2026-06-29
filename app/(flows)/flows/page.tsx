@@ -1,16 +1,21 @@
-import { Card, CardHeader, CardTitle } from "@/_design_system/Card";
+import { Workflow } from "lucide-react";
+import { Card } from "@/_design_system/Card";
+import { Badge } from "@/_design_system/Badge";
 
 export default function FlowsPage() {
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Flow Builder</h2>
-      <Card>
-        <CardHeader><CardTitle>Fase 5 — Em breve</CardTitle></CardHeader>
-        <p className="text-gray-500">
-          Editor visual de nós, execução, logs e versionamento.
-          Tabelas flows, flow_versions, flow_runs já criadas.
-        </p>
-      </Card>
-    </div>
+    <Card className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-500">
+        <Workflow size={32} />
+      </div>
+      <Badge tone="brand" className="mt-5">
+        Fase 5
+      </Badge>
+      <h2 className="mt-3 text-lg font-semibold text-slate-900">Flow Builder — Em breve</h2>
+      <p className="mt-1 max-w-md text-sm text-slate-500">
+        Editor visual de nós, execução, logs e versionamento. As tabelas flows, flow_versions e
+        flow_runs já foram criadas.
+      </p>
+    </Card>
   );
 }
