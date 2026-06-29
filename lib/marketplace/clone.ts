@@ -67,7 +67,7 @@ export async function cloneMarketplaceAgent(
       temperature: version.temperature,
       effort: version.effort ?? "medium",
       thinking_enabled: version.thinking_enabled ?? false,
-      skills: version.skills,
+      skills: [],
       tools: version.tools ?? [],
       status: "draft",
       created_by: userId,

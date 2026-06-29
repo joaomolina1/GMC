@@ -72,7 +72,7 @@ export async function POST() {
         model: example.model,
         effort: example.effort,
         thinking_enabled: example.thinking_enabled,
-        skills: example.skills,
+        skills: [],
         tools: {},
         status: "published",
         published_at: new Date().toISOString(),

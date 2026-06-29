@@ -34,6 +34,5 @@ export async function GET() {
     publicAgents: publicAgentCount ?? 0,
     users: userCount ?? 0,
     monthlyCost,
-    coreSkills: 4,
   });
 }

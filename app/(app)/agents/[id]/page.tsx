@@ -9,14 +9,6 @@ import {
   Check,
   Trash2,
   ChevronDown,
-  Search,
-  FileText,
-  Eye,
-  Library,
-  Globe,
-  Database,
-  Code,
-  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -28,7 +20,7 @@ import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
 import { MARKETPLACE_CATEGORIES } from "@lib/marketplace/constants";
 
-type Tab = "general" | "knowledge" | "skills" | "versions";
+type Tab = "general" | "knowledge" | "versions";
 
 interface AgentVersion {
   id: string;
@@ -38,8 +30,6 @@ interface AgentVersion {
   temperature?: number;
   effort?: EffortLevel;
   thinking_enabled?: boolean;
-  skills: string[];
-  tools?: Record<string, Record<string, unknown>>;
   status: string;
   published_at: string | null;
 }
@@ -57,52 +47,8 @@ interface Agent {
 const TABS: { id: Tab; label: string }[] = [
   { id: "general", label: "Geral" },
   { id: "knowledge", label: "Knowledge" },
-  { id: "skills", label: "Skills" },
   { id: "versions", label: "Versões" },
 ];
-
-const SKILL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {
-  web_search: {
-    label: "Web Search",
-    desc: "Pesquisa web nativa da API Anthropic (server-side, incluída na conta)",
-    icon: Search,
-    tone: "bg-sky-50 text-sky-600",
-  },
-  read_document: {
-    label: "Read Document",
-    desc: "PDF, Word, Excel, PowerPoint, CSV + OCR em imagens",
-    icon: FileText,
-    tone: "bg-rose-50 text-rose-600",
-  },
-  vision: {
-    label: "Vision",
-    desc: "Análise multimodal de imagens (requer ANTHROPIC_API_KEY)",
-    icon: Eye,
-    tone: "bg-violet-50 text-violet-600",
-  },
-  knowledge_search: {
-    label: "Knowledge Search",
-    desc: "RAG no Knowledge do agente (melhor com VOYAGE_API_KEY)",
-    icon: Library,
-    tone: "bg-emerald-50 text-emerald-600",
-  },
-};
-
-const CORE_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
-
-const PLUGIN_SKILLS = ["http_request", "sql_query", "run_code"];
-
-const PLUGIN_SKILL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {
-  http_request: { label: "HTTP Request", desc: "Chamadas REST a APIs externas", icon: Globe, tone: "bg-indigo-50 text-indigo-600" },
-  sql_query: { label: "SQL Query", desc: "Queries SELECT read-only na BD GMC", icon: Database, tone: "bg-cyan-50 text-cyan-600" },
-  run_code: { label: "Run Code", desc: "JavaScript sandboxed para cálculos", icon: Code, tone: "bg-orange-50 text-orange-600" },
-};
-
-const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, unknown>> = {
-  http_request: { allowed_hosts: ["*.mediacapital.pt"], timeout_ms: 10000 },
-  sql_query: { max_rows: 100 },
-  run_code: { timeout_ms: 5000 },
-};
 
 const docTone: Record<string, "success" | "warning" | "danger"> = {
   ready: "success",
@@ -127,8 +73,6 @@ export default function AgentBuilderPage() {
   >([]);
   const [effort, setEffort] = useState<EffortLevel>("medium");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [skills, setSkills] = useState<string[]>(CORE_SKILLS);
-  const [toolConfigs, setToolConfigs] = useState<Record<string, Record<string, unknown>>>(DEFAULT_TOOL_CONFIGS);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [docs, setDocs] = useState<
     Array<{
@@ -153,9 +97,6 @@ export default function AgentBuilderPage() {
   const [docError, setDocError] = useState<string | null>(null);
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
   const [knowledgeReady, setKnowledgeReady] = useState<boolean | null>(null);
-  const [skillStatuses, setSkillStatuses] = useState<
-    Record<string, { readiness: string; note: string; requirement?: string }>
-  >({});
 
   const loadDocs = useCallback(async () => {
     const res = await fetch(`/api/knowledge/upload?agentId=${id}`);
@@ -181,11 +122,6 @@ export default function AgentBuilderPage() {
       setModel(current.model);
       setEffort((current.effort as EffortLevel) ?? "medium");
       setThinkingEnabled(Boolean(current.thinking_enabled));
-      setSkills(current.skills ?? CORE_SKILLS);
-      setToolConfigs({
-        ...DEFAULT_TOOL_CONFIGS,
-        ...(current.tools as Record<string, Record<string, unknown>> | undefined),
-      });
       setActiveVersion(current.version);
     }
     setVersions(data.agent_versions ?? []);
@@ -214,22 +150,6 @@ export default function AgentBuilderPage() {
           );
         }
       });
-    fetch("/api/skills")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data.status)) {
-          const map: Record<string, { readiness: string; note: string; requirement?: string }> = {};
-          for (const s of data.status as Array<{
-            key: string;
-            readiness: string;
-            note: string;
-            requirement?: string;
-          }>) {
-            map[s.key] = { readiness: s.readiness, note: s.note, requirement: s.requirement };
-          }
-          setSkillStatuses(map);
-        }
-      });
   }, []);
 
   async function saveNewVersion() {
@@ -245,8 +165,6 @@ export default function AgentBuilderPage() {
         model,
         effort,
         thinking_enabled: thinkingEnabled,
-        skills,
-        tools: toolConfigs,
       }),
     });
     if (!versionRes.ok) {
@@ -544,11 +462,6 @@ export default function AgentBuilderPage() {
                   uploadKnowledge={uploadKnowledge}
                   deleteDoc={deleteDoc}
                   reindexDoc={reindexDoc}
-                  skills={skills}
-                  setSkills={setSkills}
-                  toolConfigs={toolConfigs}
-                  setToolConfigs={setToolConfigs}
-                  skillStatuses={skillStatuses}
                   versions={versions}
                   publishVersion={publishVersion}
                   rollbackVersion={rollbackVersion}
@@ -588,11 +501,6 @@ function AdvancedTabContent({
   uploadKnowledge,
   deleteDoc,
   reindexDoc,
-  skills,
-  setSkills,
-  toolConfigs,
-  setToolConfigs,
-  skillStatuses,
   versions,
   publishVersion,
   rollbackVersion,
@@ -623,11 +531,6 @@ function AdvancedTabContent({
   uploadKnowledge: (e: React.ChangeEvent<HTMLInputElement>) => void;
   deleteDoc: (id: string) => void;
   reindexDoc: (id: string) => void;
-  skills: string[];
-  setSkills: React.Dispatch<React.SetStateAction<string[]>>;
-  toolConfigs: Record<string, Record<string, unknown>>;
-  setToolConfigs: React.Dispatch<React.SetStateAction<Record<string, Record<string, unknown>>>>;
-  skillStatuses: Record<string, { readiness: string; note: string; requirement?: string }>;
   versions: AgentVersion[];
   publishVersion: (id: string) => void;
   rollbackVersion: (id: string) => void;
@@ -667,6 +570,10 @@ function AdvancedTabContent({
   if (tab === "knowledge") {
     return (
       <div className="space-y-4">
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
+          Os documentos carregados são usados automaticamente nas conversas — não é preciso
+          ativar skills. PDFs e imagens no chat são lidos nativamente pelo modelo.
+        </p>
         {knowledgeReady === false && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Falta SUPABASE_SERVICE_ROLE_KEY no servidor.
@@ -703,61 +610,6 @@ function AdvancedTabContent({
             </div>
           </div>
         ))}
-      </div>
-    );
-  }
-
-  if (tab === "skills") {
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-2">
-          {CORE_SKILLS.map((skill) => {
-            const meta = SKILL_META[skill];
-            const Icon = meta.icon;
-            const checked = skills.includes(skill);
-            return (
-              <button
-                key={skill}
-                type="button"
-                onClick={() =>
-                  setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
-                }
-                className={cn(
-                  "flex items-center gap-2 rounded-lg border p-2 text-left text-xs",
-                  checked ? "border-brand-300 bg-brand-50" : "border-line"
-                )}
-              >
-                <Icon size={14} />
-                <span className="font-medium">{meta.label}</span>
-                {checked && <Check size={12} className="ml-auto text-brand-600" />}
-              </button>
-            );
-          })}
-        </div>
-        <div className="grid grid-cols-1 gap-2">
-          {PLUGIN_SKILLS.map((skill) => {
-            const meta = PLUGIN_SKILL_META[skill];
-            const Icon = meta.icon;
-            const checked = skills.includes(skill);
-            return (
-              <button
-                key={skill}
-                type="button"
-                onClick={() =>
-                  setSkills(checked ? skills.filter((s) => s !== skill) : [...skills, skill])
-                }
-                className={cn(
-                  "flex items-center gap-2 rounded-lg border p-2 text-left text-xs",
-                  checked ? "border-brand-300 bg-brand-50" : "border-line"
-                )}
-              >
-                <Icon size={14} />
-                <span className="font-medium">{meta.label}</span>
-                {checked && <Check size={12} className="ml-auto text-brand-600" />}
-              </button>
-            );
-          })}
-        </div>
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import { runAgentLoop } from "@lib/skills/runner";
+import { runAgent } from "@lib/chat/agent";
 import { executeFlowCode } from "./code-runner";
 import type {
   FlowGraph,
@@ -105,27 +105,17 @@ async function executeNode(
           input: state.lastOutput,
         });
 
-        const skills = (version.skills as string[]) ?? [];
-        const skillConfigs =
-          (version.tools as Record<string, Record<string, unknown>>) ?? {};
-
-        const result = await runAgentLoop({
-          config: {
+        const result = await runAgent(
+          {
             model: version.model,
             systemPrompt: version.system_prompt,
             temperature: version.temperature != null ? Number(version.temperature) : undefined,
             effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
             thinkingEnabled: Boolean(version.thinking_enabled),
-            skills,
-            skillConfigs,
+            webSearch: true,
           },
-          messages: [{ role: "user", content: prompt }],
-          ctx: {
-            userId: ctx.userId,
-            agentId,
-            supabase: ctx.supabase,
-          },
-        });
+          [{ role: "user", content: prompt }]
+        );
 
         state.lastOutput = result.content;
         return {
