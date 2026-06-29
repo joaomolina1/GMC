@@ -15,9 +15,9 @@ const TITLES: { match: (p: string) => boolean; title: string; subtitle: string }
   { match: (p) => p === "/", title: "Página inicial", subtitle: "Visão geral da sua plataforma de agentes" },
   { match: (p) => p.startsWith("/agents/new"), title: "Novo agente", subtitle: "Configure um novo agente de IA" },
   { match: (p) => /\/agents\/[^/]+\/chat/.test(p), title: "Conversa", subtitle: "Teste o seu agente em tempo real" },
-  { match: (p) => /\/agents\/[^/]+/.test(p), title: "Agent Builder", subtitle: "Configure prompt, skills e knowledge" },
+  { match: (p) => /\/agents\/[^/]+/.test(p), title: "Agent Builder", subtitle: "Configure prompt e knowledge" },
   { match: (p) => p.startsWith("/agents"), title: "Agentes", subtitle: "Gerir e configurar agentes de IA" },
-  { match: (p) => p.startsWith("/marketplace"), title: "Marketplace", subtitle: "Descubra agentes e skills" },
+  { match: (p) => p.startsWith("/marketplace"), title: "Marketplace", subtitle: "Descubra agentes públicos" },
   { match: (p) => p.startsWith("/flows"), title: "Flows", subtitle: "Orquestração visual de agentes" },
   { match: (p) => p.startsWith("/admin"), title: "Backoffice", subtitle: "Administração e métricas" },
 ];

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseEnv } from "@lib/supabase/env";
 import { getServiceRoleKey } from "@lib/supabase/server";
 import { getVoyageProvider } from "@lib/ai/providers/voyage";
-import { getSkillStatuses } from "@lib/skills/skill-status";
 
 export const runtime = "nodejs";
 
@@ -27,7 +26,7 @@ export async function GET() {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     voyage: voyage.isConfigured,
     embeddings: voyage.isConfigured ? "voyage-3" : "pseudo-hash (configure VOYAGE_API_KEY)",
-    skills: getSkillStatuses(),
+    nativeCapabilities: ["web_search", "pdf_documents", "images", "extended_thinking"],
     timestamp: new Date().toISOString(),
   });
 }

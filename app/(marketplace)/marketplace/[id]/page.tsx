@@ -156,18 +156,6 @@ export default function MarketplaceDetailPage() {
             </div>
           </div>
 
-          {agent.skills.length > 0 && (
-            <div className="mt-6 border-t border-line pt-6">
-              <h3 className="text-sm font-semibold text-slate-800">Skills incluídas</h3>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {agent.skills.map((skill) => (
-                  <Badge key={skill} tone="success">
-                    {skill.replace(/_/g, " ")}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </Card>
 
         <div className="space-y-4">

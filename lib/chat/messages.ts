@@ -1,3 +1,4 @@
+import { extractDocument } from "@lib/documents/extract";
 import type { ChatMessage, MessageContent } from "@lib/ai/types";
 
 interface StoredAttachment {
@@ -12,12 +13,21 @@ interface StoredMessage {
   content: unknown;
 }
 
+type StorageClient = {
+  storage: {
+    from: (bucket: string) => {
+      download: (path: string) => Promise<{ data: Blob | null; error: Error | null }>;
+    };
+  };
+};
+
 /**
- * Build chat messages with multimodal content for image attachments.
+ * Build chat messages with native multimodal content (images, PDFs) and
+ * server-side text extraction for Office documents.
  */
 export async function buildChatMessages(
   history: StoredMessage[],
-  supabase: { storage: { from: (bucket: string) => { download: (path: string) => Promise<{ data: Blob | null; error: Error | null }> } } }
+  supabase: StorageClient
 ): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [];
 
@@ -29,31 +39,14 @@ export async function buildChatMessages(
       const stored = content as { text: string; attachments?: StoredAttachment[] };
       const attachments = stored.attachments ?? [];
 
-      if (role === "user" && attachments.some((a) => a.kind === "image")) {
-        const blocks: MessageContent[] = [];
-
-        for (const att of attachments) {
-          if (att.kind === "image") {
-            const imageBlock = await loadImageBlock(supabase, att);
-            if (imageBlock) blocks.push(imageBlock);
-          }
-        }
-
+      if (role === "user" && attachments.length > 0) {
+        const blocks = await buildAttachmentBlocks(supabase, attachments);
         blocks.push({ type: "text", text: stored.text });
         messages.push({ role, content: blocks });
         continue;
       }
 
-      let text = stored.text;
-      const nonImageAtts = attachments.filter((a) => a.kind !== "image");
-      if (nonImageAtts.length > 0) {
-        const attList = nonImageAtts
-          .map((a) => `- ${a.filename} (${a.kind}, path: ${a.storage_path})`)
-          .join("\n");
-        text = `${text}\n\n[Ficheiros anexados:\n${attList}]`;
-      }
-
-      messages.push({ role, content: text });
+      messages.push({ role, content: stored.text });
       continue;
     }
 
@@ -66,35 +59,62 @@ export async function buildChatMessages(
   return messages;
 }
 
-async function loadImageBlock(
-  supabase: { storage: { from: (bucket: string) => { download: (path: string) => Promise<{ data: Blob | null; error: Error | null }> } } },
-  att: StoredAttachment
-): Promise<MessageContent | null> {
-  const { data, error } = await supabase.storage.from("attachments").download(att.storage_path);
-  if (error || !data) return null;
+async function buildAttachmentBlocks(
+  supabase: StorageClient,
+  attachments: StoredAttachment[]
+): Promise<MessageContent[]> {
+  const blocks: MessageContent[] = [];
 
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const base64 = buffer.toString("base64");
-  const mediaType = att.mime || data.type || "image/png";
+  for (const att of attachments) {
+    const { data, error } = await supabase.storage
+      .from("attachments")
+      .download(att.storage_path);
 
-  return {
-    type: "image",
-    source: { type: "base64", media_type: mediaType, data: base64 },
-  };
-}
+    if (error || !data) continue;
 
-/**
- * Build a system prompt suffix that informs the model about attached files.
- */
-export function buildAttachmentHint(
-  attachments?: StoredAttachment[]
-): string | undefined {
-  if (!attachments?.length) return undefined;
+    const buffer = Buffer.from(await data.arrayBuffer());
 
-  const lines = attachments.map((a) => {
-    if (a.kind === "image") return `- Imagem: ${a.filename} (já incluída na mensagem)`;
-    return `- ${a.filename} (${a.kind}) — usa a skill read_document com storage_path="${a.storage_path}"`;
-  });
+    if (att.kind === "image" || att.mime.startsWith("image/")) {
+      const mediaType = att.mime || data.type || "image/png";
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: buffer.toString("base64"),
+        },
+      });
+      continue;
+    }
 
-  return `\n\nO utilizador anexou ficheiros:\n${lines.join("\n")}`;
+    if (att.kind === "pdf" || att.mime === "application/pdf") {
+      blocks.push({
+        type: "document",
+        title: att.filename,
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: buffer.toString("base64"),
+        },
+      });
+      continue;
+    }
+
+    try {
+      const extracted = await extractDocument(buffer, att.filename, att.mime);
+      if (extracted.text.trim()) {
+        blocks.push({
+          type: "text",
+          text: `[Conteúdo do ficheiro "${att.filename}"]\n\n${extracted.text}`,
+        });
+      }
+    } catch {
+      blocks.push({
+        type: "text",
+        text: `[Não foi possível ler o ficheiro "${att.filename}"]`,
+      });
+    }
+  }
+
+  return blocks;
 }

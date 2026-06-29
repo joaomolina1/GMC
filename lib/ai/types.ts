@@ -1,6 +1,7 @@
 export interface MessageContent {
-  type: "text" | "image";
+  type: "text" | "image" | "document";
   text?: string;
+  title?: string;
   source?: { type: "base64"; media_type: string; data: string };
 }
 
@@ -26,11 +27,8 @@ export interface GenerateOptions {
   effort?: EffortLevel;
   thinkingEnabled?: boolean;
   maxTokens?: number;
-  /** Client-executed skills (GMC runs these). */
-  tools?: ToolDefinition[];
-  /** All enabled skill keys — used to attach Anthropic server tools (e.g. web_search). */
-  skillKeys?: string[];
-  skillConfigs?: Record<string, Record<string, unknown>>;
+  /** Anthropic native server tools (e.g. web_search). */
+  nativeTools?: import("@anthropic-ai/sdk/resources/messages/messages").ToolUnion[];
 }
 
 export interface GenerateResult {

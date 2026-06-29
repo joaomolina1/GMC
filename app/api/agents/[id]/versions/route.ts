@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
 
-const DEFAULT_SKILLS = ["web_search", "read_document", "vision", "knowledge_search"];
+const DEFAULT_SKILLS: string[] = [];
 
 export async function POST(
   request: Request,
@@ -16,14 +16,12 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { system_prompt, model, temperature, effort, thinking_enabled, skills, tools, createSnapshot } = body as {
+  const { system_prompt, model, temperature, effort, thinking_enabled, createSnapshot } = body as {
     system_prompt?: string;
     model?: string;
     temperature?: number;
     effort?: string;
     thinking_enabled?: boolean;
-    skills?: string[];
-    tools?: Record<string, unknown>;
     createSnapshot?: boolean;
   };
 
@@ -43,8 +41,8 @@ export async function POST(
     temperature: temperature ?? 0.7,
     effort: effort ?? "medium",
     thinking_enabled: thinking_enabled ?? false,
-    skills: skills ?? DEFAULT_SKILLS,
-    tools: tools ?? {},
+    skills: DEFAULT_SKILLS,
+    tools: {},
   };
 
   let version;

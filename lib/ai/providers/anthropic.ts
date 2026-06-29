@@ -11,7 +11,6 @@ import type {
   ToolCall,
   VisionOptions,
 } from "../types";
-import { buildAnthropicServerTools } from "../anthropic-server-tools";
 import { buildAnthropicRequestExtras } from "../anthropic-params";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 8;
@@ -25,11 +24,26 @@ function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] 
       role: m.role as "user" | "assistant",
       content: m.content.map((block) => {
         if (block.type === "text") return { type: "text" as const, text: block.text! };
+        if (block.type === "document") {
+          return {
+            type: "document" as const,
+            title: block.title ?? undefined,
+            source: {
+              type: "base64" as const,
+              media_type: "application/pdf" as const,
+              data: block.source!.data,
+            },
+          };
+        }
         return {
           type: "image" as const,
           source: {
             type: "base64" as const,
-            media_type: block.source!.media_type as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            media_type: block.source!.media_type as
+              | "image/jpeg"
+              | "image/png"
+              | "image/gif"
+              | "image/webp",
             data: block.source!.data,
           },
         };
@@ -38,21 +52,8 @@ function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] 
   });
 }
 
-function buildAllTools(options: GenerateOptions): ToolUnion[] | undefined {
-  const server = buildAnthropicServerTools(options.skillKeys ?? [], options.skillConfigs);
-  const client = (options.tools ?? []).map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-  }));
-  const all = [...server, ...client];
-  return all.length > 0 ? all : undefined;
-}
-
-function extractClientToolCalls(content: Anthropic.ContentBlock[]): ToolCall[] {
-  return content
-    .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-    .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
+function buildTools(options: GenerateOptions): ToolUnion[] | undefined {
+  return options.nativeTools?.length ? options.nativeTools : undefined;
 }
 
 function extractText(content: Anthropic.ContentBlock[]): string {
@@ -72,7 +73,7 @@ export class AnthropicProvider implements AIProvider {
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
     let messages = toAnthropicMessages(options.messages);
-    const tools = buildAllTools(options);
+    const tools = buildTools(options);
     let totalPrompt = 0;
     let totalCompletion = 0;
     let response: Anthropic.Message | null = null;
@@ -103,7 +104,9 @@ export class AnthropicProvider implements AIProvider {
       throw new Error("No response from Anthropic");
     }
 
-    const toolCalls = extractClientToolCalls(response.content);
+    const toolCalls = response.content
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+      .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
 
     return {
       content: extractText(response.content),
@@ -119,7 +122,7 @@ export class AnthropicProvider implements AIProvider {
 
   async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
     let messages = toAnthropicMessages(options.messages);
-    const tools = buildAllTools(options);
+    const tools = buildTools(options);
     let totalPrompt = 0;
     let totalCompletion = 0;
     const requestExtras = buildAnthropicRequestExtras(options);

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logUsage } from "@lib/audit";
-import { streamAgentLoop } from "@lib/skills/runner";
-import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
+import { streamAgent } from "@lib/chat/agent";
+import { buildChatMessages } from "@lib/chat/messages";
+import { buildKnowledgeContext } from "@lib/chat/rag";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
@@ -101,16 +102,10 @@ export async function POST(request: Request) {
 
   const messages = await buildChatMessages(history ?? [], supabase);
 
-  const attachmentHint = buildAttachmentHint(attachments);
-  const systemPrompt = attachmentHint
-    ? `${version.system_prompt}${attachmentHint}`
+  const knowledgeContext = await buildKnowledgeContext(supabase, agentId, message);
+  const systemPrompt = knowledgeContext
+    ? `${version.system_prompt}${knowledgeContext}`
     : version.system_prompt;
-
-  const skills = (version.skills as string[])?.length
-    ? (version.skills as string[])
-    : ["web_search", "read_document", "vision", "knowledge_search"];
-
-  const skillConfigs = (version.tools as Record<string, Record<string, unknown>>) ?? {};
 
   const encoder = new TextEncoder();
   let fullContent = "";
@@ -120,40 +115,32 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of streamAgentLoop({
-          config: {
+        for await (const chunk of streamAgent(
+          {
             model: version.model,
             systemPrompt,
             temperature: version.temperature != null ? Number(version.temperature) : undefined,
             effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
             thinkingEnabled: Boolean(version.thinking_enabled),
-            skills,
-            skillConfigs,
+            webSearch: true,
           },
-          messages,
-          ctx: {
-            userId: user.id,
-            agentId,
-            conversationId: convId,
-            supabase,
-          },
-          onText: (text) => {
-            fullContent += text;
-          },
-        })) {
+          messages
+        )) {
           if (chunk.type === "text") {
+            fullContent += chunk.text;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk.text })}\n\n`));
           }
-          if (chunk.type === "tool") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool", name: chunk.name })}\n\n`));
-          }
           if (chunk.type === "server_tool") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name })}\n\n`)
+            );
           }
           if (chunk.type === "done") {
             finalUsage = chunk.usage;
             finalCost = chunk.costEur;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", conversationId: convId })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "done", conversationId: convId })}\n\n`)
+            );
           }
         }
 

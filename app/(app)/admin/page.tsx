@@ -60,7 +60,6 @@ export default function AdminPage() {
     publicAgents: number;
     users: number;
     monthlyCost: number;
-    coreSkills: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -261,10 +260,10 @@ export default function AdminPage() {
         </Card>
         <Card>
           <div className="flex items-center gap-2 text-slate-400">
-            <Zap size={16} />
-            <p className="text-xs font-medium uppercase">Skills Core</p>
+            <Users size={16} />
+            <p className="text-xs font-medium uppercase">Utilizadores</p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{platformStats?.coreSkills ?? 4}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{platformStats?.users ?? "—"}</p>
         </Card>
         <Card>
           <div className="flex items-center gap-2 text-slate-400">

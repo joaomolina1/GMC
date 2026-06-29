@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, description, system_prompt, model, skills } = body;
+  const { name, description, system_prompt, model } = body;
 
   const { data: agent, error: agentError } = await supabase
     .from("agents")
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       version: 1,
       system_prompt: system_prompt ?? "És um assistente útil do Grupo Media Capital.",
       model: model ?? "claude-sonnet-4-6",
-      skills: skills ?? ["web_search", "read_document", "vision", "knowledge_search"],
+      skills: [],
       status: "draft",
       created_by: user.id,
     })

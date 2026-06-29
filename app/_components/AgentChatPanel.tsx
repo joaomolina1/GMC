@@ -134,9 +134,6 @@ export function AgentChatPanel({
           if (data.type === "done" && data.conversationId) {
             setConversationId(data.conversationId);
           }
-          if (data.type === "tool" && data.name) {
-            assistantContent += `\n\n🔧 *A usar skill: ${data.name}*\n`;
-          }
           if (data.type === "server_tool" && data.name) {
             assistantContent += `\n\n🔍 *A pesquisar na web…*\n`;
           }
