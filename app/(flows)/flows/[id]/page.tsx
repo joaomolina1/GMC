@@ -20,7 +20,7 @@ import { Input, Textarea, Select } from "@/_design_system/Input";
 import { Badge } from "@/_design_system/Badge";
 import { FlowCanvas } from "@/_components/FlowCanvas";
 import { FLOW_NODE_TYPES } from "@lib/flows/constants";
-import type { FlowGraph, FlowNode } from "@lib/flows/types";
+import type { FlowGraph, FlowNode, FlowNodeExecutionStatus } from "@lib/flows/types";
 
 interface FlowVersion {
   id: string;
@@ -57,6 +57,9 @@ export default function FlowBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [running, setRunning] = useState(false);
+  const [nodeExecutionState, setNodeExecutionState] = useState<
+    Record<string, FlowNodeExecutionStatus>
+  >({});
   const [showRuns, setShowRuns] = useState(searchParams.get("run") === "1");
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -142,6 +145,7 @@ export default function FlowBuilderPage() {
     setRunning(true);
     setRunResult(null);
     setRunSteps([]);
+    setNodeExecutionState({});
 
     const saved = await saveGraph(true);
     if (!saved) {
@@ -153,17 +157,79 @@ export default function FlowBuilderPage() {
     const res = await fetch(`/api/flows/${id}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: runInput }),
+      body: JSON.stringify({ input: runInput, stream: true }),
     });
-    const data = await res.json();
-    if (res.ok) {
-      setRunResult(data.output ?? data.error ?? "Sem output");
-      setRunSteps(Array.isArray(data.steps) ? data.steps : []);
-      setShowRuns(true);
-      await loadRuns();
-    } else {
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
       setRunResult(data.error ?? "Erro na execução");
+      setRunning(false);
+      return;
     }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      setRunResult("Erro: resposta sem stream");
+      setRunning(false);
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          let event = "message";
+          let dataStr = "";
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: ")) event = line.slice(7);
+            else if (line.startsWith("data: ")) dataStr = line.slice(6);
+          }
+          if (!dataStr) continue;
+
+          const data = JSON.parse(dataStr) as Record<string, unknown>;
+
+          if (event === "step_start") {
+            const nodeId = data.nodeId as string;
+            setNodeExecutionState((prev) => ({ ...prev, [nodeId]: "running" }));
+          } else if (event === "step_complete") {
+            const nodeId = data.nodeId as string;
+            const status = data.status as FlowNodeExecutionStatus;
+            setNodeExecutionState((prev) => ({ ...prev, [nodeId]: status }));
+            setRunSteps((prev) => [
+              ...prev,
+              {
+                nodeType: data.nodeType as string,
+                status: data.status as string,
+                output: data.output as Record<string, unknown> | undefined,
+                error: data.error as string | undefined,
+              },
+            ]);
+          } else if (event === "done") {
+            setRunResult(
+              (data.output as string) ?? (data.error as string) ?? "Sem output"
+            );
+            setShowRuns(true);
+            await loadRuns();
+          } else if (event === "error") {
+            setRunResult((data.error as string) ?? "Erro na execução");
+          }
+        }
+      }
+    } catch {
+      setRunResult("Erro ao ler o progresso da execução");
+    }
+
     setRunning(false);
   }
 
@@ -291,6 +357,7 @@ export default function FlowBuilderPage() {
             onChange={setGraph}
             selectedNodeId={selectedNodeId}
             onSelectNode={setSelectedNodeId}
+            nodeExecutionState={nodeExecutionState}
           />
         </div>
 
