@@ -1,22 +1,33 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@lib/supabase/server";
+import { createClient, tryCreateServiceClient } from "@lib/supabase/server";
 import { processKnowledgeDocument } from "@lib/ai/embeddings";
 import { extractDocument } from "@lib/documents/extract";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ACCEPTED_EXTENSIONS = ["pdf", "docx", "xlsx", "xls", "pptx", "txt", "md", "csv", "png", "jpg", "jpeg", "webp", "gif"];
 
+const SERVICE_ROLE_HINT =
+  "Configure SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SECRET_KEY) em Vercel → Production e faça redeploy.";
+
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const serviceClient = await createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const rateCheck = await assertRateLimit(supabase, "/api/knowledge/upload", user.id);
   if (!rateCheck.ok) {
     return NextResponse.json({ error: rateCheck.message }, { status: 429 });
+  }
+
+  const serviceClient = await tryCreateServiceClient();
+  if (!serviceClient) {
+    return NextResponse.json(
+      { error: `Upload indisponível: chave de serviço Supabase em falta. ${SERVICE_ROLE_HINT}` },
+      { status: 503 }
+    );
   }
 
   const formData = await request.formData();
@@ -39,10 +50,10 @@ export async function POST(request: Request) {
 
   const { error: uploadError } = await supabase.storage
     .from("knowledge")
-    .upload(storagePath, buffer, { contentType: file.type });
+    .upload(storagePath, buffer, { contentType: file.type || "application/octet-stream" });
 
   if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    return NextResponse.json({ error: `Storage: ${uploadError.message}` }, { status: 500 });
   }
 
   const { data: doc, error: docError } = await supabase
@@ -51,7 +62,7 @@ export async function POST(request: Request) {
       agent_id: agentId,
       filename: file.name,
       storage_path: storagePath,
-      mime: file.type,
+      mime: file.type || "application/octet-stream",
       status: "processing",
       uploaded_by: user.id,
       metadata: { source: "upload" },
@@ -69,7 +80,7 @@ export async function POST(request: Request) {
         .from("knowledge_documents")
         .update({ status: "error", metadata: { error: "No text extracted", ocr_used: false } })
         .eq("id", doc.id);
-      return NextResponse.json({ error: "No text could be extracted from this file" }, { status: 422 });
+      return NextResponse.json({ error: "Não foi possível extrair texto deste ficheiro" }, { status: 422 });
     }
 
     const { chunkCount } = await processKnowledgeDocument(
@@ -95,16 +106,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...updated, chunk_count: chunkCount });
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Processing failed";
     await serviceClient
       .from("knowledge_documents")
       .update({
         status: "error",
-        metadata: { error: err instanceof Error ? err.message : "Processing failed" },
+        metadata: { error: message },
       })
       .eq("id", doc.id);
-    return NextResponse.json({
-      error: err instanceof Error ? err.message : "Processing failed",
-    }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -128,7 +138,7 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   const supabase = await createClient();
-  const serviceClient = await createServiceClient();
+  const serviceClient = await tryCreateServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -144,7 +154,9 @@ export async function DELETE(request: Request) {
   if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
   await supabase.storage.from("knowledge").remove([doc.storage_path]);
-  await serviceClient.from("knowledge_chunks").delete().eq("document_id", docId);
+  if (serviceClient) {
+    await serviceClient.from("knowledge_chunks").delete().eq("document_id", docId);
+  }
   const { error } = await supabase.from("knowledge_documents").delete().eq("id", docId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

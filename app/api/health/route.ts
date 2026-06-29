@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseEnv } from "@lib/supabase/env";
+import { getServiceRoleKey } from "@lib/supabase/server";
 import { getVoyageProvider } from "@lib/ai/providers/voyage";
 import { getSkillStatuses } from "@lib/skills/skill-status";
 
@@ -22,7 +23,7 @@ export async function GET() {
     enterprise: true,
     entra: process.env.NEXT_PUBLIC_ENTRA_ENABLED === "true",
     supabase: supabaseConfigured,
-    serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    serviceRole: Boolean(getServiceRoleKey()),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     voyage: voyage.isConfigured,
     embeddings: voyage.isConfigured ? "voyage-3" : "pseudo-hash (configure VOYAGE_API_KEY)",
