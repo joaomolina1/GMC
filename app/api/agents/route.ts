@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("agents")
-    .select("*, agent_versions(id, version, status, published_at)")
+    .select("*")
     .order("updated_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
