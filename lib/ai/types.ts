@@ -21,7 +21,11 @@ export interface GenerateOptions {
   system?: string;
   temperature?: number;
   maxTokens?: number;
+  /** Client-executed skills (GMC runs these). */
   tools?: ToolDefinition[];
+  /** All enabled skill keys — used to attach Anthropic server tools (e.g. web_search). */
+  skillKeys?: string[];
+  skillConfigs?: Record<string, Record<string, unknown>>;
 }
 
 export interface GenerateResult {
@@ -44,9 +48,10 @@ export interface TokenUsage {
 }
 
 export interface StreamChunk {
-  type: "text" | "tool_use" | "done";
+  type: "text" | "tool_use" | "server_tool" | "done";
   text?: string;
   toolCall?: ToolCall;
+  serverToolName?: string;
   usage?: TokenUsage;
 }
 

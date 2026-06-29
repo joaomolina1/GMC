@@ -1,5 +1,4 @@
 import type { SkillDefinition } from "./types";
-import { webSearchSkill } from "./core/web-search";
 import { readDocumentSkill } from "./core/read-document";
 import { visionSkill } from "./core/vision";
 import { knowledgeSearchSkill } from "./core/knowledge-search";
@@ -8,7 +7,6 @@ import { sqlQuerySkill } from "./plugins/sql-query";
 import { runCodeSkill } from "./plugins/run-code";
 
 const coreSkills: SkillDefinition[] = [
-  webSearchSkill,
   readDocumentSkill,
   visionSkill,
   knowledgeSearchSkill,
@@ -44,6 +42,14 @@ export function listCoreSkills(): SkillDefinition[] {
 
 export function listPluginSkills(): SkillDefinition[] {
   return [...pluginSkills];
+}
+
+export function resolveEnabledSkillKeys(
+  skillsConfig: Array<string | { key: string; enabled?: boolean }>
+): string[] {
+  return skillsConfig
+    .map((s) => (typeof s === "string" ? s : s.enabled !== false ? s.key : null))
+    .filter((k): k is string => k !== null);
 }
 
 export function resolveAgentSkills(

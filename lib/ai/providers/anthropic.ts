@@ -1,3 +1,4 @@
+import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   AIProvider,
@@ -10,8 +11,11 @@ import type {
   ToolCall,
   VisionOptions,
 } from "../types";
+import { buildAnthropicServerTools } from "../anthropic-server-tools";
 
-function toAnthropicMessages(messages: ChatMessage[]) {
+const MAX_PAUSE_TURN_CONTINUATIONS = 8;
+
+function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
   return messages.map((m) => {
     if (typeof m.content === "string") {
       return { role: m.role as "user" | "assistant", content: m.content };
@@ -33,6 +37,30 @@ function toAnthropicMessages(messages: ChatMessage[]) {
   });
 }
 
+function buildAllTools(options: GenerateOptions): ToolUnion[] | undefined {
+  const server = buildAnthropicServerTools(options.skillKeys ?? [], options.skillConfigs);
+  const client = (options.tools ?? []).map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema as Anthropic.Tool.InputSchema,
+  }));
+  const all = [...server, ...client];
+  return all.length > 0 ? all : undefined;
+}
+
+function extractClientToolCalls(content: Anthropic.ContentBlock[]): ToolCall[] {
+  return content
+    .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+    .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
+}
+
+function extractText(content: Anthropic.ContentBlock[]): string {
+  return content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+}
+
 export class AnthropicProvider implements AIProvider {
   name = "anthropic";
   private client: Anthropic;
@@ -42,39 +70,44 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
-    const response = await this.client.messages.create({
-      model: options.model,
-      max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature ?? 0.7,
-      system: options.system,
-      messages: toAnthropicMessages(options.messages),
-      tools: options.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-      })),
-    });
+    let messages = toAnthropicMessages(options.messages);
+    const tools = buildAllTools(options);
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    let response: Anthropic.Message | null = null;
 
-    let content = "";
-    const toolCalls: ToolCall[] = [];
+    for (let i = 0; i < MAX_PAUSE_TURN_CONTINUATIONS; i++) {
+      response = await this.client.messages.create({
+        model: options.model,
+        max_tokens: options.maxTokens ?? 4096,
+        temperature: options.temperature ?? 0.7,
+        system: options.system,
+        messages,
+        tools,
+      });
 
-    for (const block of response.content) {
-      if (block.type === "text") content += block.text;
-      if (block.type === "tool_use") {
-        toolCalls.push({
-          id: block.id,
-          name: block.name,
-          input: block.input as Record<string, unknown>,
-        });
+      totalPrompt += response.usage.input_tokens;
+      totalCompletion += response.usage.output_tokens;
+
+      if (response.stop_reason === "pause_turn") {
+        messages = [...messages, { role: "assistant", content: response.content }];
+        continue;
       }
+      break;
     }
 
+    if (!response) {
+      throw new Error("No response from Anthropic");
+    }
+
+    const toolCalls = extractClientToolCalls(response.content);
+
     return {
-      content,
+      content: extractText(response.content),
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
+        promptTokens: totalPrompt,
+        completionTokens: totalCompletion,
       },
       model: response.model,
       stopReason: response.stop_reason ?? undefined,
@@ -82,58 +115,75 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
-    const stream = await this.client.messages.create({
-      model: options.model,
-      max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature ?? 0.7,
-      system: options.system,
-      messages: toAnthropicMessages(options.messages),
-      tools: options.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-      })),
-      stream: true,
-    });
+    let messages = toAnthropicMessages(options.messages);
+    const tools = buildAllTools(options);
+    let totalPrompt = 0;
+    let totalCompletion = 0;
 
-    let currentTool: Partial<ToolCall> | null = null;
-    let toolInputJson = "";
+    for (let turn = 0; turn < MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
+      const stream = this.client.messages.stream({
+        model: options.model,
+        max_tokens: options.maxTokens ?? 4096,
+        temperature: options.temperature ?? 0.7,
+        system: options.system,
+        messages,
+        tools,
+      });
 
-    for await (const event of stream) {
-      if (event.type === "content_block_delta") {
-        if (event.delta.type === "text_delta") {
-          yield { type: "text", text: event.delta.text };
+      let currentTool: Partial<ToolCall> | null = null;
+      let toolInputJson = "";
+
+      for await (const event of stream) {
+        if (event.type === "content_block_delta") {
+          if (event.delta.type === "text_delta") {
+            yield { type: "text", text: event.delta.text };
+          }
+          if (event.delta.type === "input_json_delta") {
+            toolInputJson += event.delta.partial_json;
+          }
         }
-        if (event.delta.type === "input_json_delta") {
-          toolInputJson += event.delta.partial_json;
+        if (event.type === "content_block_start") {
+          if (event.content_block.type === "server_tool_use") {
+            yield { type: "server_tool", serverToolName: event.content_block.name };
+          }
+          if (event.content_block.type === "tool_use") {
+            currentTool = { id: event.content_block.id, name: event.content_block.name };
+            toolInputJson = "";
+          }
+        }
+        if (event.type === "content_block_stop" && currentTool) {
+          yield {
+            type: "tool_use",
+            toolCall: {
+              id: currentTool.id!,
+              name: currentTool.name!,
+              input: JSON.parse(toolInputJson || "{}"),
+            },
+          };
+          currentTool = null;
         }
       }
-      if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
-        currentTool = { id: event.content_block.id, name: event.content_block.name };
-        toolInputJson = "";
+
+      const final = await stream.finalMessage();
+      totalPrompt += final.usage.input_tokens;
+      totalCompletion += final.usage.output_tokens;
+
+      if (final.stop_reason === "pause_turn") {
+        messages = [...messages, { role: "assistant", content: final.content }];
+        continue;
       }
-      if (event.type === "content_block_stop" && currentTool) {
-        yield {
-          type: "tool_use",
-          toolCall: {
-            id: currentTool.id!,
-            name: currentTool.name!,
-            input: JSON.parse(toolInputJson || "{}"),
-          },
-        };
-        currentTool = null;
-      }
-      if (event.type === "message_delta" && event.usage) {
-        yield {
-          type: "done",
-          usage: {
-            promptTokens: event.usage.output_tokens,
-            completionTokens: event.usage.output_tokens,
-          },
-        };
-      }
+
+      yield {
+        type: "done",
+        usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+      };
+      return;
     }
-    yield { type: "done" };
+
+    yield {
+      type: "done",
+      usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+    };
   }
 
   async embed(options: EmbedOptions): Promise<EmbedResult> {

@@ -1,7 +1,7 @@
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import type { ChatMessage, ToolCall } from "@lib/ai/types";
 import { logAudit } from "@lib/audit";
-import { resolveAgentSkills, getSkill, PLUGIN_SKILL_KEYS } from "./registry";
+import { resolveAgentSkills, resolveEnabledSkillKeys, getSkill, PLUGIN_SKILL_KEYS } from "./registry";
 import { toToolDefinition, type SkillContext } from "./types";
 
 export interface AgentRunConfig {
@@ -27,6 +27,23 @@ export interface RunAgentResult {
   toolCalls: Array<{ name: string; input: Record<string, unknown>; result: string }>;
 }
 
+function buildProviderOptions(
+  config: AgentRunConfig,
+  messages: ChatMessage[],
+  clientTools: ReturnType<typeof toToolDefinition>[]
+) {
+  const skillKeys = resolveEnabledSkillKeys(config.skills);
+  return {
+    model: config.model,
+    system: config.systemPrompt,
+    temperature: config.temperature,
+    messages,
+    tools: clientTools.length > 0 ? clientTools : undefined,
+    skillKeys,
+    skillConfigs: config.skillConfigs,
+  };
+}
+
 export async function runAgentLoop(options: RunAgentOptions): Promise<RunAgentResult> {
   const { config, messages, ctx, maxIterations = 10, onText } = options;
   const enrichedCtx: SkillContext = {
@@ -44,13 +61,7 @@ export async function runAgentLoop(options: RunAgentOptions): Promise<RunAgentRe
   let finalContent = "";
 
   for (let i = 0; i < maxIterations; i++) {
-    const result = await provider.generate({
-      model: config.model,
-      system: config.systemPrompt,
-      temperature: config.temperature,
-      messages: currentMessages,
-      tools: tools.length > 0 ? tools : undefined,
-    });
+    const result = await provider.generate(buildProviderOptions(config, currentMessages, tools));
 
     totalPrompt += result.usage.promptTokens;
     totalCompletion += result.usage.completionTokens;
@@ -94,6 +105,7 @@ export async function* streamAgentLoop(
 ): AsyncGenerator<
   | { type: "text"; text: string }
   | { type: "tool"; name: string; result: string }
+  | { type: "server_tool"; name: string }
   | { type: "done"; usage: { promptTokens: number; completionTokens: number }; costEur: number }
 > {
   const { config, messages, ctx, maxIterations = 10 } = options;
@@ -110,19 +122,14 @@ export async function* streamAgentLoop(
   let totalCompletion = 0;
 
   for (let i = 0; i < maxIterations; i++) {
-    let textBuffer = "";
     let toolCalls: ToolCall[] = [];
 
-    for await (const chunk of provider.stream({
-      model: config.model,
-      system: config.systemPrompt,
-      temperature: config.temperature,
-      messages: currentMessages,
-      tools: tools.length > 0 ? tools : undefined,
-    })) {
+    for await (const chunk of provider.stream(buildProviderOptions(config, currentMessages, tools))) {
       if (chunk.type === "text" && chunk.text) {
-        textBuffer += chunk.text;
         yield { type: "text", text: chunk.text };
+      }
+      if (chunk.type === "server_tool" && chunk.serverToolName) {
+        yield { type: "server_tool", name: chunk.serverToolName };
       }
       if (chunk.type === "tool_use" && chunk.toolCall) {
         toolCalls.push(chunk.toolCall);
