@@ -17,7 +17,7 @@ export async function GET() {
 
   return NextResponse.json({
     status: supabaseConfigured ? "ok" : "degraded",
-    phase: 2,
+    phase: 3,
     supabase: supabaseConfigured,
     serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),

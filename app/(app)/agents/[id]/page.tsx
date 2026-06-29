@@ -24,6 +24,7 @@ import { Card } from "@/_design_system/Card";
 import { Input, Textarea, Select } from "@/_design_system/Input";
 import { Badge } from "@/_design_system/Badge";
 import { cn } from "@lib/utils";
+import { MARKETPLACE_CATEGORIES } from "@lib/marketplace/constants";
 
 type Tab = "general" | "prompt" | "knowledge" | "skills" | "model" | "versions";
 
@@ -78,6 +79,9 @@ export default function AgentBuilderPage() {
   const [tab, setTab] = useState<Tab>("general");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [visibility, setVisibility] = useState("private");
+  const [category, setCategory] = useState("geral");
+  const [tagsInput, setTagsInput] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [model, setModel] = useState("claude-sonnet-4-20250514");
   const [temperature, setTemperature] = useState(0.7);
@@ -113,6 +117,9 @@ export default function AgentBuilderPage() {
     setAgent(data);
     setName(data.name ?? "");
     setDescription(data.description ?? "");
+    setVisibility(data.visibility ?? "private");
+    setCategory(data.category ?? "geral");
+    setTagsInput((data.tags ?? []).join(", "));
     const current =
       data.agent_versions?.find((v: AgentVersion) => v.id === data.current_version_id) ??
       data.agent_versions?.[0];
@@ -141,7 +148,16 @@ export default function AgentBuilderPage() {
     await fetch(`/api/agents/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({
+        name,
+        description,
+        visibility,
+        category,
+        tags: tagsInput
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+      }),
     });
     await loadAgent();
     setSaving(false);
@@ -263,6 +279,56 @@ export default function AgentBuilderPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+
+            <div className="border-t border-line pt-5">
+              <h3 className="text-sm font-semibold text-slate-800">Marketplace</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Configure visibilidade e metadados para publicar no marketplace interno.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Visibilidade"
+                  value={visibility}
+                  onChange={(e) => setVisibility(e.target.value)}
+                >
+                  <option value="private">Privado — só eu</option>
+                  <option value="team">Equipa — membros da equipa</option>
+                  <option value="public">Público — marketplace</option>
+                </Select>
+                <Select
+                  label="Categoria"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {MARKETPLACE_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Input
+                label="Tags"
+                hint="Separadas por vírgula (ex: relatórios, análise, RH)"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                className="mt-4"
+              />
+              {visibility === "public" && agent.status !== "published" && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Publique uma versão no separador Versões para o agente aparecer no marketplace.
+                </p>
+              )}
+              {visibility === "public" && agent.status === "published" && (
+                <Link
+                  href={`/marketplace/${id}`}
+                  className="mt-3 inline-flex text-xs font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Ver no marketplace →
+                </Link>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 gap-3 border-t border-line pt-5 sm:grid-cols-3">
               <div className="rounded-xl bg-slate-50 p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Estado</p>
@@ -277,7 +343,7 @@ export default function AgentBuilderPage() {
                   Visibilidade
                 </p>
                 <p className="mt-1.5 text-sm font-medium capitalize text-slate-700">
-                  {agent.visibility ?? "privado"}
+                  {visibility}
                 </p>
               </div>
               <div className="rounded-xl bg-slate-50 p-4">

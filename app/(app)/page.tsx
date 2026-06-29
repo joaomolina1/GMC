@@ -12,6 +12,7 @@ import {
   Eye,
   Library,
   Sparkles,
+  Store,
 } from "lucide-react";
 import Link from "next/link";
 import { formatCost } from "@lib/utils";
@@ -70,7 +71,7 @@ export default async function DashboardPage() {
   const quickActions = [
     { icon: Plus, label: "Novo agente", desc: "Criar do zero", href: "/agents/new" },
     { icon: Bot, label: "Os meus agentes", desc: "Ver e gerir", href: "/agents" },
-    { icon: Sparkles, label: "Backoffice", desc: "Métricas e custos", href: "/admin" },
+    { icon: Store, label: "Marketplace", desc: "Descobrir agentes", href: "/marketplace" },
   ];
 
   return (
@@ -152,6 +153,7 @@ export default async function DashboardPage() {
               { t: "Configurar", d: "Prompt, skills e base de conhecimento." },
               { t: "Conversar e testar", d: "PDF, Vision, Web Search e RAG." },
               { t: "Publicar versão", d: "Com rollback sempre que precisar." },
+              { t: "Marketplace", d: "Partilhe agentes públicos com a equipa." },
             ].map((step, i) => (
               <li key={i} className="flex gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-600">

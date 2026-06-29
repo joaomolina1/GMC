@@ -33,6 +33,15 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Vision melhorado** — suporte multi-imagem, OCR integrado no read_document
 - **RAG melhorado** — query embeddings separados (`input_type: query`), threshold de relevância
 
+## Fase 3 — Marketplace ✅
+
+- **Catálogo público** — agentes com `visibility=public` e versão publicada
+- **Pesquisa e filtros** — texto, categoria, ordenação (recentes, populares, rating)
+- **Favoritos e seguir** — guardar agentes e acompanhar criadores
+- **Clonar agente** — cópia privada com prompt, modelo e skills (sem knowledge base)
+- **Página de detalhe** — stats, skills, criador, ações rápidas
+- **Agent Builder** — visibilidade, categoria e tags para publicação
+
 ## Setup
 
 ```bash
@@ -67,7 +76,10 @@ npm run db:types
 | `/admin` | Backoffice |
 | `/api/knowledge/reindex` | Reindexar documento (POST) |
 | `/api/health` | Diagnóstico (supabase, anthropic, voyage) |
-| `/marketplace` | Fase 3 (placeholder) |
+| `/marketplace` | Catálogo de agentes públicos |
+| `/marketplace/[id]` | Detalhe do agente no marketplace |
+| `/api/marketplace` | Listagem com pesquisa e filtros (GET) |
+| `/api/marketplace/[id]/clone` | Clonar agente (POST) |
 | `/flows` | Fase 5 (placeholder) |
 
 ## Arquitetura
@@ -84,8 +96,7 @@ lib/flows/        → Flow Engine (Fase 5)
 
 ## Roadmap
 
-- **Fase 2** — RAG avançado, OCR, Vision melhorado ✅
-- **Fase 3** — Marketplace
+- **Fase 3** — Marketplace ✅
 - **Fase 4** — Skills plugins (HTTP, SQL, Run Code)
 - **Fase 5** — Flow Builder
 - **Fase 6** — Enterprise (Entra ID, quotas, auditoria)

@@ -91,7 +91,7 @@ export function Sidebar() {
           <Sparkles size={18} className="shrink-0" />
           <div className="hidden lg:block">
             <p className="text-xs font-semibold">Plataforma IA</p>
-            <p className="text-[11px] text-white/80">Fase 2 · GMC</p>
+            <p className="text-[11px] text-white/80">Fase 3 · GMC</p>
           </div>
         </div>
       </div>
