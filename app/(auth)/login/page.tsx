@@ -80,7 +80,7 @@ export default function LoginPage() {
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-white/60">© Grupo Media Capital · Fase 1</p>
+        <p className="relative text-xs text-white/60">© Grupo Media Capital · Fase 2</p>
       </div>
 
       {/* Form panel */}

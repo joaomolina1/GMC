@@ -1,10 +1,11 @@
 import type { SkillDefinition } from "../types";
+import { extractDocument } from "@lib/documents/extract";
 
 export const readDocumentSkill: SkillDefinition = {
   key: "read_document",
   name: "Read Document",
   description:
-    "Extract and read text content from uploaded documents (PDF, Word, Excel, CSV, TXT, Markdown).",
+    "Extract and read text content from uploaded documents (PDF, Word, Excel, PowerPoint, CSV, TXT, Markdown, images via OCR).",
   inputSchema: {
     type: "object",
     properties: {
@@ -26,32 +27,15 @@ export const readDocumentSkill: SkillDefinition = {
     }
 
     const buffer = Buffer.from(await data.arrayBuffer());
-    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
 
     try {
-      if (ext === "pdf") {
-        const pdfParse = (await import("pdf-parse")).default;
-        const parsed = await pdfParse(buffer);
-        return `Document: ${filename}\n\n${parsed.text.slice(0, 50000)}`;
-      }
-      if (ext === "docx") {
-        const mammoth = await import("mammoth");
-        const result = await mammoth.extractRawText({ buffer });
-        return `Document: ${filename}\n\n${result.value.slice(0, 50000)}`;
-      }
-      if (ext === "xlsx" || ext === "xls" || ext === "csv") {
-        const XLSX = await import("xlsx");
-        const workbook = XLSX.read(buffer, { type: "buffer" });
-        const sheets = workbook.SheetNames.map((name) => {
-          const sheet = workbook.Sheets[name];
-          return `## Sheet: ${name}\n${XLSX.utils.sheet_to_csv(sheet)}`;
-        });
-        return `Document: ${filename}\n\n${sheets.join("\n\n").slice(0, 50000)}`;
-      }
-      if (["txt", "md", "json", "xml", "html"].includes(ext)) {
-        return `Document: ${filename}\n\n${buffer.toString("utf-8").slice(0, 50000)}`;
-      }
-      return `Unsupported file type: .${ext}. Supported: pdf, docx, xlsx, csv, txt, md`;
+      const doc = await extractDocument(buffer, filename, data.type);
+      const ocrNote = doc.extractionMethod === "ocr" ? "\n[Texto extraído via OCR]" : "";
+      const warning = doc.needsOcr
+        ? "\n[Aviso: documento pode ser digitalizado — texto limitado. Considere carregar como imagem para OCR completo.]"
+        : "";
+
+      return `Document: ${filename} (${doc.charCount} chars, ${doc.pageCount} pág.)${ocrNote}${warning}\n\n${doc.text.slice(0, 50_000)}`;
     } catch (err) {
       return `Error reading document: ${err instanceof Error ? err.message : "Unknown"}`;
     }

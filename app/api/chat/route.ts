@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@lib/supabase/server";
-import { logAudit, logUsage } from "@lib/audit";
+import { logUsage } from "@lib/audit";
 import { streamAgentLoop } from "@lib/skills/runner";
-import type { ChatMessage } from "@lib/ai/types";
+import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -77,12 +77,12 @@ export async function POST(request: Request) {
     .order("created_at", { ascending: true })
     .limit(50);
 
-  const messages: ChatMessage[] = (history ?? []).map((m) => ({
-    role: m.role === "tool" ? "user" : (m.role as "user" | "assistant" | "system"),
-    content: typeof m.content === "object" && m.content !== null && "text" in m.content
-      ? String((m.content as { text: string }).text)
-      : String(m.content),
-  }));
+  const messages = await buildChatMessages(history ?? [], supabase);
+
+  const attachmentHint = buildAttachmentHint(attachments);
+  const systemPrompt = attachmentHint
+    ? `${version.system_prompt}${attachmentHint}`
+    : version.system_prompt;
 
   const skills = (version.skills as string[])?.length
     ? (version.skills as string[])
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         for await (const chunk of streamAgentLoop({
           config: {
             model: version.model,
-            systemPrompt: version.system_prompt,
+            systemPrompt,
             temperature: Number(version.temperature),
             skills,
           },
