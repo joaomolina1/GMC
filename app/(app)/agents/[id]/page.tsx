@@ -87,8 +87,9 @@ export default function AgentBuilderPage() {
   const loadAgent = useCallback(async () => {
     const res = await fetch(`/api/agents/${id}`);
     const data = await res.json();
+    if (!res.ok || !data?.id) return;
     setAgent(data);
-    setName(data.name);
+    setName(data.name ?? "");
     setDescription(data.description ?? "");
     const current =
       data.agent_versions?.find((v: AgentVersion) => v.id === data.current_version_id) ??
@@ -223,6 +224,28 @@ export default function AgentBuilderPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+            <div className="grid grid-cols-1 gap-3 border-t border-line pt-5 sm:grid-cols-3">
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Estado</p>
+                <div className="mt-1.5">
+                  <Badge tone={agent.status === "published" ? "success" : "warning"}>
+                    {agent.status}
+                  </Badge>
+                </div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Visibilidade
+                </p>
+                <p className="mt-1.5 text-sm font-medium capitalize text-slate-700">
+                  {agent.visibility ?? "privado"}
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Versões</p>
+                <p className="mt-1.5 text-sm font-medium text-slate-700">{versions.length}</p>
+              </div>
+            </div>
           </div>
         )}
 
