@@ -9,6 +9,10 @@ export async function executeFlowCode(
   code: string,
   input?: string
 ): Promise<string> {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    throw new Error("Código vazio — escreva JavaScript com return ou Python com print");
+  }
   if (code.length > MAX_CODE_LENGTH) {
     throw new Error(`Código excede ${MAX_CODE_LENGTH} caracteres`);
   }
@@ -22,7 +26,7 @@ export async function executeFlowCode(
 function runJavaScript(code: string, input?: string): string {
   const logs: string[] = [];
   const sandbox = {
-    input,
+    input: input ?? "",
     console: {
       log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
     },
@@ -44,20 +48,27 @@ function runJavaScript(code: string, input?: string): string {
   };
 
   const context = vm.createContext(sandbox);
-  const wrapped = `(function() { ${code} })()`;
-  const result = vm.runInContext(wrapped, context, {
-    timeout: DEFAULT_TIMEOUT_MS,
-    displayErrors: true,
-  });
 
-  const parts: string[] = [];
-  if (logs.length > 0) parts.push(logs.join("\n"));
-  if (result !== undefined) {
-    parts.push(
-      typeof result === "object" ? JSON.stringify(result, null, 2) : String(result)
+  try {
+    const wrapped = `(function() { ${code} })()`;
+    const result = vm.runInContext(wrapped, context, {
+      timeout: DEFAULT_TIMEOUT_MS,
+      displayErrors: true,
+    });
+
+    const parts: string[] = [];
+    if (logs.length > 0) parts.push(logs.join("\n"));
+    if (result !== undefined) {
+      parts.push(
+        typeof result === "object" ? JSON.stringify(result, null, 2) : String(result)
+      );
+    }
+    return parts.join("\n") || "Código executado sem output — use return valor ou console.log()";
+  } catch (err) {
+    throw new Error(
+      `Erro JavaScript: ${err instanceof Error ? err.message : "desconhecido"}`
     );
   }
-  return parts.join("\n") || "Código executado sem output.";
 }
 
 function runPython(code: string, input?: string): Promise<string> {
@@ -83,7 +94,7 @@ function runPython(code: string, input?: string): Promise<string> {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         reject(
           new Error(
-            "Python 3 não disponível neste ambiente. Use JavaScript ou configure Python no servidor."
+            "Python 3 não está disponível no servidor (Vercel). Use JavaScript no nó Correr código."
           )
         );
       } else {
@@ -91,12 +102,12 @@ function runPython(code: string, input?: string): Promise<string> {
       }
     });
 
-    proc.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `Python exit code ${code}`));
+    proc.on("close", (exitCode) => {
+      if (exitCode !== 0) {
+        reject(new Error(stderr.trim() || `Python terminou com código ${exitCode}`));
         return;
       }
-      resolve(stdout.trim() || "Código executado sem output.");
+      resolve(stdout.trim() || "Código executado sem output — use print()");
     });
   });
 }

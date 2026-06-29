@@ -25,6 +25,7 @@ export default function FlowsPage() {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     fetch("/api/flows")
@@ -32,6 +33,24 @@ export default function FlowsPage() {
       .then((d) => setFlows(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false));
   }, []);
+
+  async function seedExamples() {
+    setSeeding(true);
+    const res = await fetch("/api/flows/seed-examples", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      const list = await fetch("/api/flows").then((r) => r.json());
+      setFlows(Array.isArray(list) ? list : []);
+    } else {
+      alert(data.error ?? "Erro ao criar exemplos");
+    }
+    setSeeding(false);
+  }
+
+  function flowCategory(description: string): string | null {
+    const match = description.match(/Categoria:\s*(\w+)/i);
+    return match ? match[1] : null;
+  }
 
   async function createFlow() {
     setCreating(true);
@@ -61,14 +80,24 @@ export default function FlowsPage() {
               Orquestre agentes de IA com workflows visuais — triggers, condições e outputs encadeados.
             </p>
           </div>
-          <Button
-            onClick={createFlow}
-            disabled={creating}
-            className="bg-white text-brand-700 hover:bg-white/90"
-          >
-            <Plus size={16} />
-            {creating ? "A criar..." : "Novo flow"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={seedExamples}
+              disabled={seeding}
+              className="border-white/40 bg-white/10 text-white hover:bg-white/20"
+            >
+              {seeding ? "A criar..." : "Carregar exemplos"}
+            </Button>
+            <Button
+              onClick={createFlow}
+              disabled={creating}
+              className="bg-white text-brand-700 hover:bg-white/90"
+            >
+              <Plus size={16} />
+              {creating ? "A criar..." : "Novo flow"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -103,6 +132,11 @@ export default function FlowsPage() {
                 <Badge tone={statusTone[flow.status] ?? "neutral"}>{flow.status}</Badge>
               </div>
               <h3 className="mt-4 font-semibold text-slate-900">{flow.name}</h3>
+              {flowCategory(flow.description) && (
+                <Badge tone="neutral" className="mt-2">
+                  {flowCategory(flow.description)}
+                </Badge>
+              )}
               <p className="mt-1 line-clamp-2 flex-1 text-sm text-slate-500">
                 {flow.description || "Sem descrição"}
               </p>

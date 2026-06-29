@@ -51,6 +51,9 @@ export default function FlowBuilderPage() {
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [runInput, setRunInput] = useState("");
   const [runResult, setRunResult] = useState<string | null>(null);
+  const [runSteps, setRunSteps] = useState<
+    Array<{ nodeType: string; status: string; output?: Record<string, unknown>; error?: string }>
+  >([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [running, setRunning] = useState(false);
@@ -108,6 +111,20 @@ export default function FlowBuilderPage() {
     }));
   }
 
+  async function saveGraph(inPlace = false) {
+    const res = await fetch(`/api/flows/${id}/versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph, updateInPlace: inPlace }),
+    });
+    if (res.ok && !inPlace) {
+      await loadFlow();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
+    return res.ok;
+  }
+
   async function saveVersion() {
     setSaving(true);
     setSaved(false);
@@ -116,17 +133,38 @@ export default function FlowBuilderPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description }),
     });
-    const res = await fetch(`/api/flows/${id}/versions`, {
+    const ok = await saveGraph(false);
+    setSaving(false);
+    if (ok) setSaved(true);
+  }
+
+  async function executeFlow() {
+    setRunning(true);
+    setRunResult(null);
+    setRunSteps([]);
+
+    const saved = await saveGraph(true);
+    if (!saved) {
+      setRunResult("Erro ao guardar o canvas antes de executar. Tente «Guardar v+».");
+      setRunning(false);
+      return;
+    }
+
+    const res = await fetch(`/api/flows/${id}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ graph }),
+      body: JSON.stringify({ input: runInput }),
     });
+    const data = await res.json();
     if (res.ok) {
-      await loadFlow();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setRunResult(data.output ?? data.error ?? "Sem output");
+      setRunSteps(Array.isArray(data.steps) ? data.steps : []);
+      setShowRuns(true);
+      await loadRuns();
+    } else {
+      setRunResult(data.error ?? "Erro na execução");
     }
-    setSaving(false);
+    setRunning(false);
   }
 
   async function publishVersion(versionId: string) {
@@ -136,25 +174,6 @@ export default function FlowBuilderPage() {
       body: JSON.stringify({ action: "publish" }),
     });
     await loadFlow();
-  }
-
-  async function executeFlow() {
-    setRunning(true);
-    setRunResult(null);
-    const res = await fetch(`/api/flows/${id}/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: runInput }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setRunResult(data.output ?? data.error ?? "Sem output");
-      setShowRuns(true);
-      await loadRuns();
-    } else {
-      setRunResult(data.error ?? "Erro na execução");
-    }
-    setRunning(false);
   }
 
   return (
@@ -230,6 +249,37 @@ export default function FlowBuilderPage() {
                   </p>
                 </div>
               )}
+              {runSteps.length > 0 && (
+                <div className="rounded-lg border border-line bg-slate-50 p-2.5">
+                  <p className="text-[10px] font-semibold text-slate-600">Passos</p>
+                  <ul className="mt-1.5 max-h-40 space-y-1 overflow-y-auto">
+                    {runSteps.map((step, i) => (
+                      <li key={i} className="text-[10px] text-slate-600">
+                        <span className="font-medium">{step.nodeType}</span>
+                        {" — "}
+                        <span
+                          className={
+                            step.status === "failed"
+                              ? "text-rose-600"
+                              : step.status === "skipped"
+                                ? "text-slate-400"
+                                : "text-emerald-700"
+                          }
+                        >
+                          {step.status}
+                        </span>
+                        {step.error && (
+                          <span className="block text-rose-600">{step.error}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                «Executar» guarda o canvas automaticamente. Use «Guardar v+» para criar um snapshot
+                de versão.
+              </p>
             </div>
           )}
         </aside>
@@ -484,12 +534,12 @@ function NodeConfigPanel({
           <div className="rounded-lg bg-orange-50 p-2.5 text-[10px] text-orange-900">
             <p className="font-semibold">Exemplo JavaScript</p>
             <pre className="mt-1 overflow-x-auto rounded bg-white/70 p-1.5 font-mono">
-              {`return input.split(" ").length + " palavras";`}
+              {`const n = input.trim().split(/\\s+/).filter(Boolean).length;\nreturn n + " palavra(s)";`}
             </pre>
-            <p className="mt-2 font-semibold">Exemplo Python</p>
-            <pre className="mt-1 overflow-x-auto rounded bg-white/70 p-1.5 font-mono">
-              {`print(len(input.split()))`}
-            </pre>
+            <p className="mt-2 text-orange-800">
+              Em produção (Vercel) use <strong>JavaScript</strong> — Python não está disponível no
+              servidor.
+            </p>
           </div>
         </>
       )}
