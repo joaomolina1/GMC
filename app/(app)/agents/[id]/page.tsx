@@ -23,6 +23,7 @@ import { Card } from "@/_design_system/Card";
 import { Input, Textarea, Select } from "@/_design_system/Input";
 import { Badge } from "@/_design_system/Badge";
 import { AgentChatPanel } from "@/_components/AgentChatPanel";
+import { SystemPromptEditor } from "@/_components/SystemPromptEditor";
 import { cn } from "@lib/utils";
 import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
@@ -420,7 +421,7 @@ export default function AgentBuilderPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 divide-x divide-line">
-        <div className="flex w-[min(44%,520px)] shrink-0 flex-col">
+        <div className="flex w-[min(48%,560px)] shrink-0 flex-col">
           <div className="grid shrink-0 grid-cols-1 gap-2 border-b border-line p-3 sm:grid-cols-3">
             <Select label="Modelo" value={model} onChange={(e) => setModel(e.target.value)}>
               {(availableModels.length > 0
@@ -483,13 +484,7 @@ export default function AgentBuilderPage() {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col p-3">
-            <label className="mb-1.5 text-sm font-medium text-slate-700">System prompt</label>
-            <Textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed"
-              placeholder="Instruções do agente..."
-            />
+            <SystemPromptEditor value={systemPrompt} onChange={setSystemPrompt} />
           </div>
 
           <div className="shrink-0 border-t border-line">
