@@ -13,10 +13,12 @@ import {
 import { cn } from "@lib/utils";
 import { Logo } from "@/_components/Logo";
 
-const navGroups: {
+const navGroups: (
+  showAdmin: boolean
+) => {
   title?: string;
   items: { href: string; icon: typeof Bot; label: string }[];
-}[] = [
+}[] = (showAdmin) => [
   {
     items: [
       { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -30,13 +32,17 @@ const navGroups: {
       { href: "/flows", icon: Workflow, label: "Flows" },
     ],
   },
-  {
-    title: "Gestão",
-    items: [{ href: "/admin", icon: Shield, label: "Backoffice" }],
-  },
+  ...(showAdmin
+    ? [
+        {
+          title: "Gestão",
+          items: [{ href: "/admin", icon: Shield, label: "Backoffice" }],
+        },
+      ]
+    : []),
 ];
 
-export function Sidebar() {
+export function Sidebar({ showAdmin = false }: { showAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -51,7 +57,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
-        {navGroups.map((group, gi) => (
+        {navGroups(showAdmin).map((group, gi) => (
           <div key={gi} className="flex flex-col gap-1">
             {group.title && (
               <p className="mb-1 hidden px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 lg:block">

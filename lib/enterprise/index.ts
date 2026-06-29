@@ -5,6 +5,7 @@ export type { RateLimitResult } from "./rate-limit";
 export {
   isEntraConfigured,
   isEmailDomainAllowed,
+  shouldRestrictSignupDomains,
   getAzureTenantId,
   ENTRA_ALLOWED_DOMAINS,
 } from "./entra";

@@ -44,6 +44,7 @@ export const httpRequestSkill: SkillDefinition = {
     try {
       const res = await fetch(url, {
         method,
+        redirect: "manual",
         headers: {
           "User-Agent": "GMC-Agent/1.0",
           Accept: "application/json, text/plain, */*",
@@ -52,6 +53,10 @@ export const httpRequestSkill: SkillDefinition = {
         body: ["GET", "HEAD"].includes(method) ? undefined : body,
         signal: controller.signal,
       });
+
+      if (res.status >= 300 && res.status < 400) {
+        return `HTTP redirect blocked (${res.status}) — redirects não são permitidos por segurança`;
+      }
 
       const buffer = await res.arrayBuffer();
       if (buffer.byteLength > MAX_RESPONSE_BYTES) {

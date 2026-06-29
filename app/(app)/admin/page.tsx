@@ -36,14 +36,29 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
   const [rateLimits, setRateLimits] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   async function loadAll() {
     setLoading(true);
+    setAccessDenied(false);
+    const [uRes, cRes, lRes, rRes] = await Promise.all([
+      fetch("/api/admin/users"),
+      fetch("/api/admin/costs"),
+      fetch("/api/admin/audit"),
+      fetch("/api/admin/rate-limits"),
+    ]);
+
+    if ([uRes, cRes, lRes, rRes].some((res) => res.status === 403)) {
+      setAccessDenied(true);
+      setLoading(false);
+      return;
+    }
+
     const [u, c, l, r] = await Promise.all([
-      fetch("/api/admin/users").then((res) => res.json()),
-      fetch("/api/admin/costs").then((res) => res.json()),
-      fetch("/api/admin/audit").then((res) => res.json()),
-      fetch("/api/admin/rate-limits").then((res) => res.json()),
+      uRes.json(),
+      cRes.json(),
+      lRes.json(),
+      rRes.json(),
     ]);
     if (Array.isArray(u)) setUsers(u);
     if (Array.isArray(c)) setCosts(c);
@@ -96,6 +111,11 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
+      {accessDenied && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Acesso negado — permissões de administrador necessárias.
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">

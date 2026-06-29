@@ -18,7 +18,7 @@ export async function checkRateLimit(
   });
 
   if (error || !data) {
-    return { allowed: true, limit: 60, current: 0, endpoint };
+    return { allowed: false, limit: 60, current: 0, endpoint };
   }
 
   return data as RateLimitResult;

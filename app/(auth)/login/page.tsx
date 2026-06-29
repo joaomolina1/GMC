@@ -7,7 +7,7 @@ import { createClient } from "@lib/supabase/client";
 import { Logo } from "@/_components/Logo";
 import { Button } from "@/_design_system/Button";
 import { Input } from "@/_design_system/Input";
-import { isEntraConfigured, getAzureTenantId } from "@lib/enterprise/entra";
+import { isEntraConfigured, getAzureTenantId, isEmailDomainAllowed, shouldRestrictSignupDomains } from "@lib/enterprise/entra";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +28,11 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
+        if (shouldRestrictSignupDomains() && !isEmailDomainAllowed(email)) {
+          throw new Error(
+            "Registo restrito a domínios corporativos autorizados. Use o SSO Microsoft ou contacte o administrador."
+          );
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,

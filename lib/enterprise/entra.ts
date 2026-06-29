@@ -9,6 +9,12 @@ export function isEntraConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_ENTRA_ENABLED === "true");
 }
 
+export function shouldRestrictSignupDomains(): boolean {
+  if (process.env.NEXT_PUBLIC_SIGNUP_DOMAIN_RESTRICT === "true") return true;
+  if (process.env.NEXT_PUBLIC_SIGNUP_DOMAIN_RESTRICT === "false") return false;
+  return isEntraConfigured();
+}
+
 export function isEmailDomainAllowed(email: string): boolean {
   if (ENTRA_ALLOWED_DOMAINS.length === 0) return true;
   const domain = email.split("@")[1]?.toLowerCase();

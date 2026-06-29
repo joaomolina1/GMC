@@ -4,10 +4,12 @@ import { getProfile } from "@lib/supabase/server";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const profile = await getProfile();
+  const showAdmin =
+    profile?.role === "admin" || profile?.role === "super_admin";
 
   return (
     <div className="flex h-screen overflow-hidden bg-canvas">
-      <Sidebar />
+      <Sidebar showAdmin={showAdmin} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           user={

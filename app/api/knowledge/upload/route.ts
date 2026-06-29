@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@lib/supabase/server";
 import { processKnowledgeDocument } from "@lib/ai/embeddings";
 import { extractDocument } from "@lib/documents/extract";
+import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,11 @@ export async function POST(request: Request) {
   const serviceClient = await createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateCheck = await assertRateLimit(supabase, "/api/knowledge/upload", user.id);
+  if (!rateCheck.ok) {
+    return NextResponse.json({ error: rateCheck.message }, { status: 429 });
+  }
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;

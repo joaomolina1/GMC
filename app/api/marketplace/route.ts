@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import type { MarketplaceAgent } from "@lib/marketplace/types";
+import { escapePostgrestFilter } from "@lib/marketplace/search";
 import { normalizeProfileRelation } from "@lib/marketplace/utils";
 
 export async function GET(request: Request) {
@@ -58,7 +59,8 @@ export async function GET(request: Request) {
   }
 
   if (q) {
-    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
+    const safe = escapePostgrestFilter(q);
+    query = query.or(`name.ilike.%${safe}%,description.ilike.%${safe}%`);
   }
 
   if (sort === "downloads") {
