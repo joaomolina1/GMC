@@ -16,10 +16,12 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { system_prompt, model, temperature, skills, tools, createSnapshot } = body as {
+  const { system_prompt, model, temperature, effort, thinking_enabled, skills, tools, createSnapshot } = body as {
     system_prompt?: string;
     model?: string;
     temperature?: number;
+    effort?: string;
+    thinking_enabled?: boolean;
     skills?: string[];
     tools?: Record<string, unknown>;
     createSnapshot?: boolean;
@@ -39,6 +41,8 @@ export async function POST(
     system_prompt: system_prompt ?? "",
     model: model ?? "claude-sonnet-4-6",
     temperature: temperature ?? 0.7,
+    effort: effort ?? "medium",
+    thinking_enabled: thinking_enabled ?? false,
     skills: skills ?? DEFAULT_SKILLS,
     tools: tools ?? {},
   };

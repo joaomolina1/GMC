@@ -118,7 +118,9 @@ export async function POST(request: Request) {
           config: {
             model: version.model,
             systemPrompt,
-            temperature: Number(version.temperature),
+            temperature: version.temperature != null ? Number(version.temperature) : undefined,
+            effort: (version.effort as "low" | "medium" | "high" | "max") ?? "medium",
+            thinkingEnabled: Boolean(version.thinking_enabled),
             skills,
             skillConfigs,
           },

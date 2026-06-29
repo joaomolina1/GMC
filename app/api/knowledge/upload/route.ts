@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, tryCreateServiceClient } from "@lib/supabase/server";
-import { processKnowledgeDocument } from "@lib/ai/embeddings";
-import { extractDocument } from "@lib/documents/extract";
+import { ingestKnowledgeFile } from "@lib/knowledge/ingest";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
 export const runtime = "nodejs";
@@ -45,76 +44,25 @@ export async function POST(request: Request) {
     }, { status: 400 });
   }
 
-  const storagePath = `${user.id}/${agentId}/${Date.now()}-${file.name}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadError } = await supabase.storage
-    .from("knowledge")
-    .upload(storagePath, buffer, { contentType: file.type || "application/octet-stream" });
-
-  if (uploadError) {
-    return NextResponse.json({ error: `Storage: ${uploadError.message}` }, { status: 500 });
-  }
-
-  const { data: doc, error: docError } = await supabase
-    .from("knowledge_documents")
-    .insert({
-      agent_id: agentId,
-      filename: file.name,
-      storage_path: storagePath,
-      mime: file.type || "application/octet-stream",
-      status: "processing",
-      uploaded_by: user.id,
-      metadata: { source: "upload" },
-    })
-    .select()
-    .single();
-
-  if (docError) return NextResponse.json({ error: docError.message }, { status: 500 });
-
   try {
-    const extracted = await extractDocument(buffer, file.name, file.type);
-
-    if (extracted.charCount === 0) {
-      await serviceClient
-        .from("knowledge_documents")
-        .update({ status: "error", metadata: { error: "No text extracted", ocr_used: false } })
-        .eq("id", doc.id);
-      return NextResponse.json({ error: "Não foi possível extrair texto deste ficheiro" }, { status: 422 });
-    }
-
-    const { chunkCount } = await processKnowledgeDocument(
+    const doc = await ingestKnowledgeFile({
+      supabase,
       serviceClient,
-      doc.id,
+      userId: user.id,
       agentId,
-      extracted.text,
-      {
-        filename: file.name,
-        mime: extracted.mime,
-        ocrUsed: extracted.extractionMethod === "ocr",
-        charCount: extracted.charCount,
-        pageCount: extracted.pageCount,
-        pages: extracted.pages,
-      }
-    );
-
-    const { data: updated } = await supabase
-      .from("knowledge_documents")
-      .select("*")
-      .eq("id", doc.id)
-      .single();
-
-    return NextResponse.json({ ...updated, chunk_count: chunkCount });
+      buffer,
+      filename: file.name,
+      mime: file.type,
+      source: "upload",
+    });
+    return NextResponse.json(doc);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Processing failed";
-    await serviceClient
-      .from("knowledge_documents")
-      .update({
-        status: "error",
-        metadata: { error: message },
-      })
-      .eq("id", doc.id);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Processing failed" },
+      { status: 500 }
+    );
   }
 }
 

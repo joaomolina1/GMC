@@ -4,16 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bot } from "lucide-react";
 import { Button } from "@/_design_system/Button";
-import { Input, Textarea } from "@/_design_system/Input";
+import { Input } from "@/_design_system/Input";
 import { Card } from "@/_design_system/Card";
 
 export default function NewAgentPage() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState(
-    "És um assistente de IA do Grupo Media Capital. Responde de forma clara e profissional em português."
-  );
   const [loading, setLoading] = useState(false);
 
   async function handleCreate(e: React.FormEvent) {
@@ -22,7 +18,7 @@ export default function NewAgentPage() {
     const res = await fetch("/api/agents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, system_prompt: systemPrompt }),
+      body: JSON.stringify({ name }),
     });
     const data = await res.json();
     if (res.ok) router.push(`/agents/${data.id}`);
@@ -30,10 +26,10 @@ export default function NewAgentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-lg space-y-6">
       <button
         onClick={() => router.back()}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800"
       >
         <ArrowLeft size={16} />
         Voltar
@@ -45,7 +41,9 @@ export default function NewAgentPage() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Novo agente</h2>
-          <p className="text-sm text-slate-500">Defina os fundamentos do seu agente de IA</p>
+          <p className="text-sm text-slate-500">
+            Dê um nome — configure o prompt e teste no editor a seguir
+          </p>
         </div>
       </div>
 
@@ -57,23 +55,11 @@ export default function NewAgentPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-          />
-          <Textarea
-            label="Descrição"
-            placeholder="Para que serve este agente?"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <Textarea
-            label="System Prompt"
-            hint="Define a personalidade e as regras do agente."
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="min-h-[180px] font-mono text-xs leading-relaxed"
+            autoFocus
           />
           <div className="flex gap-3 border-t border-line pt-5">
-            <Button type="submit" disabled={loading}>
-              {loading ? "A criar..." : "Criar agente"}
+            <Button type="submit" disabled={loading || !name.trim()}>
+              {loading ? "A criar..." : "Criar e configurar"}
             </Button>
             <Button type="button" variant="ghost" onClick={() => router.back()}>
               Cancelar

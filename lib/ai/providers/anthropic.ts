@@ -12,6 +12,7 @@ import type {
   VisionOptions,
 } from "../types";
 import { buildAnthropicServerTools } from "../anthropic-server-tools";
+import { buildAnthropicRequestExtras } from "../anthropic-params";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 8;
 
@@ -76,15 +77,17 @@ export class AnthropicProvider implements AIProvider {
     let totalCompletion = 0;
     let response: Anthropic.Message | null = null;
 
+    const requestExtras = buildAnthropicRequestExtras(options);
+
     for (let i = 0; i < MAX_PAUSE_TURN_CONTINUATIONS; i++) {
       response = await this.client.messages.create({
         model: options.model,
         max_tokens: options.maxTokens ?? 4096,
-        temperature: options.temperature ?? 0.7,
         system: options.system,
         messages,
         tools,
-      });
+        ...requestExtras,
+      } as Anthropic.MessageCreateParamsNonStreaming);
 
       totalPrompt += response.usage.input_tokens;
       totalCompletion += response.usage.output_tokens;
@@ -119,16 +122,17 @@ export class AnthropicProvider implements AIProvider {
     const tools = buildAllTools(options);
     let totalPrompt = 0;
     let totalCompletion = 0;
+    const requestExtras = buildAnthropicRequestExtras(options);
 
     for (let turn = 0; turn < MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
       const stream = this.client.messages.stream({
         model: options.model,
         max_tokens: options.maxTokens ?? 4096,
-        temperature: options.temperature ?? 0.7,
         system: options.system,
         messages,
         tools,
-      });
+        ...requestExtras,
+      } as Anthropic.MessageCreateParamsStreaming);
 
       let currentTool: Partial<ToolCall> | null = null;
       let toolInputJson = "";

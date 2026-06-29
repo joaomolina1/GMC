@@ -1,3 +1,4 @@
+import type { EffortLevel } from "@lib/ai/types";
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import type { ChatMessage, ToolCall } from "@lib/ai/types";
 import { logAudit } from "@lib/audit";
@@ -7,7 +8,9 @@ import { toToolDefinition, type SkillContext } from "./types";
 export interface AgentRunConfig {
   model: string;
   systemPrompt: string;
-  temperature: number;
+  temperature?: number;
+  effort?: EffortLevel;
+  thinkingEnabled?: boolean;
   skills: Array<string | { key: string; enabled?: boolean }>;
   skillConfigs?: Record<string, Record<string, unknown>>;
 }
@@ -37,6 +40,8 @@ function buildProviderOptions(
     model: config.model,
     system: config.systemPrompt,
     temperature: config.temperature,
+    effort: config.effort,
+    thinkingEnabled: config.thinkingEnabled,
     messages,
     tools: clientTools.length > 0 ? clientTools : undefined,
     skillKeys,

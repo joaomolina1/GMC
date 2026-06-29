@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bot,
   LayoutDashboard,
-  Store,
   Workflow,
   Shield,
   Sparkles,
@@ -19,18 +17,11 @@ const navGroups: (
   showAdmin: boolean
 ) => {
   title?: string;
-  items: { href: string; icon: typeof Bot; label: string }[];
+  items: { href: string; icon: typeof LayoutDashboard; label: string }[];
 }[] = (showAdmin) => [
   {
     items: [
-      { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-      { href: "/agents", icon: Bot, label: "Agentes" },
-    ],
-  },
-  {
-    title: "Explorar",
-    items: [
-      { href: "/marketplace", icon: Store, label: "Marketplace" },
+      { href: "/", icon: LayoutDashboard, label: "Agentes" },
       { href: "/flows", icon: Workflow, label: "Flows" },
     ],
   },

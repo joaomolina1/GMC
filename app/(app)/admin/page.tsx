@@ -8,6 +8,10 @@ import {
   Gauge,
   Shield,
   RefreshCw,
+  Bot,
+  MessageSquare,
+  Zap,
+  Store,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/_design_system/Card";
 import { Badge } from "@/_design_system/Badge";
@@ -35,35 +39,46 @@ export default function AdminPage() {
   const [costs, setCosts] = useState<Array<Record<string, unknown>>>([]);
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
   const [rateLimits, setRateLimits] = useState<Array<Record<string, unknown>>>([]);
+  const [platformStats, setPlatformStats] = useState<{
+    agents: number;
+    conversations: number;
+    publicAgents: number;
+    users: number;
+    monthlyCost: number;
+    coreSkills: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
   async function loadAll() {
     setLoading(true);
     setAccessDenied(false);
-    const [uRes, cRes, lRes, rRes] = await Promise.all([
+    const [uRes, cRes, lRes, rRes, sRes] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/admin/costs"),
       fetch("/api/admin/audit"),
       fetch("/api/admin/rate-limits"),
+      fetch("/api/admin/stats"),
     ]);
 
-    if ([uRes, cRes, lRes, rRes].some((res) => res.status === 403)) {
+    if ([uRes, cRes, lRes, rRes, sRes].some((res) => res.status === 403)) {
       setAccessDenied(true);
       setLoading(false);
       return;
     }
 
-    const [u, c, l, r] = await Promise.all([
+    const [u, c, l, r, s] = await Promise.all([
       uRes.json(),
       cRes.json(),
       lRes.json(),
       rRes.json(),
+      sRes.json(),
     ]);
     if (Array.isArray(u)) setUsers(u);
     if (Array.isArray(c)) setCosts(c);
     if (Array.isArray(l)) setLogs(l);
     if (Array.isArray(r)) setRateLimits(r);
+    if (s && typeof s === "object" && !Array.isArray(s)) setPlatformStats(s);
     setLoading(false);
   }
 
@@ -149,18 +164,71 @@ export default function AdminPage() {
         ))}
       </div>
 
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Users size={16} />
+            <p className="text-xs font-medium uppercase">Utilizadores</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {platformStats?.users ?? users.length}
+          </p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Bot size={16} />
+            <p className="text-xs font-medium uppercase">Agentes</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{platformStats?.agents ?? "—"}</p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <MessageSquare size={16} />
+            <p className="text-xs font-medium uppercase">Conversas</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {platformStats?.conversations ?? "—"}
+          </p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Store size={16} />
+            <p className="text-xs font-medium uppercase">Públicos</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {platformStats?.publicAgents ?? "—"}
+          </p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Zap size={16} />
+            <p className="text-xs font-medium uppercase">Skills Core</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{platformStats?.coreSkills ?? 4}</p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Euro size={16} />
+            <p className="text-xs font-medium uppercase">Custo (mês)</p>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatCost(platformStats?.monthlyCost ?? totalCost)}
+          </p>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
-          <p className="text-2xl font-bold text-slate-900">{users.length}</p>
-          <p className="text-sm text-slate-500">Utilizadores</p>
+          <p className="text-2xl font-bold text-slate-900">{logs.length}</p>
+          <p className="text-sm text-slate-500">Eventos de auditoria (recentes)</p>
         </Card>
         <Card>
           <p className="text-2xl font-bold text-slate-900">{formatCost(totalCost)}</p>
           <p className="text-sm text-slate-500">Custo (logs recentes)</p>
         </Card>
         <Card>
-          <p className="text-2xl font-bold text-slate-900">{logs.length}</p>
-          <p className="text-sm text-slate-500">Eventos de auditoria</p>
+          <p className="text-2xl font-bold text-slate-900">{rateLimits.length}</p>
+          <p className="text-sm text-slate-500">Rate limits configurados</p>
         </Card>
       </div>
 
