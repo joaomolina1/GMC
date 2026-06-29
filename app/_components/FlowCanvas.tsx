@@ -40,6 +40,22 @@ function edgePath(sx: number, sy: number, tx: number, ty: number): string {
   return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
 }
 
+function edgeMidpoint(
+  source: FlowNode,
+  target: FlowNode,
+  branch?: "true" | "false"
+): { x: number; y: number } {
+  const outPort: PortSide =
+    source.type === "condition"
+      ? branch === "false"
+        ? "out-false"
+        : "out-true"
+      : "out";
+  const sp = portPosition(source, outPort);
+  const tp = portPosition(target, "in");
+  return { x: (sp.x + tp.x) / 2, y: (sp.y + tp.y) / 2 };
+}
+
 function portPosition(
   node: FlowNode,
   port: PortSide
@@ -59,6 +75,7 @@ export function FlowCanvas({
   nodeExecutionState = {},
 }: FlowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
   const [dragging, setDragging] = useState<{
     nodeId: string;
@@ -91,6 +108,20 @@ export function FlowCanvas({
       edges: graph.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     });
     if (selectedNodeId === nodeId) onSelectNode(null);
+    setSelectedEdgeId(null);
+  };
+
+  const removeEdge = (edgeId: string) => {
+    onChange({
+      ...graph,
+      edges: graph.edges.filter((e) => e.id !== edgeId),
+    });
+    if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
+  };
+
+  const selectEdge = (edgeId: string) => {
+    setSelectedEdgeId(edgeId);
+    onSelectNode(null);
   };
 
   const addEdge = (
@@ -132,6 +163,7 @@ export function FlowCanvas({
       y: e.clientY - rect.top + canvasRef.current.scrollTop,
     });
     onSelectNode(sourceId);
+    setSelectedEdgeId(null);
   };
 
   const completeConnection = (e: React.MouseEvent, targetId: string) => {
@@ -198,7 +230,7 @@ export function FlowCanvas({
           </button>
         ))}
         <span className="ml-auto text-[10px] text-slate-400">
-          Arraste das bolinhas para ligar nós
+          Arraste das bolinhas para ligar · clique numa seta para apagar
         </span>
       </div>
 
@@ -208,12 +240,12 @@ export function FlowCanvas({
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onClick={() => {
+          setSelectedEdgeId(null);
+          onSelectNode(null);
+        }}
       >
-        <svg
-          className="pointer-events-none absolute left-0 top-0"
-          width={CANVAS_W}
-          height={CANVAS_H}
-        >
+        <svg className="absolute left-0 top-0" width={CANVAS_W} height={CANVAS_H}>
           {graph.edges.map((edge) => {
             const source = graph.nodes.find((n) => n.id === edge.source);
             const target = graph.nodes.find((n) => n.id === edge.target);
@@ -227,22 +259,36 @@ export function FlowCanvas({
                 : "out";
             const sp = portPosition(source, outPort);
             const tp = portPosition(target, "in");
+            const path = edgePath(sp.x, sp.y, tp.x, tp.y);
+            const selected = selectedEdgeId === edge.id;
 
             return (
               <g key={edge.id}>
                 <path
-                  d={edgePath(sp.x, sp.y, tp.x, tp.y)}
+                  d={path}
                   fill="none"
-                  stroke="#64748b"
-                  strokeWidth={2}
-                  markerEnd="url(#flow-arrow)"
+                  stroke="transparent"
+                  strokeWidth={18}
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selectEdge(edge.id);
+                  }}
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={selected ? "#0066b3" : "#64748b"}
+                  strokeWidth={selected ? 3 : 2}
+                  markerEnd={selected ? "url(#flow-arrow-selected)" : "url(#flow-arrow)"}
+                  className="pointer-events-none"
                 />
                 {edge.data?.branch && (
                   <text
                     x={(sp.x + tp.x) / 2}
                     y={(sp.y + tp.y) / 2 - 8}
                     textAnchor="middle"
-                    className="fill-amber-700 text-[10px] font-semibold"
+                    className="pointer-events-none fill-amber-700 text-[10px] font-semibold"
                   >
                     {edge.data.branch}
                   </text>
@@ -284,10 +330,43 @@ export function FlowCanvas({
             >
               <path d="M0,0 L7,3 L0,6" fill="#64748b" />
             </marker>
+            <marker
+              id="flow-arrow-selected"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L7,3 L0,6" fill="#0066b3" />
+            </marker>
           </defs>
         </svg>
 
         <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
+          {selectedEdgeId && (() => {
+            const edge = graph.edges.find((e) => e.id === selectedEdgeId);
+            if (!edge) return null;
+            const source = graph.nodes.find((n) => n.id === edge.source);
+            const target = graph.nodes.find((n) => n.id === edge.target);
+            if (!source || !target) return null;
+            const mid = edgeMidpoint(source, target, edge.data?.branch);
+            return (
+              <button
+                type="button"
+                title="Apagar ligação"
+                className="absolute z-30 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+                style={{ left: mid.x - 14, top: mid.y - 14 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeEdge(selectedEdgeId);
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            );
+          })()}
+
           {graph.nodes.map((node) => {
             const meta = nodeMeta(node.type);
             const selected = selectedNodeId === node.id;
@@ -315,7 +394,11 @@ export function FlowCanvas({
                   width: NODE_W,
                   minHeight: NODE_H,
                 }}
-                onClick={() => onSelectNode(node.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEdgeId(null);
+                  onSelectNode(node.id);
+                }}
                 onMouseDown={(e) => {
                   if ((e.target as HTMLElement).closest("[data-port]")) return;
                   if ((e.target as HTMLElement).closest("button")) return;
@@ -326,6 +409,7 @@ export function FlowCanvas({
                     offsetY: e.clientY - rect.top,
                   });
                   onSelectNode(node.id);
+                  setSelectedEdgeId(null);
                 }}
               >
                 {hasInputPort(node.type) && (
