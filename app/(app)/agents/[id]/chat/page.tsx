@@ -83,37 +83,50 @@ export default function AgentChatPage() {
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No stream");
 
+      let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const text = decoder.decode(value);
-        const lines = text.split("\n").filter((l) => l.startsWith("data: "));
-        for (const line of lines) {
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n");
+        buffer = parts.pop() ?? "";
+
+        for (const line of parts) {
+          if (!line.startsWith("data: ")) continue;
           const payload = line.slice(6);
           if (payload === "[DONE]") continue;
+
+          let data: { type?: string; text?: string; message?: string; name?: string; conversationId?: string };
           try {
-            const data = JSON.parse(payload);
-            if (data.type === "text") {
-              assistantContent += data.text;
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: "assistant", content: assistantContent };
-                return updated;
-              });
-            }
-            if (data.type === "done" && data.conversationId) {
-              setConversationId(data.conversationId);
-            }
-            if (data.type === "error") {
-              throw new Error(data.message ?? "Erro no streaming");
-            }
-            if (data.type === "tool") {
-              assistantContent += `\n\n\u{1F527} *A usar skill: ${data.name}*\n`;
-            }
+            data = JSON.parse(payload);
           } catch {
-            // skip malformed
+            continue;
+          }
+
+          if (data.type === "error") {
+            throw new Error(data.message ?? "Erro no streaming");
+          }
+          if (data.type === "text" && data.text) {
+            assistantContent += data.text;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+              return updated;
+            });
+          }
+          if (data.type === "done" && data.conversationId) {
+            setConversationId(data.conversationId);
+          }
+          if (data.type === "tool" && data.name) {
+            assistantContent += `\n\n\u{1F527} *A usar skill: ${data.name}*\n`;
           }
         }
+      }
+
+      if (!assistantContent.trim()) {
+        throw new Error(
+          "O agente não devolveu resposta. Verifique se ANTHROPIC_API_KEY está configurada e se guardou o agente."
+        );
       }
     } catch (err) {
       setMessages((prev) => {

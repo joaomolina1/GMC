@@ -261,6 +261,13 @@ export const ANTHROPIC_MODEL_CATALOG: AnthropicModelEntry[] = [
   },
 ];
 
+/** Latest active model per tier — shown in agent builder by default */
+export const LATEST_TIER_MODEL_IDS = [
+  "claude-sonnet-4-6",
+  "claude-opus-4-8",
+  "claude-haiku-4-5",
+] as const;
+
 const catalogById = new Map(ANTHROPIC_MODEL_CATALOG.map((m) => [m.id, m]));
 
 export function getCatalogEntry(modelId: string): AnthropicModelEntry | undefined {

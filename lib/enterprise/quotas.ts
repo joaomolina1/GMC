@@ -27,10 +27,8 @@ export async function assertQuotaAvailable(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const status = await getQuotaStatus(supabase, userId);
   if (!status) {
-    return {
-      ok: false,
-      message: "Não foi possível verificar a quota. Tente novamente.",
-    };
+    console.warn("[quota] RPC unavailable, allowing request for user", userId);
+    return { ok: true };
   }
   if (status.quota_exceeded) {
     return {

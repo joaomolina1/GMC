@@ -124,6 +124,7 @@ export default function AgentBuilderPage() {
   >([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [docAction, setDocAction] = useState<string | null>(null);
 
   const loadDocs = useCallback(async () => {
@@ -182,12 +183,21 @@ export default function AgentBuilderPage() {
   async function saveNewVersion() {
     setSaving(true);
     setSaved(false);
-    await fetch(`/api/agents/${id}/versions`, {
+    setSaveError(null);
+
+    const versionRes = await fetch(`/api/agents/${id}/versions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ system_prompt: systemPrompt, model, temperature, skills, tools: toolConfigs }),
     });
-    await fetch(`/api/agents/${id}`, {
+    if (!versionRes.ok) {
+      const err = await versionRes.json().catch(() => ({}));
+      setSaveError((err as { error?: string }).error ?? "Falha ao guardar versão");
+      setSaving(false);
+      return;
+    }
+
+    const patchRes = await fetch(`/api/agents/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -201,6 +211,13 @@ export default function AgentBuilderPage() {
           .filter(Boolean),
       }),
     });
+    if (!patchRes.ok) {
+      const err = await patchRes.json().catch(() => ({}));
+      setSaveError((err as { error?: string }).error ?? "Falha ao atualizar agente");
+      setSaving(false);
+      return;
+    }
+
     await loadAgent();
     setSaving(false);
     setSaved(true);
@@ -280,10 +297,14 @@ export default function AgentBuilderPage() {
           <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
           <Badge tone={agent.status === "published" ? "success" : "warning"}>{agent.status}</Badge>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col items-end gap-1">
+          {saveError && (
+            <p className="text-xs text-rose-600">{saveError}</p>
+          )}
+          <div className="flex gap-2">
           <Button variant="outline" onClick={saveNewVersion} disabled={saving}>
             {saved ? <Check size={16} /> : <Save size={16} />}
-            {saving ? "A guardar..." : saved ? "Guardado" : "Guardar v+"}
+            {saving ? "A guardar..." : saved ? "Guardado" : "Guardar"}
           </Button>
           <Link href={`/agents/${id}/chat`}>
             <Button>
@@ -291,6 +312,7 @@ export default function AgentBuilderPage() {
               Chat
             </Button>
           </Link>
+          </div>
         </div>
       </div>
 
@@ -604,6 +626,7 @@ export default function AgentBuilderPage() {
                 ? availableModels
                 : [
                     { id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6" },
+                    { id: "claude-opus-4-8", display_name: "Claude Opus 4.8" },
                     { id: "claude-haiku-4-5", display_name: "Claude Haiku 4.5" },
                   ]
               ).map((m) => (

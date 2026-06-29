@@ -42,6 +42,26 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await supabase
+    .from("agent_versions")
+    .update({ status: "archived" })
+    .eq("agent_id", agentId)
+    .eq("status", "published");
+
+  await supabase
+    .from("agent_versions")
+    .update({ status: "published", published_at: new Date().toISOString() })
+    .eq("id", version.id);
+
+  await supabase
+    .from("agents")
+    .update({
+      current_version_id: version.id,
+      status: "published",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", agentId);
+
   await logAudit(supabase, {
     actorId: user.id,
     action: "agent.version.create",
