@@ -11,6 +11,7 @@ import {
   FileText,
   Eye,
   Library,
+  Workflow,
   Store,
 } from "lucide-react";
 import Link from "next/link";
@@ -71,6 +72,7 @@ export default async function DashboardPage() {
     { icon: Plus, label: "Novo agente", desc: "Criar do zero", href: "/agents/new" },
     { icon: Bot, label: "Os meus agentes", desc: "Ver e gerir", href: "/agents" },
     { icon: Store, label: "Marketplace", desc: "Descobrir agentes", href: "/marketplace" },
+    { icon: Workflow, label: "Flows", desc: "Orquestrar agentes", href: "/flows" },
   ];
 
   return (

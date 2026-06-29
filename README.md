@@ -50,6 +50,14 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Agent Builder** — secção Plugins com configuração de hosts permitidos
 - **Auditoria** — invocações de plugins registadas em `audit_logs`
 
+## Fase 5 — Flow Builder ✅
+
+- **Editor visual** — canvas com nós arrastáveis (Trigger, Agente, Condição, Transform, Output)
+- **Ligações** — conectar nós com edges SVG; ramificações true/false em condições
+- **Execução** — motor topológico com logs por passo em `flow_run_steps`
+- **Versionamento** — `flow_versions` com graph JSONB, publicar versões
+- **Histórico** — `flow_runs` com status e steps detalhados
+
 ## Setup
 
 ```bash
@@ -88,7 +96,9 @@ npm run db:types
 | `/marketplace/[id]` | Detalhe do agente no marketplace |
 | `/api/marketplace` | Listagem com pesquisa e filtros (GET) |
 | `/api/marketplace/[id]/clone` | Clonar agente (POST) |
-| `/flows` | Fase 5 (placeholder) |
+| `/flows` | Lista de workflows |
+| `/flows/[id]` | Flow Builder (editor visual) |
+| `/api/flows/[id]/run` | Executar flow (POST) / histórico (GET) |
 
 ## Arquitetura
 
@@ -106,5 +116,5 @@ lib/flows/        → Flow Engine (Fase 5)
 
 - **Fase 3** — Marketplace ✅
 - **Fase 4** — Skills plugins (HTTP, SQL, Run Code) ✅
-- **Fase 5** — Flow Builder
+- **Fase 5** — Flow Builder ✅
 - **Fase 6** — Enterprise (Entra ID, quotas, auditoria)

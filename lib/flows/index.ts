@@ -1,21 +1,12 @@
-/** Flow Engine — Phase 5 placeholder */
-export interface FlowNode {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
-}
+export type {
+  FlowGraph,
+  FlowNode,
+  FlowEdge,
+  FlowNodeType,
+  FlowRunInput,
+  FlowRunResult,
+  FlowStepResult,
+  FlowRunContext,
+} from "./types";
 
-export interface FlowEdge {
-  id: string;
-  source: string;
-  target: string;
-}
-
-export interface FlowGraph {
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-}
-
-export async function runFlow(_graph: FlowGraph): Promise<{ status: string }> {
-  return { status: "not_implemented" };
-}
+export { FLOW_NODE_TYPES, DEFAULT_FLOW_GRAPH } from "./constants";

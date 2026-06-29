@@ -18,7 +18,7 @@ const TITLES: { match: (p: string) => boolean; title: string; subtitle: string }
   { match: (p) => /\/agents\/[^/]+/.test(p), title: "Agent Builder", subtitle: "Configure prompt, skills e knowledge" },
   { match: (p) => p.startsWith("/agents"), title: "Agentes", subtitle: "Gerir e configurar agentes de IA" },
   { match: (p) => p.startsWith("/marketplace"), title: "Marketplace", subtitle: "Descubra agentes e skills" },
-  { match: (p) => p.startsWith("/flows"), title: "Flows", subtitle: "Orquestração de agentes" },
+  { match: (p) => p.startsWith("/flows"), title: "Flows", subtitle: "Orquestração visual de agentes" },
   { match: (p) => p.startsWith("/admin"), title: "Backoffice", subtitle: "Administração e métricas" },
 ];
 
