@@ -18,8 +18,15 @@ import { Badge } from "@/_design_system/Badge";
 import { Button } from "@/_design_system/Button";
 import { Input, Select } from "@/_design_system/Input";
 import { formatCost } from "@lib/utils";
+import {
+  USER_ROLES,
+  ROLE_LABELS,
+  type RolePolicy,
+  type UserRole,
+  isUnrestrictedRole,
+} from "@lib/enterprise/role-policies";
 
-type Tab = "users" | "quotas" | "audit" | "costs" | "rate-limits";
+type Tab = "users" | "roles" | "audit" | "costs" | "rate-limits";
 
 interface UserRow {
   id: string;
@@ -27,10 +34,13 @@ interface UserRow {
   full_name: string | null;
   role: string;
   auth_provider?: string;
-  user_quotas?: Array<{
-    monthly_token_limit: number | null;
-    monthly_cost_limit_eur: number | null;
-  }>;
+}
+
+interface ModelOption {
+  id: string;
+  display_name: string;
+  tier?: string;
+  status?: string;
 }
 
 export default function AdminPage() {
@@ -49,36 +59,52 @@ export default function AdminPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [rolePolicies, setRolePolicies] = useState<RolePolicy[]>([]);
+  const [allModels, setAllModels] = useState<ModelOption[]>([]);
+  const [selectedRole, setSelectedRole] = useState<UserRole>("user");
+  const [savingRole, setSavingRole] = useState(false);
+
+  async function loadRoles() {
+    const res = await fetch("/api/admin/roles");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data.policies)) setRolePolicies(data.policies);
+    if (Array.isArray(data.models)) setAllModels(data.models);
+  }
 
   async function loadAll() {
     setLoading(true);
     setAccessDenied(false);
-    const [uRes, cRes, lRes, rRes, sRes] = await Promise.all([
+    const [uRes, cRes, lRes, rRes, sRes, rolesRes] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/admin/costs"),
       fetch("/api/admin/audit"),
       fetch("/api/admin/rate-limits"),
       fetch("/api/admin/stats"),
+      fetch("/api/admin/roles"),
     ]);
 
-    if ([uRes, cRes, lRes, rRes, sRes].some((res) => res.status === 403)) {
+    if ([uRes, cRes, lRes, rRes, sRes, rolesRes].some((res) => res.status === 403)) {
       setAccessDenied(true);
       setLoading(false);
       return;
     }
 
-    const [u, c, l, r, s] = await Promise.all([
+    const [u, c, l, r, s, rolesData] = await Promise.all([
       uRes.json(),
       cRes.json(),
       lRes.json(),
       rRes.json(),
       sRes.json(),
+      rolesRes.json(),
     ]);
     if (Array.isArray(u)) setUsers(u);
     if (Array.isArray(c)) setCosts(c);
     if (Array.isArray(l)) setLogs(l);
     if (Array.isArray(r)) setRateLimits(r);
     if (s && typeof s === "object" && !Array.isArray(s)) setPlatformStats(s);
+    if (rolesData?.policies) setRolePolicies(rolesData.policies);
+    if (rolesData?.models) setAllModels(rolesData.models);
     setLoading(false);
   }
 
@@ -95,24 +121,23 @@ export default function AdminPage() {
     await loadAll();
   }
 
-  async function updateQuota(
-    userId: string,
-    monthly_token_limit: number | null,
-    monthly_cost_limit_eur: number | null
-  ) {
-    await fetch("/api/admin/quotas", {
+  async function saveRolePolicy(policy: RolePolicy) {
+    setSavingRole(true);
+    await fetch("/api/admin/roles", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, monthly_token_limit, monthly_cost_limit_eur }),
+      body: JSON.stringify(policy),
     });
-    await loadAll();
+    await loadRoles();
+    setSavingRole(false);
   }
 
   const totalCost = costs.reduce((s, row) => s + Number(row.cost_eur ?? 0), 0);
+  const activePolicy = rolePolicies.find((p) => p.role === selectedRole);
 
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: "users", label: "Utilizadores", icon: Users },
-    { id: "quotas", label: "Quotas", icon: Gauge },
+    { id: "roles", label: "Roles & limites", icon: Gauge },
     { id: "rate-limits", label: "Rate Limits", icon: Shield },
     { id: "audit", label: "Auditoria", icon: ScrollText },
     { id: "costs", label: "Custos", icon: Euro },
@@ -278,40 +303,44 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {tab === "quotas" && (
-        <Card padding="none">
-          <div className="px-6 pt-5">
-            <CardHeader>
-              <CardTitle>Quotas mensais</CardTitle>
-            </CardHeader>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-y border-line bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
-                  <th className="px-6 py-3 font-medium">Utilizador</th>
-                  <th className="px-6 py-3 font-medium">Limite tokens</th>
-                  <th className="px-6 py-3 font-medium">Limite custo (€)</th>
-                  <th className="px-6 py-3 font-medium" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {users.map((u) => {
-                  const q = u.user_quotas?.[0];
-                  return (
-                    <QuotaRow
-                      key={u.id}
-                      email={u.email}
-                      tokenLimit={q?.monthly_token_limit ?? 500000}
-                      costLimit={q?.monthly_cost_limit_eur ?? 50}
-                      onSave={(tokens, cost) => updateQuota(u.id, tokens, cost)}
-                    />
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      {tab === "roles" && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
+          <Card padding="none">
+            <div className="border-b border-line px-4 py-3">
+              <p className="text-xs font-semibold uppercase text-slate-400">Roles</p>
+            </div>
+            <ul className="p-2">
+              {USER_ROLES.map((role) => (
+                <li key={role}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole(role)}
+                    className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                      selectedRole === role
+                        ? "bg-brand-50 font-medium text-brand-700"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {ROLE_LABELS[role]}
+                    <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                      {role}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          {activePolicy && (
+            <RolePolicyEditor
+              key={activePolicy.role}
+              policy={activePolicy}
+              models={allModels}
+              saving={savingRole}
+              onSave={saveRolePolicy}
+            />
+          )}
+        </div>
       )}
 
       {tab === "rate-limits" && (
@@ -433,51 +462,144 @@ export default function AdminPage() {
   );
 }
 
-function QuotaRow({
-  email,
-  tokenLimit,
-  costLimit,
+function RolePolicyEditor({
+  policy,
+  models,
+  saving,
   onSave,
 }: {
-  email: string;
-  tokenLimit: number;
-  costLimit: number;
-  onSave: (tokens: number | null, cost: number | null) => void;
+  policy: RolePolicy;
+  models: ModelOption[];
+  saving: boolean;
+  onSave: (policy: RolePolicy) => void;
 }) {
-  const [tokens, setTokens] = useState(String(tokenLimit));
-  const [cost, setCost] = useState(String(costLimit));
+  const unrestricted = isUnrestrictedRole(policy.role);
+  const [tokens, setTokens] = useState(
+    policy.monthly_token_limit != null ? String(policy.monthly_token_limit) : ""
+  );
+  const [cost, setCost] = useState(
+    policy.monthly_cost_limit_eur != null ? String(policy.monthly_cost_limit_eur) : ""
+  );
+  const [unlimited, setUnlimited] = useState(
+    policy.monthly_token_limit == null && policy.monthly_cost_limit_eur == null
+  );
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(
+    new Set(policy.allowed_model_ids)
+  );
+  const [allModelsAllowed, setAllModelsAllowed] = useState(
+    unrestricted || policy.allowed_model_ids.length === 0
+  );
+
+  function toggleModel(id: string) {
+    setSelectedModels((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setAllModelsAllowed(false);
+  }
 
   return (
-    <tr>
-      <td className="px-6 py-3 text-slate-700">{email}</td>
-      <td className="px-6 py-3">
-        <Input
-          type="number"
-          value={tokens}
-          onChange={(e) => setTokens(e.target.value)}
-          className="h-8 w-32 text-xs"
-        />
-      </td>
-      <td className="px-6 py-3">
-        <Input
-          type="number"
-          step="0.01"
-          value={cost}
-          onChange={(e) => setCost(e.target.value)}
-          className="h-8 w-24 text-xs"
-        />
-      </td>
-      <td className="px-6 py-3">
+    <Card>
+      <CardHeader>
+        <CardTitle>{ROLE_LABELS[policy.role]}</CardTitle>
+      </CardHeader>
+      <p className="mb-4 text-sm text-slate-500">
+        Limites e modelos aplicam-se a todos os utilizadores com role{" "}
+        <code className="rounded bg-slate-100 px-1">{policy.role}</code>.
+      </p>
+
+      <div className="space-y-5">
+        <div>
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={unlimited}
+              onChange={(e) => setUnlimited(e.target.checked)}
+            />
+            Quota ilimitada
+          </label>
+          {!unlimited && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Limite tokens / mês"
+                type="number"
+                value={tokens}
+                onChange={(e) => setTokens(e.target.value)}
+                placeholder="500000"
+              />
+              <Input
+                label="Limite custo (€) / mês"
+                type="number"
+                step="0.01"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                placeholder="50.00"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-line pt-5">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={allModelsAllowed || unrestricted}
+              disabled={unrestricted}
+              onChange={(e) => {
+                setAllModelsAllowed(e.target.checked);
+                if (e.target.checked) setSelectedModels(new Set());
+              }}
+            />
+            {unrestricted
+              ? "Todos os modelos (admin tem acesso total)"
+              : "Todos os modelos ativos"}
+          </label>
+
+          {!allModelsAllowed && !unrestricted && (
+            <div className="mt-3 max-h-64 space-y-1 overflow-y-auto rounded-xl border border-line p-3">
+              {models.map((m) => (
+                <label
+                  key={m.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedModels.has(m.id)}
+                    onChange={() => toggleModel(m.id)}
+                  />
+                  <span className="font-medium text-slate-800">{m.display_name}</span>
+                  <span className="text-xs text-slate-400">{m.id}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
         <Button
-          size="sm"
-          variant="outline"
+          disabled={saving}
           onClick={() =>
-            onSave(tokens ? Number(tokens) : null, cost ? Number(cost) : null)
+            onSave({
+              role: policy.role,
+              monthly_token_limit: unlimited
+                ? null
+                : tokens
+                  ? Number(tokens)
+                  : null,
+              monthly_cost_limit_eur: unlimited
+                ? null
+                : cost
+                  ? Number(cost)
+                  : null,
+              allowed_model_ids:
+                allModelsAllowed || unrestricted ? [] : Array.from(selectedModels),
+            })
           }
         >
-          Guardar
+          {saving ? "A guardar..." : "Guardar política do role"}
         </Button>
-      </td>
-    </tr>
+      </div>
+    </Card>
   );
 }
