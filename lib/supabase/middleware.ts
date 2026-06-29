@@ -33,8 +33,9 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute =
     request.nextUrl.pathname.startsWith("/auth") ||
     request.nextUrl.pathname === "/login";
+  const isV1Api = request.nextUrl.pathname.startsWith("/api/v1/");
 
-  if (!user && !isPublicRoute) {
+  if (!user && !isPublicRoute && !isV1Api) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
