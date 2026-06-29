@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (path === "costs") {
     const { data, error } = await supabase
       .from("usage_logs")
-      .select("*")
+      .select("*, profiles(email, full_name)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

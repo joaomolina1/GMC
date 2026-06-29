@@ -26,7 +26,12 @@ import {
   isUnrestrictedRole,
 } from "@lib/enterprise/role-policies";
 
-type Tab = "users" | "roles" | "audit" | "costs" | "rate-limits";
+import {
+  AdminConversationDetail,
+  type ConversationListItem,
+} from "@/_components/AdminConversationDetail";
+
+type Tab = "users" | "roles" | "conversations" | "audit" | "costs" | "rate-limits";
 
 interface UserRow {
   id: string;
@@ -63,6 +68,10 @@ export default function AdminPage() {
   const [allModels, setAllModels] = useState<ModelOption[]>([]);
   const [selectedRole, setSelectedRole] = useState<UserRole>("user");
   const [savingRole, setSavingRole] = useState(false);
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null);
+  const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
 
   async function loadRoles() {
     const res = await fetch("/api/admin/roles");
@@ -75,28 +84,30 @@ export default function AdminPage() {
   async function loadAll() {
     setLoading(true);
     setAccessDenied(false);
-    const [uRes, cRes, lRes, rRes, sRes, rolesRes] = await Promise.all([
+    const [uRes, cRes, lRes, rRes, sRes, rolesRes, convRes] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/admin/costs"),
       fetch("/api/admin/audit"),
       fetch("/api/admin/rate-limits"),
       fetch("/api/admin/stats"),
       fetch("/api/admin/roles"),
+      fetch("/api/admin/conversations?limit=100"),
     ]);
 
-    if ([uRes, cRes, lRes, rRes, sRes, rolesRes].some((res) => res.status === 403)) {
+    if ([uRes, cRes, lRes, rRes, sRes, rolesRes, convRes].some((res) => res.status === 403)) {
       setAccessDenied(true);
       setLoading(false);
       return;
     }
 
-    const [u, c, l, r, s, rolesData] = await Promise.all([
+    const [u, c, l, r, s, rolesData, convData] = await Promise.all([
       uRes.json(),
       cRes.json(),
       lRes.json(),
       rRes.json(),
       sRes.json(),
       rolesRes.json(),
+      convRes.json(),
     ]);
     if (Array.isArray(u)) setUsers(u);
     if (Array.isArray(c)) setCosts(c);
@@ -105,6 +116,7 @@ export default function AdminPage() {
     if (s && typeof s === "object" && !Array.isArray(s)) setPlatformStats(s);
     if (rolesData?.policies) setRolePolicies(rolesData.policies);
     if (rolesData?.models) setAllModels(rolesData.models);
+    if (Array.isArray(convData)) setConversations(convData);
     setLoading(false);
   }
 
@@ -138,10 +150,27 @@ export default function AdminPage() {
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: "users", label: "Utilizadores", icon: Users },
     { id: "roles", label: "Roles & limites", icon: Gauge },
+    { id: "conversations", label: "Conversas", icon: MessageSquare },
     { id: "rate-limits", label: "Rate Limits", icon: Shield },
     { id: "audit", label: "Auditoria", icon: ScrollText },
     { id: "costs", label: "Custos", icon: Euro },
   ];
+
+  const filteredConversations = conversations.filter((c) => {
+    if (!conversationSearch.trim()) return true;
+    const q = conversationSearch.toLowerCase();
+    return (
+      (c.title ?? "").toLowerCase().includes(q) ||
+      (c.user_email ?? "").toLowerCase().includes(q) ||
+      (c.agent_name ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  function conversationIdFromMetadata(metadata: unknown): string | null {
+    if (!metadata || typeof metadata !== "object") return null;
+    const id = (metadata as { conversationId?: string }).conversationId;
+    return id ?? null;
+  }
 
   const roleTone: Record<string, "brand" | "warning" | "neutral"> = {
     super_admin: "brand",
@@ -151,6 +180,12 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
+      {openConversationId && (
+        <AdminConversationDetail
+          conversationId={openConversationId}
+          onClose={() => setOpenConversationId(null)}
+        />
+      )}
       {accessDenied && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Acesso negado — permissões de administrador necessárias.
@@ -377,6 +412,65 @@ export default function AdminPage() {
         </Card>
       )}
 
+      {tab === "conversations" && (
+        <Card padding="none">
+          <div className="flex flex-col gap-3 border-b border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardHeader className="!p-0">
+              <CardTitle>Conversas</CardTitle>
+            </CardHeader>
+            <Input
+              value={conversationSearch}
+              onChange={(e) => setConversationSearch(e.target.value)}
+              placeholder="Pesquisar por título, utilizador ou agente..."
+              className="max-w-sm"
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-y border-line bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-6 py-3 font-medium">Título</th>
+                  <th className="px-6 py-3 font-medium">Utilizador</th>
+                  <th className="px-6 py-3 font-medium">Agente</th>
+                  <th className="px-6 py-3 font-medium">Msgs</th>
+                  <th className="px-6 py-3 font-medium">Atualizada</th>
+                  <th className="px-6 py-3 font-medium" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {filteredConversations.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/60">
+                    <td className="max-w-[200px] truncate px-6 py-3 font-medium text-slate-800">
+                      {c.title || <span className="text-slate-400 italic">Sem título</span>}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600">
+                      {c.user_name ?? c.user_email ?? "—"}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600">{c.agent_name ?? "—"}</td>
+                    <td className="px-6 py-3 text-slate-600">{c.message_count}</td>
+                    <td className="px-6 py-3 text-slate-500">
+                      {new Date(c.updated_at).toLocaleString("pt-PT")}
+                    </td>
+                    <td className="px-6 py-3">
+                      <Button size="sm" variant="outline" onClick={() => setOpenConversationId(c.id)}>
+                        Abrir
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredConversations.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                      Sem conversas.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {tab === "audit" && (
         <Card padding="none">
           <div className="px-6 pt-5">
@@ -392,24 +486,65 @@ export default function AdminPage() {
                   <th className="px-6 py-3 font-medium">Entidade</th>
                   <th className="px-6 py-3 font-medium">Ator</th>
                   <th className="px-6 py-3 font-medium">Data</th>
+                  <th className="px-6 py-3 font-medium" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {logs.map((log) => (
-                  <tr key={String(log.id)} className="hover:bg-slate-50/60">
-                    <td className="px-6 py-3 font-medium text-slate-800">{String(log.action)}</td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {String(log.entity_type)}
-                      {log.entity_id ? ` · ${String(log.entity_id).slice(0, 8)}…` : ""}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {(log.profiles as { email?: string } | null)?.email ?? "—"}
-                    </td>
-                    <td className="px-6 py-3 text-slate-500">
-                      {new Date(String(log.created_at)).toLocaleString("pt-PT")}
-                    </td>
-                  </tr>
-                ))}
+                {logs.map((log) => {
+                  const logId = String(log.id);
+                  const expanded = expandedAuditId === logId;
+                  const metadata = log.metadata as Record<string, unknown> | undefined;
+                  const convId = metadata?.conversationId as string | undefined;
+
+                  return (
+                    <>
+                      <tr key={logId} className="hover:bg-slate-50/60">
+                        <td className="px-6 py-3 font-medium text-slate-800">{String(log.action)}</td>
+                        <td className="px-6 py-3 text-slate-600">
+                          {String(log.entity_type)}
+                          {log.entity_id ? ` · ${String(log.entity_id).slice(0, 8)}…` : ""}
+                        </td>
+                        <td className="px-6 py-3 text-slate-600">
+                          {(log.profiles as { email?: string } | null)?.email ?? "—"}
+                        </td>
+                        <td className="px-6 py-3 text-slate-500">
+                          {new Date(String(log.created_at)).toLocaleString("pt-PT")}
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex gap-2">
+                            {metadata && Object.keys(metadata).length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setExpandedAuditId(expanded ? null : logId)}
+                              >
+                                {expanded ? "Ocultar" : "Detalhes"}
+                              </Button>
+                            )}
+                            {convId && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setOpenConversationId(convId)}
+                              >
+                                Conversa
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded && metadata && (
+                        <tr key={`${logId}-meta`}>
+                          <td colSpan={5} className="bg-slate-50 px-6 py-3">
+                            <pre className="overflow-x-auto rounded-lg border border-line bg-white p-3 text-xs text-slate-700">
+                              {JSON.stringify(metadata, null, 2)}
+                            </pre>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
                 {logs.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
@@ -434,25 +569,46 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-y border-line bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-6 py-3 font-medium">Utilizador</th>
                   <th className="px-6 py-3 font-medium">Modelo</th>
                   <th className="px-6 py-3 font-medium">Tokens</th>
                   <th className="px-6 py-3 font-medium">Custo</th>
                   <th className="px-6 py-3 font-medium">Data</th>
+                  <th className="px-6 py-3 font-medium" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {costs.slice(0, 50).map((r) => (
-                  <tr key={String(r.id)} className="hover:bg-slate-50/60">
-                    <td className="px-6 py-3 font-medium text-slate-700">{String(r.model)}</td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {Number(r.prompt_tokens) + Number(r.completion_tokens)}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">{formatCost(Number(r.cost_eur))}</td>
-                    <td className="px-6 py-3 text-slate-500">
-                      {new Date(String(r.created_at)).toLocaleString("pt-PT")}
-                    </td>
-                  </tr>
-                ))}
+                {costs.slice(0, 50).map((r) => {
+                  const convId = conversationIdFromMetadata(r.metadata);
+                  return (
+                    <tr key={String(r.id)} className="hover:bg-slate-50/60">
+                      <td className="px-6 py-3 text-slate-600">
+                        {(r.profiles as { email?: string } | null)?.email ?? "—"}
+                      </td>
+                      <td className="px-6 py-3 font-medium text-slate-700">{String(r.model)}</td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {Number(r.prompt_tokens) + Number(r.completion_tokens)}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">{formatCost(Number(r.cost_eur))}</td>
+                      <td className="px-6 py-3 text-slate-500">
+                        {new Date(String(r.created_at)).toLocaleString("pt-PT")}
+                      </td>
+                      <td className="px-6 py-3">
+                        {convId ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setOpenConversationId(convId)}
+                          >
+                            Ver conversa
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
