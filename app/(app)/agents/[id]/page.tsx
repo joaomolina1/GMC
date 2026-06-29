@@ -125,6 +125,8 @@ export default function AgentBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [activeVersion, setActiveVersion] = useState<number | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [docAction, setDocAction] = useState<string | null>(null);
 
   const loadDocs = useCallback(async () => {
@@ -155,6 +157,7 @@ export default function AgentBuilderPage() {
         ...DEFAULT_TOOL_CONFIGS,
         ...(current.tools as Record<string, Record<string, unknown>> | undefined),
       });
+      setActiveVersion(current.version);
     }
     setVersions(data.agent_versions ?? []);
   }, [id]);
@@ -197,6 +200,8 @@ export default function AgentBuilderPage() {
       return;
     }
 
+    const savedVersion = (await versionRes.json()) as AgentVersion;
+
     const patchRes = await fetch(`/api/agents/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -218,7 +223,30 @@ export default function AgentBuilderPage() {
       return;
     }
 
-    await loadAgent();
+    const patchedAgent = (await patchRes.json()) as Agent;
+
+    setAgent((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...patchedAgent,
+            current_version_id: savedVersion.id,
+            status: "published",
+          }
+        : prev
+    );
+    setVersions((prev) => {
+      const idx = prev.findIndex((v) => v.id === savedVersion.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = savedVersion;
+        return next;
+      }
+      return [savedVersion, ...prev];
+    });
+    setActiveVersion(savedVersion.version);
+    setSavedAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }));
+
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -295,11 +323,17 @@ export default function AgentBuilderPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
+          {activeVersion != null && (
+            <Badge tone="neutral">v{activeVersion}</Badge>
+          )}
           <Badge tone={agent.status === "published" ? "success" : "warning"}>{agent.status}</Badge>
         </div>
         <div className="flex flex-col items-end gap-1">
           {saveError && (
             <p className="text-xs text-rose-600">{saveError}</p>
+          )}
+          {savedAt && !saveError && (
+            <p className="text-xs text-slate-400">Último guardado às {savedAt}</p>
           )}
           <div className="flex gap-2">
           <Button variant="outline" onClick={saveNewVersion} disabled={saving}>
