@@ -8,7 +8,15 @@ const providers: Record<string, () => AIProvider> = {
 };
 
 const modelRegistry: Record<string, { provider: string; pricing: ModelPricing }> = {
+  "claude-opus-4-20250514": {
+    provider: "anthropic",
+    pricing: { inputPricePerMtok: 15.0, outputPricePerMtok: 75.0 },
+  },
   "claude-sonnet-4-20250514": {
+    provider: "anthropic",
+    pricing: { inputPricePerMtok: 3.0, outputPricePerMtok: 15.0 },
+  },
+  "claude-3-5-sonnet-20241022": {
     provider: "anthropic",
     pricing: { inputPricePerMtok: 3.0, outputPricePerMtok: 15.0 },
   },

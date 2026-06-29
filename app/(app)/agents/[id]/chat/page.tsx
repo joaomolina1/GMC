@@ -71,6 +71,14 @@ export default function AgentChatPage() {
         }),
       });
 
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ??
+            `Erro ${res.status}: pedido rejeitado`
+        );
+      }
+
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No stream");
@@ -95,6 +103,9 @@ export default function AgentChatPage() {
             }
             if (data.type === "done" && data.conversationId) {
               setConversationId(data.conversationId);
+            }
+            if (data.type === "error") {
+              throw new Error(data.message ?? "Erro no streaming");
             }
             if (data.type === "tool") {
               assistantContent += `\n\n\u{1F527} *A usar skill: ${data.name}*\n`;

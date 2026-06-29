@@ -40,6 +40,15 @@ export async function createServiceClient() {
   });
 }
 
+/** Returns null when SUPABASE_SERVICE_ROLE_KEY is not configured. */
+export async function tryCreateServiceClient() {
+  try {
+    return await createServiceClient();
+  } catch {
+    return null;
+  }
+}
+
 export async function getUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

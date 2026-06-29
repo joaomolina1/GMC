@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@lib/supabase/server";
+import { createClient } from "@lib/supabase/server";
 import { logUsage } from "@lib/audit";
 import { streamAgentLoop } from "@lib/skills/runner";
 import { buildChatMessages, buildAttachmentHint } from "@lib/chat/messages";
@@ -12,7 +12,6 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const start = Date.now();
   const supabase = await createClient();
-  const serviceClient = await createServiceClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,7 +48,12 @@ export async function POST(request: Request) {
     .eq("id", agent.current_version_id)
     .single();
 
-  if (!version) return NextResponse.json({ error: "No published version" }, { status: 400 });
+  if (!version) {
+    return NextResponse.json(
+      { error: "Agente sem versão configurada. Guarde uma versão no Builder primeiro." },
+      { status: 400 }
+    );
+  }
 
   let convId = conversationId;
   if (!convId) {
@@ -152,7 +156,7 @@ export async function POST(request: Request) {
           cost_eur: finalCost,
         });
 
-        await logUsage(serviceClient, {
+        await logUsage(supabase, {
           userId: user.id,
           model: version.model,
           provider: "anthropic",

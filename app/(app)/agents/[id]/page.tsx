@@ -102,6 +102,9 @@ export default function AgentBuilderPage() {
   const [tagsInput, setTagsInput] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [model, setModel] = useState("claude-sonnet-4-20250514");
+  const [availableModels, setAvailableModels] = useState<
+    Array<{ id: string; display_name: string }>
+  >([]);
   const [temperature, setTemperature] = useState(0.7);
   const [skills, setSkills] = useState<string[]>(CORE_SKILLS);
   const [toolConfigs, setToolConfigs] = useState<Record<string, Record<string, unknown>>>(DEFAULT_TOOL_CONFIGS);
@@ -159,6 +162,21 @@ export default function AgentBuilderPage() {
     loadAgent();
     loadDocs();
   }, [id, loadAgent, loadDocs]);
+
+  useEffect(() => {
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAvailableModels(
+            data.map((m: { id: string; display_name: string }) => ({
+              id: m.id,
+              display_name: m.display_name,
+            }))
+          );
+        }
+      });
+  }, []);
 
   async function saveNewVersion() {
     setSaving(true);
@@ -581,8 +599,17 @@ export default function AgentBuilderPage() {
         {tab === "model" && (
           <div className="max-w-md space-y-6">
             <Select label="Modelo" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+              {(availableModels.length > 0
+                ? availableModels
+                : [
+                    { id: "claude-sonnet-4-20250514", display_name: "Claude Sonnet 4" },
+                    { id: "claude-3-5-haiku-20241022", display_name: "Claude 3.5 Haiku" },
+                  ]
+              ).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.display_name}
+                </option>
+              ))}
             </Select>
             <div>
               <div className="mb-2 flex items-center justify-between">
