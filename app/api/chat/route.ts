@@ -4,6 +4,7 @@ import { logUsage } from "@lib/audit";
 import { streamAgent } from "@lib/chat/agent";
 import { buildChatMessages } from "@lib/chat/messages";
 import { buildKnowledgeContext } from "@lib/chat/rag";
+import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
@@ -102,10 +103,22 @@ export async function POST(request: Request) {
 
   const messages = await buildChatMessages(history ?? [], supabase);
 
+  const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
+  let skillsPrompt = "";
+  if (skillPackageIds.length > 0) {
+    const { data: skillPackages } = await supabase
+      .from("agent_skill_packages")
+      .select("id, name, description, skill_md, extra_files")
+      .in("id", skillPackageIds);
+    if (skillPackages?.length) {
+      skillsPrompt = buildAgentSkillsPrompt(skillPackages);
+    }
+  }
+
   const knowledgeContext = await buildKnowledgeContext(supabase, agentId, message);
-  const systemPrompt = knowledgeContext
-    ? `${version.system_prompt}${knowledgeContext}`
-    : version.system_prompt;
+  const systemPrompt = [version.system_prompt, skillsPrompt, knowledgeContext]
+    .filter(Boolean)
+    .join("");
 
   const encoder = new TextEncoder();
   let fullContent = "";
