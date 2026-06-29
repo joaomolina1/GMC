@@ -1,4 +1,10 @@
-export type FlowNodeType = "trigger" | "agent" | "condition" | "transform" | "output";
+export type FlowNodeType =
+  | "trigger"
+  | "agent"
+  | "condition"
+  | "transform"
+  | "code"
+  | "output";
 
 export interface FlowNode {
   id: string;
