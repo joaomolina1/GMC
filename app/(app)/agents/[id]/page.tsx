@@ -146,6 +146,7 @@ export default function AgentBuilderPage() {
         char_count?: number;
         chunk_count?: number;
         embedding_model?: string;
+        error?: string;
       };
     }>
   >([]);
@@ -155,6 +156,9 @@ export default function AgentBuilderPage() {
   const [activeVersion, setActiveVersion] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [docAction, setDocAction] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+  const [docSuccess, setDocSuccess] = useState<string | null>(null);
+  const [knowledgeReady, setKnowledgeReady] = useState<boolean | null>(null);
   const [skillStatuses, setSkillStatuses] = useState<
     Record<string, { readiness: string; note: string; requirement?: string }>
   >({});
@@ -195,6 +199,10 @@ export default function AgentBuilderPage() {
   useEffect(() => {
     loadAgent();
     loadDocs();
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((h) => setKnowledgeReady(Boolean(h.serviceRole)))
+      .catch(() => setKnowledgeReady(null));
   }, [id, loadAgent, loadDocs]);
 
   useEffect(() => {
@@ -320,29 +328,52 @@ export default function AgentBuilderPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setDocAction("upload");
+    setDocError(null);
+    setDocSuccess(null);
     const form = new FormData();
     form.append("file", file);
     form.append("agentId", id);
-    await fetch("/api/knowledge/upload", { method: "POST", body: form });
-    await loadDocs();
-    setDocAction(null);
-    e.target.value = "";
+    try {
+      const res = await fetch("/api/knowledge/upload", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDocError(data.error ?? `Upload falhou (${res.status})`);
+      } else {
+        setDocSuccess(`${file.name} indexado (${data.metadata?.chunk_count ?? data.chunk_count ?? "?"} chunks)`);
+      }
+      await loadDocs();
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Erro de rede no upload");
+    } finally {
+      setDocAction(null);
+      e.target.value = "";
+    }
   }
 
   async function deleteDoc(docId: string) {
     setDocAction(docId);
-    await fetch(`/api/knowledge/upload?id=${docId}`, { method: "DELETE" });
+    setDocError(null);
+    const res = await fetch(`/api/knowledge/upload?id=${docId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDocError(data.error ?? "Falha ao eliminar documento");
+    }
     await loadDocs();
     setDocAction(null);
   }
 
   async function reindexDoc(docId: string) {
     setDocAction(`reindex-${docId}`);
-    await fetch("/api/knowledge/reindex", {
+    setDocError(null);
+    const res = await fetch("/api/knowledge/reindex", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documentId: docId }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDocError(data.error ?? "Falha na reindexação");
+    }
     await loadDocs();
     setDocAction(null);
   }
@@ -510,6 +541,26 @@ export default function AgentBuilderPage() {
 
         {tab === "knowledge" && (
           <div className="space-y-5">
+            {knowledgeReady === false && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">Upload de Knowledge indisponível</p>
+                <p className="mt-1 text-xs leading-relaxed">
+                  Falta <code className="rounded bg-white/70 px-1">SUPABASE_SERVICE_ROLE_KEY</code> no
+                  Vercel (pode usar o valor da Secret Key do Supabase). Depois de adicionar, faça{" "}
+                  <strong>redeploy</strong> do projeto.
+                </p>
+              </div>
+            )}
+            {docError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                {docError}
+              </div>
+            )}
+            {docSuccess && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                {docSuccess}
+              </div>
+            )}
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 py-10 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-500">
                 <Upload size={22} />
@@ -544,6 +595,9 @@ export default function AgentBuilderPage() {
                           <p className="text-xs text-slate-400">
                             {doc.metadata.chunk_count != null && `${doc.metadata.chunk_count} chunks`}
                             {doc.metadata.char_count != null && ` · ${doc.metadata.char_count.toLocaleString()} chars`}
+                            {doc.metadata.error && (
+                              <span className="block text-rose-500">{String(doc.metadata.error)}</span>
+                            )}
                             {doc.metadata.ocr_used && (
                               <span className="ml-1 inline-flex items-center gap-0.5 text-violet-500">
                                 <ScanText size={10} /> OCR

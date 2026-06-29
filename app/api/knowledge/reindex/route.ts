@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@lib/supabase/server";
+import { createClient, tryCreateServiceClient } from "@lib/supabase/server";
 import { processKnowledgeDocument } from "@lib/ai/embeddings";
 import { extractDocument } from "@lib/documents/extract";
 
@@ -7,9 +7,19 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const serviceClient = await createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const serviceClient = await tryCreateServiceClient();
+  if (!serviceClient) {
+    return NextResponse.json(
+      {
+        error:
+          "Reindexação indisponível: configure SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SECRET_KEY) no Vercel.",
+      },
+      { status: 503 }
+    );
+  }
 
   const { documentId } = await request.json();
   if (!documentId) return NextResponse.json({ error: "documentId required" }, { status: 400 });
