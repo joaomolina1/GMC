@@ -114,10 +114,11 @@ const CORE_TOOLS = [
   "knowledge_search",
 ];
 
-const PLUGIN_TOOLS = ["http_request", "sql_query", "run_code"];
+const PLUGIN_TOOLS = ["http_request", "fetch_url", "sql_query"];
 
 const PLUGIN_TOOL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {
-  http_request: { label: "HTTP Request", desc: "Chamadas REST a APIs externas", icon: Globe, tone: "bg-indigo-50 text-indigo-600" },
+  http_request: { label: "HTTP Request", desc: "Chamadas REST a APIs externas (loop agêntico)", icon: Globe, tone: "bg-indigo-50 text-indigo-600" },
+  fetch_url: { label: "Fetch URL", desc: "Extrai texto de páginas web públicas", icon: Globe, tone: "bg-sky-50 text-sky-600" },
   sql_query: { label: "SQL Query", desc: "Queries SELECT read-only na BD GMC", icon: Database, tone: "bg-cyan-50 text-cyan-600" },
   run_code: { label: "Run Code", desc: "JavaScript sandboxed para cálculos", icon: Code, tone: "bg-orange-50 text-orange-600" },
 };
@@ -803,17 +804,32 @@ function AdvancedTabContent({
   }
 
   if (tab === "tools") {
+    const docStatus = skillStatuses[TOOL_CREATE_DOCUMENTS];
+    const docEnabled = tools.includes(TOOL_CREATE_DOCUMENTS);
     return (
       <div className="space-y-4">
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
           Tools são capacidades técnicas do agente. <strong>Criar documentos</strong> activa
           PowerPoint, Excel, Word e PDF via API Anthropic (requer code execution na conta).
         </p>
+        {!docEnabled && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Sem «Criar documentos», pedidos de PowerPoint/Excel/Word/PDF só produzem texto —
+            não há ficheiro para download.
+          </p>
+        )}
+        {docEnabled && docStatus && docStatus.readiness !== "ready" && (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            {docStatus.note}
+            {docStatus.requirement ? ` (${docStatus.requirement})` : ""}
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-2">
           {CORE_TOOLS.map((tool) => {
             const meta = TOOL_META[tool];
             const Icon = meta.icon;
             const checked = tools.includes(tool);
+            const status = skillStatuses[tool];
             return (
               <button
                 key={tool}
@@ -822,13 +838,19 @@ function AdvancedTabContent({
                   setTools(checked ? tools.filter((s) => s !== tool) : [...tools, tool])
                 }
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border p-2 text-left text-xs",
+                  "flex items-start gap-2 rounded-lg border p-2 text-left text-xs",
                   checked ? "border-brand-300 bg-brand-50" : "border-line"
                 )}
               >
-                <Icon size={14} />
-                <span className="font-medium">{meta.label}</span>
-                {checked && <Check size={12} className="ml-auto text-brand-600" />}
+                <Icon size={14} className="mt-0.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium">{meta.label}</span>
+                  <p className="mt-0.5 text-[10px] text-slate-500">{meta.desc}</p>
+                  {status && (
+                    <p className="mt-1 text-[10px] text-slate-400">{status.note}</p>
+                  )}
+                </div>
+                {checked && <Check size={12} className="shrink-0 text-brand-600" />}
               </button>
             );
           })}

@@ -110,6 +110,7 @@ export async function POST(request: Request) {
     agentId,
     version,
     userMessage: message,
+    userId: user.id,
   });
 
   const encoder = new TextEncoder();
@@ -140,6 +141,17 @@ export async function POST(request: Request) {
                   : chunk.name;
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ type: "server_tool", name: chunk.name, label })}\n\n`)
+            );
+          }
+          if (chunk.type === "client_tool") {
+            const label =
+              chunk.phase === "start"
+                ? `A usar ${chunk.name}…`
+                : `${chunk.name} concluído`;
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "client_tool", name: chunk.name, label, phase: chunk.phase })}\n\n`
+              )
             );
           }
           if (chunk.type === "anthropic_file_ids") {

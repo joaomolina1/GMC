@@ -27,8 +27,11 @@ export interface GenerateOptions {
   effort?: EffortLevel;
   thinkingEnabled?: boolean;
   maxTokens?: number;
+  maxSteps?: number;
   /** Anthropic native server tools (e.g. web_search). */
   nativeTools?: import("@anthropic-ai/sdk/resources/messages/messages").ToolUnion[];
+  /** Client-side tool registry for custom tool execution loop. */
+  toolRegistry?: import("@lib/agents/tool-runtime").AgentToolRegistry;
 }
 
 export interface GenerateResult {
@@ -43,6 +46,8 @@ export interface ToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  result?: string;
+  isError?: boolean;
 }
 
 export interface TokenUsage {
@@ -51,11 +56,12 @@ export interface TokenUsage {
 }
 
 export interface StreamChunk {
-  type: "text" | "tool_use" | "server_tool" | "done";
+  type: "text" | "tool_use" | "tool_result" | "server_tool" | "done";
   text?: string;
   toolCall?: ToolCall;
   serverToolName?: string;
   usage?: TokenUsage;
+  executedTools?: ToolCall[];
 }
 
 export interface EmbedOptions {

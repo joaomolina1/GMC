@@ -12,10 +12,11 @@ import {
   buildDocumentCreationTools,
   buildDocumentSkillParams,
 } from "@lib/ai/anthropic-document-skills";
-import { extractFileIdsFromPayload } from "@lib/ai/extract-generated-files";
+import { extractFileIdsFromPayload, logMissingFileIds } from "@lib/ai/extract-generated-files";
+import { getModelMaxTokens } from "@lib/ai/model-limits";
+import { modelSupportsDocumentSkills } from "@lib/ai/document-skills-guard";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 12;
-const DOCUMENT_MAX_TOKENS = 16384;
 
 function toAnthropicMessages(messages: ChatMessage[]): BetaMessageParam[] {
   return messages.map((m) => {
@@ -69,20 +70,27 @@ export interface BetaAgentRunOptions {
   thinkingEnabled?: boolean;
   webSearch?: boolean;
   webSearchConfig?: Record<string, unknown>;
+  maxTokens?: number;
 }
 
 export interface BetaAgentRunResult {
   content: string;
   usage: { promptTokens: number; completionTokens: number };
   anthropicFileIds: string[];
+  stepsUsed: number;
 }
 
 export async function runBetaAgentWithDocuments(
   options: BetaAgentRunOptions
 ): Promise<BetaAgentRunResult> {
+  if (!modelSupportsDocumentSkills(options.model)) {
+    throw new Error("Model does not support document skills");
+  }
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let messages = toAnthropicMessages(options.messages);
   const betas = [...ANTHROPIC_DOCUMENT_BETAS];
+  const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model, true);
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -96,11 +104,13 @@ export async function runBetaAgentWithDocuments(
   let totalCompletion = 0;
   let response: BetaMessage | null = null;
   const collectedFileIds = new Set<string>();
+  let stepsUsed = 0;
 
   for (let i = 0; i < MAX_PAUSE_TURN_CONTINUATIONS; i++) {
+    stepsUsed += 1;
     response = await client.beta.messages.create({
       model: options.model,
-      max_tokens: DOCUMENT_MAX_TOKENS,
+      max_tokens: maxTokens,
       system: options.systemPrompt,
       messages,
       betas,
@@ -112,6 +122,7 @@ export async function runBetaAgentWithDocuments(
     totalPrompt += response.usage.input_tokens;
     totalCompletion += response.usage.output_tokens;
     extractFileIdsFromPayload(response.content).forEach((id) => collectedFileIds.add(id));
+    logMissingFileIds("beta-run", response.content, extractText(response.content));
 
     if (response.stop_reason === "pause_turn") {
       messages = [...messages, { role: "assistant", content: response.content }];
@@ -126,6 +137,7 @@ export async function runBetaAgentWithDocuments(
     content: extractText(response.content),
     usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
     anthropicFileIds: Array.from(collectedFileIds),
+    stepsUsed,
   };
 }
 
@@ -138,9 +150,16 @@ export type BetaAgentStreamEvent =
 export async function* streamBetaAgentWithDocuments(
   options: BetaAgentRunOptions
 ): AsyncGenerator<BetaAgentStreamEvent> {
+  if (!modelSupportsDocumentSkills(options.model)) {
+    yield { type: "text", text: "Modelo não suporta geração de documentos." };
+    yield { type: "done", usage: { promptTokens: 0, completionTokens: 0 } };
+    return;
+  }
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let messages = toAnthropicMessages(options.messages);
   const betas = [...ANTHROPIC_DOCUMENT_BETAS];
+  const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model, true);
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -157,7 +176,7 @@ export async function* streamBetaAgentWithDocuments(
   for (let turn = 0; turn < MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
     const stream = client.beta.messages.stream({
       model: options.model,
-      max_tokens: DOCUMENT_MAX_TOKENS,
+      max_tokens: maxTokens,
       system: options.systemPrompt,
       messages,
       betas,
@@ -179,6 +198,7 @@ export async function* streamBetaAgentWithDocuments(
     totalPrompt += final.usage.input_tokens;
     totalCompletion += final.usage.output_tokens;
     extractFileIdsFromPayload(final.content).forEach((id) => collectedFileIds.add(id));
+    logMissingFileIds("beta-stream", final.content, extractText(final.content));
 
     if (final.stop_reason === "pause_turn") {
       messages = [...messages, { role: "assistant", content: final.content }];

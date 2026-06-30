@@ -119,6 +119,7 @@ export function AgentChatPanel({
             message?: string;
             name?: string;
             label?: string;
+            phase?: string;
             conversationId?: string;
             files?: GeneratedFileView[];
           };
@@ -164,6 +165,21 @@ export function AgentChatPanel({
               };
               return updated;
             });
+          }
+          if (data.type === "client_tool") {
+            const label = data.label ?? data.name ?? "tool";
+            if (data.phase !== "done") {
+              assistantContent += `\n\n🔧 *${label}*\n`;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  content: assistantContent,
+                  files: assistantFiles,
+                };
+                return updated;
+              });
+            }
           }
           if (data.type === "files" && Array.isArray(data.files)) {
             assistantFiles = data.files;
