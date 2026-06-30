@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
+import { DEFAULT_AGENT_MODEL, canChangeAgentModel } from "@lib/agents/constants";
 
 const DEFAULT_SKILLS: string[] = [];
+
+async function getActorRole(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  return profile?.role ?? null;
+}
 
 export async function POST(
   request: Request,
@@ -39,9 +49,34 @@ export async function POST(
     return NextResponse.json({ error: "Agente não encontrado" }, { status: 404 });
   }
 
+  const shouldUpdateInPlace = Boolean(agent.current_version_id && !createSnapshot);
+  const actorRole = await getActorRole(supabase, user.id);
+  let resolvedModel = DEFAULT_AGENT_MODEL;
+
+  if (shouldUpdateInPlace && agent.current_version_id) {
+    const { data: currentVersion } = await supabase
+      .from("agent_versions")
+      .select("model")
+      .eq("id", agent.current_version_id)
+      .single();
+    resolvedModel = currentVersion?.model ?? DEFAULT_AGENT_MODEL;
+  }
+
+  if (model !== undefined && model !== resolvedModel) {
+    if (!canChangeAgentModel(actorRole)) {
+      return NextResponse.json(
+        { error: "Apenas super_admin pode alterar o modelo do agente" },
+        { status: 403 }
+      );
+    }
+    resolvedModel = model;
+  } else if (model !== undefined && canChangeAgentModel(actorRole)) {
+    resolvedModel = model;
+  }
+
   const versionPayload = {
     system_prompt: system_prompt ?? "",
-    model: model ?? "claude-sonnet-4-6",
+    model: resolvedModel,
     temperature: temperature ?? 0.7,
     effort: effort ?? "medium",
     thinking_enabled: thinking_enabled ?? false,
@@ -53,8 +88,6 @@ export async function POST(
 
   let version;
   let action: string;
-
-  const shouldUpdateInPlace = agent.current_version_id && !createSnapshot;
 
   if (shouldUpdateInPlace) {
     const { data, error } = await supabase

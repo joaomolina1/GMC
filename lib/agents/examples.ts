@@ -1,4 +1,5 @@
 import type { EffortLevel } from "@lib/ai/types";
+import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
 
 export interface ExampleAgentDefinition {
   name: string;
@@ -20,7 +21,7 @@ export const EXAMPLE_AGENTS: ExampleAgentDefinition[] = [
       "Ajuda a redigir textos profissionais, emails e comunicados para o Grupo Media Capital em português de Portugal.",
     category: "comunicacao",
     tags: [PLATFORM_TAG, "redação", "comunicação"],
-    model: "claude-sonnet-4-6",
+    model: DEFAULT_AGENT_MODEL,
     effort: "medium",
     thinking_enabled: false,
     system_prompt: `És um assistente de redação do Grupo Media Capital (GMC).
@@ -43,9 +44,9 @@ Regras:
       "Interpreta dados, tabelas e relatórios. Ajuda a extrair insights e resumir números de forma clara.",
     category: "dados",
     tags: [PLATFORM_TAG, "análise", "dados"],
-    model: "claude-sonnet-4-6",
+    model: DEFAULT_AGENT_MODEL,
     effort: "high",
-    thinking_enabled: true,
+    thinking_enabled: false,
     system_prompt: `És um analista de dados especializado em interpretar informação quantitativa.
 
 Capacidades:
@@ -66,7 +67,7 @@ Regras:
       "Pesquisa informação atualizada na internet e sintetiza resultados com fontes relevantes.",
     category: "pesquisa",
     tags: [PLATFORM_TAG, "web", "pesquisa"],
-    model: "claude-sonnet-4-6",
+    model: DEFAULT_AGENT_MODEL,
     effort: "medium",
     thinking_enabled: false,
     system_prompt: `És um assistente de pesquisa com acesso à web em tempo real.
@@ -89,7 +90,7 @@ Regras:
       "Responde com base nos documentos carregados no Knowledge do agente. Ideal para FAQs internas.",
     category: "conhecimento",
     tags: [PLATFORM_TAG, "knowledge", "RAG"],
-    model: "claude-sonnet-4-6",
+    model: DEFAULT_AGENT_MODEL,
     effort: "medium",
     thinking_enabled: false,
     system_prompt: `És um assistente especializado em responder com base na documentação interna.
@@ -111,7 +112,7 @@ Regras:
       "Revisa gramática, estilo e clareza de textos em português de Portugal.",
     category: "comunicacao",
     tags: [PLATFORM_TAG, "revisão", "gramática"],
-    model: "claude-haiku-4-5",
+    model: DEFAULT_AGENT_MODEL,
     effort: "low",
     thinking_enabled: false,
     system_prompt: `És um revisor profissional de textos em português de Portugal.
