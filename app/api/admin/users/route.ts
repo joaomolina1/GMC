@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@lib/enterprise/auth";
 import { logAudit } from "@lib/audit";
+import { tryCreateServiceClient } from "@lib/supabase/server";
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -47,14 +48,22 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Cannot change your own role" }, { status: 403 });
   }
 
-  const { data, error } = await supabase
+  const service = await tryCreateServiceClient();
+  const db = service ?? supabase;
+
+  const { data, error } = await db
     .from("profiles")
     .update({ role })
     .eq("id", userId)
     .select("id, email, full_name, role, auth_provider")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Utilizador não encontrado" }, { status: 404 });
+  }
 
   await logAudit(supabase, {
     actorId: user.id,
