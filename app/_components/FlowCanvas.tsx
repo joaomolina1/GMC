@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Plus, Trash2, GripVertical, Check, Loader2, Minus } from "lucide-react";
+import { Plus, Trash2, GripVertical, Check, Loader2, Minus, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { cn } from "@lib/utils";
 import { FLOW_NODE_TYPES } from "@lib/flows/constants";
 import type {
@@ -24,9 +24,17 @@ const NODE_W = 176;
 const NODE_H = 80;
 const CANVAS_W = 2800;
 const CANVAS_H = 1600;
-const PORT = 10;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2;
+const DEFAULT_ZOOM = 1;
 
 type PortSide = "in" | "out-true" | "out-false" | "out";
+
+interface Viewport {
+  panX: number;
+  panY: number;
+  zoom: number;
+}
 
 interface ConnectionDrag {
   sourceId: string;
@@ -56,15 +64,24 @@ function edgeMidpoint(
   return { x: (sp.x + tp.x) / 2, y: (sp.y + tp.y) / 2 };
 }
 
-function portPosition(
-  node: FlowNode,
-  port: PortSide
-): { x: number; y: number } {
+function portPosition(node: FlowNode, port: PortSide): { x: number; y: number } {
   const { x, y } = node.position;
   if (port === "in") return { x, y: y + NODE_H / 2 };
   if (port === "out-true") return { x: x + NODE_W, y: y + NODE_H * 0.3 };
   if (port === "out-false") return { x: x + NODE_W, y: y + NODE_H * 0.7 };
   return { x: x + NODE_W, y: y + NODE_H / 2 };
+}
+
+function screenToCanvas(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+  viewport: Viewport
+): { x: number; y: number } {
+  return {
+    x: (clientX - rect.left - viewport.panX) / viewport.zoom,
+    y: (clientY - rect.top - viewport.panY) / viewport.zoom,
+  };
 }
 
 export function FlowCanvas({
@@ -75,6 +92,7 @@ export function FlowCanvas({
   nodeExecutionState = {},
 }: FlowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<Viewport>({ panX: 40, panY: 40, zoom: DEFAULT_ZOOM });
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
   const [dragging, setDragging] = useState<{
@@ -82,9 +100,49 @@ export function FlowCanvas({
     offsetX: number;
     offsetY: number;
   } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
-  const nodeMeta = (type: FlowNodeType) =>
-    FLOW_NODE_TYPES.find((n) => n.type === type)!;
+  const nodeMeta = (type: FlowNodeType) => FLOW_NODE_TYPES.find((n) => n.type === type)!;
+
+  const fitView = useCallback(() => {
+    if (!canvasRef.current || graph.nodes.length === 0) {
+      setViewport({ panX: 40, panY: 40, zoom: DEFAULT_ZOOM });
+      return;
+    }
+    const rect = canvasRef.current.getBoundingClientRect();
+    const xs = graph.nodes.map((n) => n.position.x);
+    const ys = graph.nodes.map((n) => n.position.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs.map((x) => x + NODE_W));
+    const maxY = Math.max(...ys.map((y) => y + NODE_H));
+    const pad = 80;
+    const contentW = maxX - minX + pad * 2;
+    const contentH = maxY - minY + pad * 2;
+    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(rect.width / contentW, rect.height / contentH)));
+    setViewport({
+      zoom,
+      panX: (rect.width - contentW * zoom) / 2 - minX * zoom + pad * zoom,
+      panY: (rect.height - contentH * zoom) / 2 - minY * zoom + pad * zoom,
+    });
+  }, [graph.nodes]);
+
+  const zoomBy = (delta: number) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setViewport((v) => {
+      const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta));
+      const scale = nextZoom / v.zoom;
+      return {
+        zoom: nextZoom,
+        panX: cx - (cx - v.panX) * scale,
+        panY: cy - (cy - v.panY) * scale,
+      };
+    });
+  };
 
   const addNode = (type: FlowNodeType) => {
     const meta = nodeMeta(type);
@@ -112,10 +170,7 @@ export function FlowCanvas({
   };
 
   const removeEdge = (edgeId: string) => {
-    onChange({
-      ...graph,
-      edges: graph.edges.filter((e) => e.id !== edgeId),
-    });
+    onChange({ ...graph, edges: graph.edges.filter((e) => e.id !== edgeId) });
     if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
   };
 
@@ -124,11 +179,7 @@ export function FlowCanvas({
     onSelectNode(null);
   };
 
-  const addEdge = (
-    source: string,
-    target: string,
-    branch?: "true" | "false"
-  ) => {
+  const addEdge = (source: string, target: string, branch?: "true" | "false") => {
     if (source === target) return;
     const exists = graph.edges.some(
       (e) =>
@@ -137,7 +188,6 @@ export function FlowCanvas({
         (e.data?.branch ?? null) === (branch ?? null)
     );
     if (exists) return;
-
     const edge: FlowEdge = {
       id: `e-${source}-${target}-${branch ?? "default"}`,
       source,
@@ -156,12 +206,8 @@ export function FlowCanvas({
     e.preventDefault();
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    setConnectionDrag({
-      sourceId,
-      branch,
-      x: e.clientX - rect.left + canvasRef.current.scrollLeft,
-      y: e.clientY - rect.top + canvasRef.current.scrollTop,
-    });
+    const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
+    setConnectionDrag({ sourceId, branch, x: pos.x, y: pos.y });
     onSelectNode(sourceId);
     setSelectedEdgeId(null);
   };
@@ -177,35 +223,71 @@ export function FlowCanvas({
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (connectionDrag && canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        setConnectionDrag({
-          ...connectionDrag,
-          x: e.clientX - rect.left + canvasRef.current.scrollLeft,
-          y: e.clientY - rect.top + canvasRef.current.scrollTop,
-        });
+      if (isPanning && panStart.current && canvasRef.current) {
+        const dx = e.clientX - panStart.current.x;
+        const dy = e.clientY - panStart.current.y;
+        setViewport((v) => ({
+          ...v,
+          panX: panStart.current!.panX + dx,
+          panY: panStart.current!.panY + dy,
+        }));
         return;
       }
 
-      if (!dragging || !canvasRef.current) return;
+      if (!canvasRef.current) return;
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + canvasRef.current.scrollLeft - dragging.offsetX;
-      const y = e.clientY - rect.top + canvasRef.current.scrollTop - dragging.offsetY;
+
+      if (connectionDrag) {
+        const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
+        setConnectionDrag({ ...connectionDrag, x: pos.x, y: pos.y });
+        return;
+      }
+
+      if (!dragging) return;
+      const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
       onChange({
         ...graph,
         nodes: graph.nodes.map((n) =>
           n.id === dragging.nodeId
-            ? { ...n, position: { x: Math.max(0, x), y: Math.max(0, y) } }
+            ? { ...n, position: { x: Math.max(0, pos.x - dragging.offsetX), y: Math.max(0, pos.y - dragging.offsetY) } }
             : n
         ),
       });
     },
-    [connectionDrag, dragging, graph, onChange]
+    [connectionDrag, dragging, graph, isPanning, onChange, viewport]
   );
 
   const onMouseUp = () => {
     setDragging(null);
     setConnectionDrag(null);
+    setIsPanning(false);
+    panStart.current = null;
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (!canvasRef.current) return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const delta = e.deltaY > 0 ? -0.08 : 0.08;
+      setViewport((v) => {
+        const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta));
+        const scale = nextZoom / v.zoom;
+        return {
+          zoom: nextZoom,
+          panX: mx - (mx - v.panX) * scale,
+          panY: my - (my - v.panY) * scale,
+        };
+      });
+      return;
+    }
+    setViewport((v) => ({
+      ...v,
+      panX: v.panX - e.deltaX,
+      panY: v.panY - e.deltaY,
+    }));
   };
 
   const hasInputPort = (type: FlowNodeType) => type !== "trigger";
@@ -215,9 +297,7 @@ export function FlowCanvas({
   return (
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-line bg-slate-100/80">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-          Nós
-        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Nós</span>
         {FLOW_NODE_TYPES.map((meta) => (
           <button
             key={meta.type}
@@ -229,277 +309,298 @@ export function FlowCanvas({
             {meta.label}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-slate-400">
-          Arraste das bolinhas para ligar · clique numa seta para apagar
-        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            title="Zoom out"
+            className="rounded-lg border border-line bg-white p-1.5 text-slate-500 hover:bg-slate-50"
+            onClick={() => zoomBy(-0.15)}
+          >
+            <ZoomOut size={14} />
+          </button>
+          <span className="min-w-[3rem] text-center text-[10px] text-slate-500">
+            {Math.round(viewport.zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            title="Zoom in"
+            className="rounded-lg border border-line bg-white p-1.5 text-slate-500 hover:bg-slate-50"
+            onClick={() => zoomBy(0.15)}
+          >
+            <ZoomIn size={14} />
+          </button>
+          <button
+            type="button"
+            title="Ajustar à vista"
+            className="rounded-lg border border-line bg-white p-1.5 text-slate-500 hover:bg-slate-50"
+            onClick={fitView}
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
       </div>
 
       <div
         ref={canvasRef}
-        className="relative min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle,_#cbd5e1_1px,_transparent_1px)] [background-size:20px_20px]"
+        className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle,_#cbd5e1_1px,_transparent_1px)] [background-size:20px_20px]"
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onWheel={onWheel}
+        onMouseDown={(e) => {
+          if (e.button === 1 || (e.button === 0 && e.altKey)) {
+            e.preventDefault();
+            setIsPanning(true);
+            panStart.current = { x: e.clientX, y: e.clientY, panX: viewport.panX, panY: viewport.panY };
+          }
+        }}
         onClick={() => {
           setSelectedEdgeId(null);
           onSelectNode(null);
         }}
       >
-        <svg className="absolute left-0 top-0" width={CANVAS_W} height={CANVAS_H}>
-          {graph.edges.map((edge) => {
-            const source = graph.nodes.find((n) => n.id === edge.source);
-            const target = graph.nodes.find((n) => n.id === edge.target);
-            if (!source || !target) return null;
-
-            const outPort: PortSide =
-              source.type === "condition"
-                ? edge.data?.branch === "false"
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{
+            width: CANVAS_W,
+            height: CANVAS_H,
+            transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
+          }}
+        >
+          <svg className="absolute left-0 top-0" width={CANVAS_W} height={CANVAS_H}>
+            {graph.edges.map((edge) => {
+              const source = graph.nodes.find((n) => n.id === edge.source);
+              const target = graph.nodes.find((n) => n.id === edge.target);
+              if (!source || !target) return null;
+              const outPort: PortSide =
+                source.type === "condition"
+                  ? edge.data?.branch === "false"
+                    ? "out-false"
+                    : "out-true"
+                  : "out";
+              const sp = portPosition(source, outPort);
+              const tp = portPosition(target, "in");
+              const path = edgePath(sp.x, sp.y, tp.x, tp.y);
+              const selected = selectedEdgeId === edge.id;
+              return (
+                <g key={edge.id}>
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={18 / viewport.zoom}
+                    className="cursor-pointer"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      selectEdge(edge.id);
+                    }}
+                  />
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke={selected ? "#0066b3" : "#64748b"}
+                    strokeWidth={(selected ? 3 : 2) / viewport.zoom}
+                    markerEnd={selected ? "url(#flow-arrow-selected)" : "url(#flow-arrow)"}
+                    className="pointer-events-none"
+                  />
+                  {edge.data?.branch && (
+                    <text
+                      x={(sp.x + tp.x) / 2}
+                      y={(sp.y + tp.y) / 2 - 8}
+                      textAnchor="middle"
+                      className="pointer-events-none fill-amber-700 text-[10px] font-semibold"
+                    >
+                      {edge.data.branch}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+            {connectionDrag && (() => {
+              const source = graph.nodes.find((n) => n.id === connectionDrag.sourceId);
+              if (!source) return null;
+              const outPort: PortSide = connectionDrag.branch
+                ? connectionDrag.branch === "false"
                   ? "out-false"
                   : "out-true"
-                : "out";
-            const sp = portPosition(source, outPort);
-            const tp = portPosition(target, "in");
-            const path = edgePath(sp.x, sp.y, tp.x, tp.y);
-            const selected = selectedEdgeId === edge.id;
-
-            return (
-              <g key={edge.id}>
+                : source.type === "condition"
+                  ? "out-true"
+                  : "out";
+              const sp = portPosition(source, outPort);
+              return (
                 <path
-                  d={path}
+                  d={edgePath(sp.x, sp.y, connectionDrag.x, connectionDrag.y)}
                   fill="none"
-                  stroke="transparent"
-                  strokeWidth={18}
-                  className="cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectEdge(edge.id);
+                  stroke="#0066b3"
+                  strokeWidth={2 / viewport.zoom}
+                  strokeDasharray="6 4"
+                />
+              );
+            })()}
+            <defs>
+              <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6" fill="#64748b" />
+              </marker>
+              <marker id="flow-arrow-selected" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6" fill="#0066b3" />
+              </marker>
+            </defs>
+          </svg>
+
+          <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
+            {selectedEdgeId && (() => {
+              const edge = graph.edges.find((e) => e.id === selectedEdgeId);
+              if (!edge) return null;
+              const source = graph.nodes.find((n) => n.id === edge.source);
+              const target = graph.nodes.find((n) => n.id === edge.target);
+              if (!source || !target) return null;
+              const mid = edgeMidpoint(source, target, edge.data?.branch);
+              return (
+                <button
+                  type="button"
+                  title="Apagar ligação"
+                  className="absolute z-30 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md hover:border-rose-300 hover:bg-rose-50"
+                  style={{ left: mid.x - 14, top: mid.y - 14 }}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    removeEdge(selectedEdgeId);
                   }}
-                />
-                <path
-                  d={path}
-                  fill="none"
-                  stroke={selected ? "#0066b3" : "#64748b"}
-                  strokeWidth={selected ? 3 : 2}
-                  markerEnd={selected ? "url(#flow-arrow-selected)" : "url(#flow-arrow)"}
-                  className="pointer-events-none"
-                />
-                {edge.data?.branch && (
-                  <text
-                    x={(sp.x + tp.x) / 2}
-                    y={(sp.y + tp.y) / 2 - 8}
-                    textAnchor="middle"
-                    className="pointer-events-none fill-amber-700 text-[10px] font-semibold"
-                  >
-                    {edge.data.branch}
-                  </text>
-                )}
-              </g>
-            );
-          })}
+                >
+                  <Trash2 size={14} />
+                </button>
+              );
+            })()}
 
-          {connectionDrag && (() => {
-            const source = graph.nodes.find((n) => n.id === connectionDrag.sourceId);
-            if (!source) return null;
-            const outPort: PortSide = connectionDrag.branch
-              ? connectionDrag.branch === "false"
-                ? "out-false"
-                : "out-true"
-              : source.type === "condition"
-                ? "out-true"
-                : "out";
-            const sp = portPosition(source, outPort);
-            return (
-              <path
-                d={edgePath(sp.x, sp.y, connectionDrag.x, connectionDrag.y)}
-                fill="none"
-                stroke="#0066b3"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-              />
-            );
-          })()}
-
-          <defs>
-            <marker
-              id="flow-arrow"
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L7,3 L0,6" fill="#64748b" />
-            </marker>
-            <marker
-              id="flow-arrow-selected"
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L7,3 L0,6" fill="#0066b3" />
-            </marker>
-          </defs>
-        </svg>
-
-        <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
-          {selectedEdgeId && (() => {
-            const edge = graph.edges.find((e) => e.id === selectedEdgeId);
-            if (!edge) return null;
-            const source = graph.nodes.find((n) => n.id === edge.source);
-            const target = graph.nodes.find((n) => n.id === edge.target);
-            if (!source || !target) return null;
-            const mid = edgeMidpoint(source, target, edge.data?.branch);
-            return (
-              <button
-                type="button"
-                title="Apagar ligação"
-                className="absolute z-30 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
-                style={{ left: mid.x - 14, top: mid.y - 14 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeEdge(selectedEdgeId);
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
-            );
-          })()}
-
-          {graph.nodes.map((node) => {
-            const meta = nodeMeta(node.type);
-            const selected = selectedNodeId === node.id;
-            const execStatus = nodeExecutionState[node.id];
-
-            return (
-              <div
-                key={node.id}
-                className={cn(
-                  "absolute select-none rounded-xl border-2 bg-white transition-all duration-300",
-                  meta.tone,
-                  selected && "ring-2 ring-brand-400 ring-offset-1",
-                  execStatus === "running" &&
-                    "z-20 scale-[1.03] border-brand-400 shadow-lg shadow-brand-200/60 ring-2 ring-brand-300 ring-offset-1",
-                  execStatus === "completed" &&
-                    "z-10 scale-[1.02] border-emerald-400 bg-emerald-50/40 shadow-md shadow-emerald-200/50",
-                  execStatus === "failed" &&
-                    "z-10 scale-[1.02] border-rose-400 bg-rose-50/40 shadow-md shadow-rose-200/50",
-                  execStatus === "skipped" && "opacity-40 scale-[0.98]",
-                  !execStatus && "shadow-sm"
-                )}
-                style={{
-                  left: node.position.x,
-                  top: node.position.y,
-                  width: NODE_W,
-                  minHeight: NODE_H,
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedEdgeId(null);
-                  onSelectNode(node.id);
-                }}
-                onMouseDown={(e) => {
-                  if ((e.target as HTMLElement).closest("[data-port]")) return;
-                  if ((e.target as HTMLElement).closest("button")) return;
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setDragging({
-                    nodeId: node.id,
-                    offsetX: e.clientX - rect.left,
-                    offsetY: e.clientY - rect.top,
-                  });
-                  onSelectNode(node.id);
-                  setSelectedEdgeId(null);
-                }}
-              >
-                {hasInputPort(node.type) && (
-                  <button
-                    type="button"
-                    data-port="in"
-                    title="Entrada — largue aqui para ligar"
-                    className={cn(
-                      "absolute left-0 top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:scale-125 hover:bg-brand-500",
-                      connectionDrag && "scale-125 bg-brand-500"
-                    )}
-                    onMouseUp={(e) => completeConnection(e, node.id)}
-                  />
-                )}
-
-                {hasOutputPort(node.type) &&
-                  (isCondition(node.type) ? (
-                    <>
-                      <button
-                        type="button"
-                        data-port="out-true"
-                        title="Saída verdadeiro"
-                        className="absolute right-0 top-[30%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow hover:scale-125"
-                        onMouseDown={(e) => startConnection(e, node.id, "true")}
-                      />
-                      <button
-                        type="button"
-                        data-port="out-false"
-                        title="Saída falso"
-                        className="absolute right-0 top-[70%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow hover:scale-125"
-                        onMouseDown={(e) => startConnection(e, node.id, "false")}
-                      />
-                    </>
-                  ) : (
+            {graph.nodes.map((node) => {
+              const meta = nodeMeta(node.type);
+              const selected = selectedNodeId === node.id;
+              const execStatus = nodeExecutionState[node.id];
+              return (
+                <div
+                  key={node.id}
+                  className={cn(
+                    "absolute select-none rounded-xl border-2 bg-white transition-shadow duration-300",
+                    meta.tone,
+                    selected && "ring-2 ring-brand-400 ring-offset-1",
+                    execStatus === "running" &&
+                      "z-20 border-brand-400 shadow-lg shadow-brand-200/60 ring-2 ring-brand-300 ring-offset-1",
+                    execStatus === "completed" &&
+                      "z-10 border-emerald-400 bg-emerald-50/40 shadow-md shadow-emerald-200/50",
+                    execStatus === "failed" &&
+                      "z-10 border-rose-400 bg-rose-50/40 shadow-md shadow-rose-200/50",
+                    execStatus === "skipped" && "opacity-40",
+                    !execStatus && "shadow-sm"
+                  )}
+                  style={{
+                    left: node.position.x,
+                    top: node.position.y,
+                    width: NODE_W,
+                    minHeight: NODE_H,
+                  }}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    setSelectedEdgeId(null);
+                    onSelectNode(node.id);
+                  }}
+                  onMouseDown={(ev) => {
+                    if ((ev.target as HTMLElement).closest("[data-port]")) return;
+                    if ((ev.target as HTMLElement).closest("button")) return;
+                    if (!canvasRef.current) return;
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    const pos = screenToCanvas(ev.clientX, ev.clientY, rect, viewport);
+                    setDragging({
+                      nodeId: node.id,
+                      offsetX: pos.x - node.position.x,
+                      offsetY: pos.y - node.position.y,
+                    });
+                    onSelectNode(node.id);
+                    setSelectedEdgeId(null);
+                  }}
+                >
+                  {hasInputPort(node.type) && (
                     <button
                       type="button"
-                      data-port="out"
-                      title="Saída — arraste para ligar"
-                      className="absolute right-0 top-1/2 z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow hover:scale-125"
-                      onMouseDown={(e) => startConnection(e, node.id)}
+                      data-port="in"
+                      title="Entrada"
+                      className={cn(
+                        "absolute left-0 top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:bg-brand-500",
+                        connectionDrag && "bg-brand-500"
+                      )}
+                      onMouseUp={(ev) => completeConnection(ev, node.id)}
                     />
-                  ))}
-
-                <div className="flex cursor-grab items-start gap-1 p-2.5 active:cursor-grabbing">
-                  <GripVertical size={14} className="mt-0.5 shrink-0 text-slate-300" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] font-bold uppercase tracking-wide opacity-60">
-                      {meta.label}
-                    </p>
-                    <p className="truncate text-xs font-semibold text-slate-800">
-                      {String(node.data.label ?? meta.label)}
-                    </p>
+                  )}
+                  {hasOutputPort(node.type) &&
+                    (isCondition(node.type) ? (
+                      <>
+                        <button
+                          type="button"
+                          data-port="out-true"
+                          title="Saída verdadeiro"
+                          className="absolute right-0 top-[30%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow"
+                          onMouseDown={(ev) => startConnection(ev, node.id, "true")}
+                        />
+                        <button
+                          type="button"
+                          data-port="out-false"
+                          title="Saída falso"
+                          className="absolute right-0 top-[70%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow"
+                          onMouseDown={(ev) => startConnection(ev, node.id, "false")}
+                        />
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        data-port="out"
+                        title="Saída"
+                        className="absolute right-0 top-1/2 z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow"
+                        onMouseDown={(ev) => startConnection(ev, node.id)}
+                      />
+                    ))}
+                  <div className="flex cursor-grab items-start gap-1 p-2.5 active:cursor-grabbing">
+                    <GripVertical size={14} className="mt-0.5 shrink-0 text-slate-300" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-bold uppercase tracking-wide opacity-60">{meta.label}</p>
+                      <p className="truncate text-xs font-semibold text-slate-800">
+                        {String(node.data.label ?? meta.label)}
+                      </p>
+                    </div>
+                    {execStatus === "running" && (
+                      <Loader2 size={16} className="shrink-0 animate-spin text-brand-500" />
+                    )}
+                    {execStatus === "completed" && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                        <Check size={12} strokeWidth={3} />
+                      </span>
+                    )}
+                    {execStatus === "failed" && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white text-xs font-bold">
+                        !
+                      </span>
+                    )}
+                    {execStatus === "skipped" && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-300 text-white">
+                        <Minus size={12} strokeWidth={3} />
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        removeNode(node.id);
+                      }}
+                      className="rounded p-0.5 text-slate-400 hover:text-red-500"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
-                  {execStatus === "running" && (
-                    <Loader2
-                      size={16}
-                      className="shrink-0 animate-spin text-brand-500"
-                      aria-label="A executar"
-                    />
-                  )}
-                  {execStatus === "completed" && (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
-                      <Check size={12} strokeWidth={3} />
-                    </span>
-                  )}
-                  {execStatus === "failed" && (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white text-xs font-bold shadow-sm">
-                      !
-                    </span>
-                  )}
-                  {execStatus === "skipped" && (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-300 text-white shadow-sm">
-                      <Minus size={12} strokeWidth={3} />
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeNode(node.id);
-                    }}
-                    className="rounded p-0.5 text-slate-400 hover:bg-white/80 hover:text-red-500"
-                  >
-                    <Trash2 size={12} />
-                  </button>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
+        <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
+          Ctrl+scroll zoom · scroll pan · Alt+arrastar pan
+        </p>
       </div>
     </div>
   );

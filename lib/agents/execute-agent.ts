@@ -110,6 +110,7 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
     agentId,
     version,
     userMessage: message,
+    userId,
   });
 
   const messages: ChatMessage[] = [{ role: "user", content: message }];
@@ -138,6 +139,8 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
       apiKeyId,
       source: "api_v1",
       generatedFiles: files.length,
+      toolCalls: result.toolCalls?.length ?? 0,
+      stepsUsed: result.stepsUsed,
     },
   });
 
@@ -149,6 +152,13 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
     },
     cost_eur: result.costEur,
     files,
-    tool_calls: [],
+    tool_calls: (result.toolCalls ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      input: t.input,
+      result: t.result,
+      is_error: t.isError,
+    })),
+    steps_used: result.stepsUsed,
   };
 }
