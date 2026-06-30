@@ -533,7 +533,7 @@ export default function AgentBuilderPage() {
             >
               {(availableModels.length > 0
                 ? availableModels
-                : [{ id: DEFAULT_AGENT_MODEL, display_name: "Claude 3.5 Haiku" }]
+                : [{ id: DEFAULT_AGENT_MODEL, display_name: "Claude Haiku 4.5" }]
               ).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.display_name}
