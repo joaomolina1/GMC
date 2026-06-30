@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BetaRequestMCPServerURLDefinition } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContainerUploadBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { streamAgent, runAgent, toGeneratedFileRefs } from "@lib/chat/agent";
 import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
+import {
+  buildSkillContainerHint,
+  uploadSkillPackagesToContainer,
+} from "@lib/agent-skills/container-files";
 import { buildKnowledgeContext } from "@lib/chat/rag";
 import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
 import {
@@ -8,6 +14,7 @@ import {
   isCreateDocumentsEnabled,
   isWebSearchEnabled,
 } from "@lib/agents/agent-tools";
+import { buildAnthropicMcpServers, loadAgentMcpConnections } from "@lib/agents/mcp-connections";
 import { persistAnthropicGeneratedFiles } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS } from "@lib/ai/model-limits";
 import type { ChatMessage } from "@lib/ai/types";
@@ -26,6 +33,8 @@ export interface AgentRuntimeConfig {
   agentId: string;
   userId?: string;
   supabase?: SupabaseClient;
+  mcpServers?: BetaRequestMCPServerURLDefinition[];
+  containerUploadBlocks?: BetaContainerUploadBlockParam[];
 }
 
 export async function buildAgentRuntimeConfig(options: {
@@ -39,10 +48,13 @@ export async function buildAgentRuntimeConfig(options: {
   const { supabase, agentId, version, userMessage, userId } = options;
   const skills = version.skills;
   const enabledTools = agentToolsFromVersion(skills);
+  const createDocuments = isCreateDocumentsEnabled(skills);
   const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
   const injectStaticRag = options.injectStaticRag !== false;
 
   let skillsPrompt = "";
+  let containerUploadBlocks: BetaContainerUploadBlockParam[] = [];
+
   if (skillPackageIds.length > 0) {
     const { data: skillPackages } = await supabase
       .from("agent_skill_packages")
@@ -50,8 +62,18 @@ export async function buildAgentRuntimeConfig(options: {
       .in("id", skillPackageIds);
     if (skillPackages?.length) {
       skillsPrompt = buildAgentSkillsPrompt(skillPackages);
+      if (createDocuments || skillPackages.some((p) => (p.extra_files?.length ?? 0) > 0)) {
+        const uploaded = await uploadSkillPackagesToContainer(skillPackages);
+        containerUploadBlocks = uploaded.uploadBlocks;
+        if (uploaded.fileIds.length > 0) {
+          skillsPrompt += buildSkillContainerHint(skillPackages);
+        }
+      }
     }
   }
+
+  const mcpConnections = await loadAgentMcpConnections(supabase, agentId);
+  const mcpServers = buildAnthropicMcpServers(mcpConnections);
 
   const useDynamicKnowledgeTool = enabledTools.includes("knowledge_search");
   const knowledgeContext =
@@ -59,7 +81,6 @@ export async function buildAgentRuntimeConfig(options: {
       ? await buildKnowledgeContext(supabase, agentId, userMessage)
       : "";
 
-  const createDocuments = isCreateDocumentsEnabled(skills);
   const parts = [String(version.system_prompt ?? ""), skillsPrompt, knowledgeContext];
   if (createDocuments) parts.push(DOCUMENT_CREATION_SYSTEM_HINT);
 
@@ -81,6 +102,8 @@ export async function buildAgentRuntimeConfig(options: {
     agentId,
     userId,
     supabase,
+    mcpServers: mcpServers.length ? mcpServers : undefined,
+    containerUploadBlocks: containerUploadBlocks.length ? containerUploadBlocks : undefined,
   };
 }
 

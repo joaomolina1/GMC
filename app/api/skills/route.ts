@@ -70,7 +70,7 @@ export async function GET() {
     model_support: modelSupport,
     capabilities: {
       agentic_loop: true,
-      mcp: "planned",
+      mcp: "active",
       custom_skill_execution: "partial",
     },
   });
