@@ -8,7 +8,6 @@ import {
   uploadSkillPackagesToContainer,
 } from "@lib/agent-skills/container-files";
 import { buildKnowledgeContext } from "@lib/chat/rag";
-import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
 import {
   agentToolsFromVersion,
   isCreateDocumentsEnabled,
@@ -82,7 +81,6 @@ export async function buildAgentRuntimeConfig(options: {
       : "";
 
   const parts = [String(version.system_prompt ?? ""), skillsPrompt, knowledgeContext];
-  if (createDocuments) parts.push(DOCUMENT_CREATION_SYSTEM_HINT);
 
   const maxSteps =
     version.max_steps != null ? Number(version.max_steps) : DEFAULT_MAX_AGENT_STEPS;
@@ -91,8 +89,8 @@ export async function buildAgentRuntimeConfig(options: {
     model: String(version.model ?? "claude-sonnet-4-6"),
     systemPrompt: parts.filter(Boolean).join(""),
     temperature: version.temperature != null ? Number(version.temperature) : undefined,
-    effort: (version.effort as AgentRuntimeConfig["effort"]) ?? "medium",
-    thinkingEnabled: Boolean(version.thinking_enabled),
+    effort: (version.effort as AgentRuntimeConfig["effort"]) ?? "low",
+    thinkingEnabled: version.thinking_enabled === true,
     webSearch: isWebSearchEnabled(skills),
     createDocuments,
     webSearchConfig:

@@ -162,7 +162,7 @@ export default function AgentBuilderPage() {
   const [availableModels, setAvailableModels] = useState<
     Array<{ id: string; display_name: string; status?: string }>
   >([]);
-  const [effort, setEffort] = useState<EffortLevel>("medium");
+  const [effort, setEffort] = useState<EffortLevel>("low");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [tools, setTools] = useState<string[]>(CORE_TOOLS);
   const [toolConfigs, setToolConfigs] = useState<Record<string, Record<string, unknown>>>(DEFAULT_TOOL_CONFIGS);
@@ -237,7 +237,7 @@ export default function AgentBuilderPage() {
     if (current) {
       setSystemPrompt(current.system_prompt);
       setModel(current.model);
-      setEffort((current.effort as EffortLevel) ?? "medium");
+      setEffort((current.effort as EffortLevel) ?? "low");
       setThinkingEnabled(Boolean(current.thinking_enabled));
       setTools(current.skills ?? CORE_TOOLS);
       setSkillPackageIds((current.skill_package_ids as string[]) ?? []);

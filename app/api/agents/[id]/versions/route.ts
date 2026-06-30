@@ -43,7 +43,7 @@ export async function POST(
     system_prompt: system_prompt ?? "",
     model: model ?? "claude-sonnet-4-6",
     temperature: temperature ?? 0.7,
-    effort: effort ?? "medium",
+    effort: effort ?? "low",
     thinking_enabled: thinking_enabled ?? false,
     skills: skills ?? DEFAULT_SKILLS,
     tools: tools ?? {},

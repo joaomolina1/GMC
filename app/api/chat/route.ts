@@ -6,11 +6,14 @@ import {
   persistAgentGeneratedFiles,
   streamAgent,
 } from "@lib/agents/runtime";
+import { buildUsageLogMetadata } from "@lib/chat/agent";
+import type { AnthropicDocumentSkillId } from "@lib/ai/anthropic-document-skills";
 import { buildChatMessages } from "@lib/chat/messages";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
 import type { GeneratedFileRef } from "@lib/chat/agent";
+import type { TokenUsage } from "@lib/ai/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -115,8 +118,11 @@ export async function POST(request: Request) {
 
   const encoder = new TextEncoder();
   let fullContent = "";
-  let finalUsage = { promptTokens: 0, completionTokens: 0 };
+  let finalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
   let finalCost = 0;
+  let finalRoute: string | undefined;
+  let finalDocumentSkills: string[] | undefined;
+  let finalStepsUsed: number | undefined;
   let generatedFiles: GeneratedFileRef[] = [];
   const fileStorage = (await tryCreateServiceClient()) ?? supabase;
 
@@ -160,6 +166,9 @@ export async function POST(request: Request) {
           if (chunk.type === "done") {
             finalUsage = chunk.usage;
             finalCost = chunk.costEur;
+            finalRoute = chunk.route;
+            finalDocumentSkills = chunk.documentSkillsUsed;
+            finalStepsUsed = chunk.stepsUsed;
           }
         }
 
@@ -203,11 +212,17 @@ export async function POST(request: Request) {
           completionTokens: finalUsage.completionTokens,
           costEur: finalCost,
           latencyMs: Date.now() - start,
-          metadata: {
-            agentId,
-            conversationId: convId,
-            generatedFiles: generatedFiles.length,
-          },
+          metadata: buildUsageLogMetadata({
+            usage: finalUsage,
+            route: finalRoute,
+            documentSkillsUsed: finalDocumentSkills as AnthropicDocumentSkillId[] | undefined,
+            stepsUsed: finalStepsUsed,
+            extra: {
+              agentId,
+              conversationId: convId,
+              generatedFiles: generatedFiles.length,
+            },
+          }),
         });
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
