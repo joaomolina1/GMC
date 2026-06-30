@@ -1,11 +1,15 @@
 import type { EffortLevel, ChatMessage } from "@lib/ai/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BetaContainerUploadBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaRequestMCPServerURLDefinition } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
 import {
   runBetaAgentWithDocuments,
   streamBetaAgentWithDocuments,
+  runBetaAgentSession,
+  streamBetaAgentSession,
 } from "@lib/ai/anthropic-beta-runner";
 import type { PersistedGeneratedFile } from "@lib/ai/persist-generated-files";
 import {
@@ -31,6 +35,8 @@ export interface AgentConfig {
   agentId?: string;
   userId?: string;
   supabase?: SupabaseClient;
+  mcpServers?: BetaRequestMCPServerURLDefinition[];
+  containerUploadBlocks?: BetaContainerUploadBlockParam[];
 }
 
 export interface GeneratedFileRef {
@@ -78,6 +84,31 @@ function buildProviderOptions(config: AgentConfig, messages: ChatMessage[]) {
   };
 }
 
+function usesBetaPath(config: AgentConfig): boolean {
+  return Boolean(
+    config.createDocuments ||
+      config.mcpServers?.length ||
+      config.containerUploadBlocks?.length
+  );
+}
+
+function betaRunOptions(config: AgentConfig, systemPrompt: string, messages: ChatMessage[]) {
+  return {
+    model: config.model,
+    systemPrompt,
+    messages,
+    temperature: config.temperature,
+    effort: config.effort,
+    thinkingEnabled: config.thinkingEnabled,
+    webSearch: config.webSearch,
+    webSearchConfig: config.webSearchConfig,
+    maxTokens: getModelMaxTokens(config.model, Boolean(config.createDocuments)),
+    createDocuments: config.createDocuments,
+    mcpServers: config.mcpServers,
+    containerUploadBlocks: config.containerUploadBlocks,
+  };
+}
+
 function withDocumentHint(systemPrompt: string, createDocuments: boolean): string {
   if (!createDocuments) return systemPrompt;
   return `${systemPrompt}${DOCUMENT_CREATION_SYSTEM_HINT}`;
@@ -99,19 +130,9 @@ export async function runAgent(
 
   const systemPrompt = withDocumentHint(config.systemPrompt, wantsDocuments);
 
-  if (wantsDocuments) {
-    const result = await runBetaAgentWithDocuments({
-      model: config.model,
-      systemPrompt,
-      messages,
-      temperature: config.temperature,
-      effort: config.effort,
-      thinkingEnabled: config.thinkingEnabled,
-      webSearch: config.webSearch,
-      webSearchConfig: config.webSearchConfig,
-      maxTokens: getModelMaxTokens(config.model, true),
-    });
-
+  if (usesBetaPath(config)) {
+    const run = config.createDocuments ? runBetaAgentWithDocuments : runBetaAgentSession;
+    const result = await run(betaRunOptions({ ...config, systemPrompt }, systemPrompt, messages));
     const costEur = computeModelCost(config.model, result.usage);
     return {
       content: result.content,
@@ -171,23 +192,21 @@ export async function* streamAgent(
 
   const systemPrompt = withDocumentHint(config.systemPrompt, wantsDocuments);
 
-  if (wantsDocuments) {
+  if (usesBetaPath({ ...config, systemPrompt })) {
     let totalPrompt = 0;
     let totalCompletion = 0;
+    const stream = config.createDocuments
+      ? streamBetaAgentWithDocuments
+      : streamBetaAgentSession;
 
-    for await (const chunk of streamBetaAgentWithDocuments({
-      model: config.model,
-      systemPrompt,
-      messages,
-      temperature: config.temperature,
-      effort: config.effort,
-      thinkingEnabled: config.thinkingEnabled,
-      webSearch: config.webSearch,
-      webSearchConfig: config.webSearchConfig,
-      maxTokens: getModelMaxTokens(config.model, true),
-    })) {
+    for await (const chunk of stream(
+      betaRunOptions({ ...config, systemPrompt }, systemPrompt, messages)
+    )) {
       if (chunk.type === "text") yield chunk;
       if (chunk.type === "server_tool") yield chunk;
+      if (chunk.type === "mcp_tool") {
+        yield { type: "server_tool", name: `mcp:${chunk.name}` };
+      }
       if (chunk.type === "anthropic_file_ids") yield chunk;
       if (chunk.type === "done") {
         totalPrompt = chunk.usage.promptTokens;

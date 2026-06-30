@@ -18,6 +18,8 @@ import {
   Code,
   Sparkles,
   FileOutput,
+  Link2,
+  Plug,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
@@ -31,7 +33,16 @@ import { modelSupportsThinking } from "@lib/ai/anthropic-params";
 import { TOOL_CREATE_DOCUMENTS } from "@lib/agents/agent-tools";
 import { MARKETPLACE_CATEGORIES } from "@lib/marketplace/constants";
 
-type Tab = "general" | "knowledge" | "tools" | "skills" | "versions";
+type Tab = "general" | "knowledge" | "tools" | "skills" | "connectors" | "versions";
+
+interface McpConnectionRow {
+  id: string;
+  name: string;
+  server_url: string;
+  allowed_tools: string[] | null;
+  enabled: boolean;
+  created_at: string;
+}
 
 interface SkillPackageRow {
   id: string;
@@ -70,6 +81,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "knowledge", label: "Knowledge" },
   { id: "tools", label: "Tools" },
   { id: "skills", label: "Skills" },
+  { id: "connectors", label: "Conectores" },
   { id: "versions", label: "Versões" },
 ];
 
@@ -158,6 +170,11 @@ export default function AgentBuilderPage() {
   const [skillPackageIds, setSkillPackageIds] = useState<string[]>([]);
   const [skillUploading, setSkillUploading] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [mcpConnections, setMcpConnections] = useState<McpConnectionRow[]>([]);
+  const [mcpName, setMcpName] = useState("");
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpToken, setMcpToken] = useState("");
+  const [mcpSaving, setMcpSaving] = useState(false);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [docs, setDocs] = useState<
     Array<{
@@ -198,6 +215,12 @@ export default function AgentBuilderPage() {
     setSkillPackages(Array.isArray(data) ? data : []);
   }, [id]);
 
+  const loadMcpConnections = useCallback(async () => {
+    const res = await fetch(`/api/agents/${id}/mcp-connections`);
+    const data = await res.json();
+    setMcpConnections(Array.isArray(data) ? data : []);
+  }, [id]);
+
   const loadAgent = useCallback(async () => {
     const res = await fetch(`/api/agents/${id}`);
     const data = await res.json();
@@ -231,11 +254,12 @@ export default function AgentBuilderPage() {
     loadAgent();
     loadDocs();
     loadSkillPackages();
+    loadMcpConnections();
     fetch("/api/health")
       .then((r) => r.json())
       .then((h) => setKnowledgeReady(Boolean(h.serviceRole)))
       .catch(() => setKnowledgeReady(null));
-  }, [id, loadAgent, loadDocs, loadSkillPackages]);
+  }, [id, loadAgent, loadDocs, loadSkillPackages, loadMcpConnections]);
 
   useEffect(() => {
     fetch("/api/models")
@@ -631,6 +655,16 @@ export default function AgentBuilderPage() {
                   skillError={skillError}
                   uploadSkillPackage={uploadSkillPackage}
                   deleteSkillPackage={deleteSkillPackage}
+                  mcpConnections={mcpConnections}
+                  mcpName={mcpName}
+                  setMcpName={setMcpName}
+                  mcpUrl={mcpUrl}
+                  setMcpUrl={setMcpUrl}
+                  mcpToken={mcpToken}
+                  setMcpToken={setMcpToken}
+                  mcpSaving={mcpSaving}
+                  setMcpSaving={setMcpSaving}
+                  loadMcpConnections={loadMcpConnections}
                   versions={versions}
                   publishVersion={publishVersion}
                   rollbackVersion={rollbackVersion}
@@ -682,6 +716,16 @@ function AdvancedTabContent({
   skillError,
   uploadSkillPackage,
   deleteSkillPackage,
+  mcpConnections,
+  mcpName,
+  setMcpName,
+  mcpUrl,
+  setMcpUrl,
+  mcpToken,
+  setMcpToken,
+  mcpSaving,
+  setMcpSaving,
+  loadMcpConnections,
   versions,
   publishVersion,
   rollbackVersion,
@@ -724,6 +768,16 @@ function AdvancedTabContent({
   skillError: string | null;
   uploadSkillPackage: (e: React.ChangeEvent<HTMLInputElement>) => void;
   deleteSkillPackage: (id: string) => void;
+  mcpConnections: McpConnectionRow[];
+  mcpName: string;
+  setMcpName: (v: string) => void;
+  mcpUrl: string;
+  setMcpUrl: (v: string) => void;
+  mcpToken: string;
+  setMcpToken: (v: string) => void;
+  mcpSaving: boolean;
+  setMcpSaving: React.Dispatch<React.SetStateAction<boolean>>;
+  loadMcpConnections: () => Promise<void>;
   versions: AgentVersion[];
   publishVersion: (id: string) => void;
   rollbackVersion: (id: string) => void;
@@ -956,6 +1010,103 @@ function AdvancedTabContent({
     );
   }
 
+  if (tab === "connectors") {
+    async function addMcpConnection() {
+      if (!mcpName.trim() || !mcpUrl.trim()) return;
+      setMcpSaving(true);
+      const res = await fetch(`/api/agents/${id}/mcp-connections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: mcpName.trim(),
+          server_url: mcpUrl.trim(),
+          auth_secret_ref: mcpToken.trim() || undefined,
+        }),
+      });
+      setMcpSaving(false);
+      if (res.ok) {
+        setMcpName("");
+        setMcpUrl("");
+        setMcpToken("");
+        await loadMcpConnections();
+      }
+    }
+
+    return (
+      <div className="space-y-4">
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Liga servidores MCP (Gmail, Drive, Supabase, etc.) via API Anthropic. O token pode ser o
+          valor directo ou <code>env:NOME_VAR</code> para ler de variável de ambiente no servidor.
+        </p>
+        <Input
+          label="Nome"
+          hint="Identificador único (ex. gmail, supabase)"
+          value={mcpName}
+          onChange={(e) => setMcpName(e.target.value)}
+        />
+        <Input
+          label="URL do servidor MCP"
+          value={mcpUrl}
+          onChange={(e) => setMcpUrl(e.target.value)}
+          placeholder="https://..."
+        />
+        <Input
+          label="Token (opcional)"
+          type="password"
+          value={mcpToken}
+          onChange={(e) => setMcpToken(e.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={mcpSaving || !mcpName.trim() || !mcpUrl.trim()}
+          onClick={() => void addMcpConnection()}
+        >
+          <Plug size={14} />
+          {mcpSaving ? "A ligar…" : "Adicionar conector"}
+        </Button>
+        {mcpConnections.length === 0 ? (
+          <p className="text-center text-xs text-slate-400">Nenhum conector configurado.</p>
+        ) : (
+          <div className="space-y-2">
+            {mcpConnections.map((conn) => (
+              <div
+                key={conn.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-line p-3 text-xs"
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1 font-semibold text-slate-800">
+                    <Link2 size={12} />
+                    {conn.name}
+                  </p>
+                  <p className="truncate text-slate-500">{conn.server_url}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge tone={conn.enabled ? "success" : "neutral"}>
+                    {conn.enabled ? "Activo" : "Off"}
+                  </Badge>
+                  <button
+                    type="button"
+                    className="text-slate-400 hover:text-rose-500"
+                    onClick={async () => {
+                      await fetch(`/api/agents/${id}/mcp-connections?id=${conn.id}`, {
+                        method: "DELETE",
+                      });
+                      await loadMcpConnections();
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (tab === "versions") {
   return (
     <div className="space-y-2">
       {versions.map((v) => (
@@ -979,5 +1130,8 @@ function AdvancedTabContent({
       ))}
     </div>
   );
+  }
+
+  return null;
 }
 

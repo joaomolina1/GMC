@@ -46,6 +46,33 @@ function topologicalOrder(graph: FlowGraph): FlowNode[] {
   return order.length === graph.nodes.length ? order : graph.nodes;
 }
 
+/** Group nodes by dependency depth for parallel execution of independent branches. */
+function executionLevels(graph: FlowGraph): FlowNode[][] {
+  const order = topologicalOrder(graph);
+  const level = new Map<string, number>();
+
+  for (const node of order) {
+    const incoming = graph.edges.filter((e) => e.target === node.id);
+    if (incoming.length === 0) {
+      level.set(node.id, 0);
+    } else {
+      const maxPred = Math.max(...incoming.map((e) => level.get(e.source) ?? 0));
+      level.set(node.id, maxPred + 1);
+    }
+  }
+
+  const byLevel = new Map<number, FlowNode[]>();
+  for (const node of order) {
+    const l = level.get(node.id) ?? 0;
+    if (!byLevel.has(l)) byLevel.set(l, []);
+    byLevel.get(l)!.push(node);
+  }
+
+  return Array.from(byLevel.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, nodes]) => nodes);
+}
+
 function getOutgoingEdges(graph: FlowGraph, nodeId: string) {
   return graph.edges.filter((e) => e.source === nodeId);
 }
@@ -111,6 +138,7 @@ async function executeNode(
           agentId,
           version,
           userMessage: prompt,
+          userId: ctx.userId,
         });
 
         const result = await runAgent(runtimeConfig, [{ role: "user", content: prompt }]);
@@ -134,6 +162,8 @@ async function executeNode(
             text: result.content,
             costEur: result.costEur,
             files: generatedFiles,
+            tool_calls: result.toolCalls ?? [],
+            steps_used: result.stepsUsed,
           },
         };
       }
@@ -256,7 +286,7 @@ export async function runFlow(
   ctx: FlowRunContext,
   callbacks?: FlowRunCallbacks
 ): Promise<FlowRunResult> {
-  const order = topologicalOrder(graph);
+  const levels = executionLevels(graph);
   const steps: FlowStepResult[] = [];
   const state = {
     lastOutput: "",
@@ -265,8 +295,15 @@ export async function runFlow(
 
   const skippedNodeIds = new Set<string>();
 
-  for (const node of order) {
-    if (shouldSkipNode(node, graph, state.variables, skippedNodeIds)) {
+  for (const levelNodes of levels) {
+    const runnable = levelNodes.filter(
+      (node) => !shouldSkipNode(node, graph, state.variables, skippedNodeIds)
+    );
+    const skippedInLevel = levelNodes.filter((node) =>
+      shouldSkipNode(node, graph, state.variables, skippedNodeIds)
+    );
+
+    for (const node of skippedInLevel) {
       skippedNodeIds.add(node.id);
       const skipped: FlowStepResult = {
         nodeId: node.id,
@@ -277,27 +314,49 @@ export async function runFlow(
       };
       steps.push(skipped);
       callbacks?.onStepComplete?.(skipped);
+    }
+
+    if (runnable.length === 0) continue;
+
+    if (runnable.length === 1) {
+      const node = runnable[0]!;
+      callbacks?.onStepStart?.(node.id, node.type);
+      const step = await executeNode(node, graph, ctx, state);
+      steps.push(step);
+      callbacks?.onStepComplete?.(step);
+      if (step.status === "failed") {
+        return { status: "failed", output: state.lastOutput, steps, error: step.error };
+      }
       continue;
     }
 
-    callbacks?.onStepStart?.(node.id, node.type);
-    const step = await executeNode(node, graph, ctx, state);
-    steps.push(step);
-    callbacks?.onStepComplete?.(step);
+    const parallelResults = await Promise.all(
+      runnable.map(async (node) => {
+        callbacks?.onStepStart?.(node.id, node.type);
+        const localState = {
+          lastOutput: state.lastOutput,
+          variables: { ...state.variables },
+        };
+        const step = await executeNode(node, graph, ctx, localState);
+        return { step, localState };
+      })
+    );
 
-    if (step.status === "failed") {
-      return {
-        status: "failed",
-        output: state.lastOutput,
-        steps,
-        error: step.error,
-      };
+    for (const { step, localState } of parallelResults) {
+      steps.push(step);
+      callbacks?.onStepComplete?.(step);
+      if (step.status === "completed" && step.output.text) {
+        state.lastOutput = String(step.output.text);
+        state.variables = { ...state.variables, ...localState.variables };
+      }
+      if (step.status === "failed") {
+        return { status: "failed", output: state.lastOutput, steps, error: step.error };
+      }
     }
   }
 
   const outputNode = steps.find((s) => s.nodeType === "output" && s.status === "completed");
-  const finalText =
-    (outputNode?.output.text as string) ?? state.lastOutput;
+  const finalText = (outputNode?.output.text as string) ?? state.lastOutput;
 
   return {
     status: "completed",

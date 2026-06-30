@@ -1,10 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   BetaContentBlock,
+  BetaContainerUploadBlockParam,
   BetaMessage,
   BetaMessageParam,
+  BetaRequestMCPServerURLDefinition,
   BetaTextBlock,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { ChatMessage, EffortLevel } from "@lib/ai/types";
 import { buildAnthropicRequestExtras } from "@lib/ai/anthropic-params";
 import {
@@ -15,13 +18,22 @@ import {
 import { extractFileIdsFromPayload, logMissingFileIds } from "@lib/ai/extract-generated-files";
 import { getModelMaxTokens } from "@lib/ai/model-limits";
 import { modelSupportsDocumentSkills } from "@lib/ai/document-skills-guard";
+import { MCP_BETA } from "@lib/agents/mcp-connections";
+import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 12;
 
-function toAnthropicMessages(messages: ChatMessage[]): BetaMessageParam[] {
-  return messages.map((m) => {
+function toAnthropicMessages(
+  messages: ChatMessage[],
+  containerUploadBlocks?: BetaContainerUploadBlockParam[]
+): BetaMessageParam[] {
+  const converted = messages.map((m, index) => {
     if (typeof m.content === "string") {
-      return { role: m.role as "user" | "assistant", content: m.content };
+      const uploads =
+        index === 0 && m.role === "user" && containerUploadBlocks?.length
+          ? [...containerUploadBlocks, { type: "text" as const, text: m.content }]
+          : m.content;
+      return { role: m.role as "user" | "assistant", content: uploads };
     }
     return {
       role: m.role as "user" | "assistant",
@@ -52,6 +64,18 @@ function toAnthropicMessages(messages: ChatMessage[]): BetaMessageParam[] {
       }),
     };
   });
+
+  if (containerUploadBlocks?.length && converted.length > 0) {
+    const first = converted[0];
+    if (first.role === "user" && typeof first.content === "string") {
+      converted[0] = {
+        role: "user",
+        content: [...containerUploadBlocks, { type: "text", text: first.content }],
+      };
+    }
+  }
+
+  return converted;
 }
 
 function extractText(content: BetaContentBlock[]): string {
@@ -59,6 +83,30 @@ function extractText(content: BetaContentBlock[]): string {
     .filter((b): b is BetaTextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
+}
+
+function buildBetas(options: { mcpServers?: BetaRequestMCPServerURLDefinition[]; createDocuments?: boolean }) {
+  const betas = new Set<string>([...ANTHROPIC_DOCUMENT_BETAS]);
+  if (options.mcpServers?.length) betas.add(MCP_BETA);
+  if (!options.createDocuments) {
+    betas.delete("skills-2025-10-02");
+  }
+  return Array.from(betas);
+}
+
+function buildBetaTools(options: {
+  createDocuments?: boolean;
+  webSearch?: boolean;
+  webSearchConfig?: Record<string, unknown>;
+  clientTools?: ToolUnion[];
+}): ToolUnion[] | undefined {
+  const tools: ToolUnion[] = [...(options.clientTools ?? [])];
+  if (options.createDocuments) {
+    tools.push(...buildDocumentCreationTools(options.webSearch !== false, options.webSearchConfig));
+  } else if (options.webSearch !== false) {
+    tools.push(...buildAnthropicServerTools(["web_search"]));
+  }
+  return tools.length ? tools : undefined;
 }
 
 export interface BetaAgentRunOptions {
@@ -71,6 +119,10 @@ export interface BetaAgentRunOptions {
   webSearch?: boolean;
   webSearchConfig?: Record<string, unknown>;
   maxTokens?: number;
+  createDocuments?: boolean;
+  mcpServers?: BetaRequestMCPServerURLDefinition[];
+  containerUploadBlocks?: BetaContainerUploadBlockParam[];
+  clientTools?: ToolUnion[];
 }
 
 export interface BetaAgentRunResult {
@@ -80,17 +132,15 @@ export interface BetaAgentRunResult {
   stepsUsed: number;
 }
 
-export async function runBetaAgentWithDocuments(
-  options: BetaAgentRunOptions
-): Promise<BetaAgentRunResult> {
-  if (!modelSupportsDocumentSkills(options.model)) {
-    throw new Error("Model does not support document skills");
-  }
-
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  let messages = toAnthropicMessages(options.messages);
-  const betas = [...ANTHROPIC_DOCUMENT_BETAS];
-  const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model, true);
+async function createBetaResponse(
+  client: Anthropic,
+  options: BetaAgentRunOptions,
+  messages: BetaMessageParam[]
+) {
+  const createDocuments = Boolean(options.createDocuments);
+  const maxTokens =
+    options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
+  const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -100,6 +150,34 @@ export async function runBetaAgentWithDocuments(
     thinkingEnabled: options.thinkingEnabled,
   });
 
+  return client.beta.messages.create({
+    model: options.model,
+    max_tokens: maxTokens,
+    system: options.systemPrompt,
+    messages,
+    betas,
+    ...(createDocuments ? { container: { skills: buildDocumentSkillParams() } } : {}),
+    ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
+    tools: buildBetaTools({
+      createDocuments,
+      webSearch: options.webSearch,
+      webSearchConfig: options.webSearchConfig,
+      clientTools: options.clientTools,
+    }),
+    ...requestExtras,
+  });
+}
+
+export async function runBetaAgentWithDocuments(
+  options: BetaAgentRunOptions
+): Promise<BetaAgentRunResult> {
+  if (options.createDocuments && !modelSupportsDocumentSkills(options.model)) {
+    throw new Error("Model does not support document skills");
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  let messages = toAnthropicMessages(options.messages, options.containerUploadBlocks);
+
   let totalPrompt = 0;
   let totalCompletion = 0;
   let response: BetaMessage | null = null;
@@ -108,16 +186,7 @@ export async function runBetaAgentWithDocuments(
 
   for (let i = 0; i < MAX_PAUSE_TURN_CONTINUATIONS; i++) {
     stepsUsed += 1;
-    response = await client.beta.messages.create({
-      model: options.model,
-      max_tokens: maxTokens,
-      system: options.systemPrompt,
-      messages,
-      betas,
-      container: { skills: buildDocumentSkillParams() },
-      tools: buildDocumentCreationTools(options.webSearch !== false, options.webSearchConfig),
-      ...requestExtras,
-    });
+    response = await createBetaResponse(client, options, messages);
 
     totalPrompt += response.usage.input_tokens;
     totalCompletion += response.usage.output_tokens;
@@ -144,22 +213,25 @@ export async function runBetaAgentWithDocuments(
 export type BetaAgentStreamEvent =
   | { type: "text"; text: string }
   | { type: "server_tool"; name: string }
+  | { type: "mcp_tool"; name: string }
   | { type: "anthropic_file_ids"; fileIds: string[] }
   | { type: "done"; usage: { promptTokens: number; completionTokens: number } };
 
 export async function* streamBetaAgentWithDocuments(
   options: BetaAgentRunOptions
 ): AsyncGenerator<BetaAgentStreamEvent> {
-  if (!modelSupportsDocumentSkills(options.model)) {
+  if (options.createDocuments && !modelSupportsDocumentSkills(options.model)) {
     yield { type: "text", text: "Modelo não suporta geração de documentos." };
     yield { type: "done", usage: { promptTokens: 0, completionTokens: 0 } };
     return;
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  let messages = toAnthropicMessages(options.messages);
-  const betas = [...ANTHROPIC_DOCUMENT_BETAS];
-  const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model, true);
+  let messages = toAnthropicMessages(options.messages, options.containerUploadBlocks);
+  const createDocuments = Boolean(options.createDocuments);
+  const maxTokens =
+    options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
+  const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -180,8 +252,14 @@ export async function* streamBetaAgentWithDocuments(
       system: options.systemPrompt,
       messages,
       betas,
-      container: { skills: buildDocumentSkillParams() },
-      tools: buildDocumentCreationTools(options.webSearch !== false, options.webSearchConfig),
+      ...(createDocuments ? { container: { skills: buildDocumentSkillParams() } } : {}),
+      ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
+      tools: buildBetaTools({
+        createDocuments,
+        webSearch: options.webSearch,
+        webSearchConfig: options.webSearchConfig,
+        clientTools: options.clientTools,
+      }),
       ...requestExtras,
     });
 
@@ -189,8 +267,14 @@ export async function* streamBetaAgentWithDocuments(
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         yield { type: "text", text: event.delta.text };
       }
-      if (event.type === "content_block_start" && event.content_block.type === "server_tool_use") {
-        yield { type: "server_tool", name: event.content_block.name };
+      if (event.type === "content_block_start") {
+        const block = event.content_block;
+        if (block.type === "server_tool_use") {
+          yield { type: "server_tool", name: block.name };
+        }
+        if (block.type === "mcp_tool_use") {
+          yield { type: "mcp_tool", name: block.name };
+        }
       }
     }
 
@@ -226,4 +310,15 @@ export async function* streamBetaAgentWithDocuments(
     type: "done",
     usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
   };
+}
+
+/** Beta path for MCP and/or skill container files without document skills. */
+export async function runBetaAgentSession(options: BetaAgentRunOptions): Promise<BetaAgentRunResult> {
+  return runBetaAgentWithDocuments({ ...options, createDocuments: options.createDocuments ?? false });
+}
+
+export async function* streamBetaAgentSession(
+  options: BetaAgentRunOptions
+): AsyncGenerator<BetaAgentStreamEvent> {
+  yield* streamBetaAgentWithDocuments({ ...options, createDocuments: options.createDocuments ?? false });
 }
