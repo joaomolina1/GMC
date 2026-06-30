@@ -8,10 +8,11 @@ import type {
   BetaTextBlock,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
-import type { ChatMessage, EffortLevel } from "@lib/ai/types";
+import type { ChatMessage, EffortLevel, TokenUsage } from "@lib/ai/types";
 import { buildAnthropicRequestExtras } from "@lib/ai/anthropic-params";
 import {
   ANTHROPIC_DOCUMENT_BETAS,
+  type AnthropicDocumentSkillId,
   buildDocumentCreationTools,
   buildDocumentSkillParams,
 } from "@lib/ai/anthropic-document-skills";
@@ -20,8 +21,15 @@ import { getModelMaxTokens } from "@lib/ai/model-limits";
 import { modelSupportsDocumentSkills } from "@lib/ai/document-skills-guard";
 import { MCP_BETA } from "@lib/agents/mcp-connections";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
+import {
+  addAnthropicUsage,
+  applyCacheToTools,
+  buildCachedSystem,
+  emptyTokenUsage,
+} from "@lib/ai/prompt-cache";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 12;
+const PROMPT_CACHING_BETA = "prompt-caching-2024-07-31";
 
 function toAnthropicMessages(
   messages: ChatMessage[],
@@ -86,7 +94,7 @@ function extractText(content: BetaContentBlock[]): string {
 }
 
 function buildBetas(options: { mcpServers?: BetaRequestMCPServerURLDefinition[]; createDocuments?: boolean }) {
-  const betas = new Set<string>([...ANTHROPIC_DOCUMENT_BETAS]);
+  const betas = new Set<string>([...ANTHROPIC_DOCUMENT_BETAS, PROMPT_CACHING_BETA]);
   if (options.mcpServers?.length) betas.add(MCP_BETA);
   if (!options.createDocuments) {
     betas.delete("skills-2025-10-02");
@@ -106,7 +114,7 @@ function buildBetaTools(options: {
   } else if (options.webSearch !== false) {
     tools.push(...buildAnthropicServerTools(["web_search"]));
   }
-  return tools.length ? tools : undefined;
+  return tools.length ? applyCacheToTools(tools) : undefined;
 }
 
 export interface BetaAgentRunOptions {
@@ -120,6 +128,7 @@ export interface BetaAgentRunOptions {
   webSearchConfig?: Record<string, unknown>;
   maxTokens?: number;
   createDocuments?: boolean;
+  documentSkillIds?: AnthropicDocumentSkillId[];
   mcpServers?: BetaRequestMCPServerURLDefinition[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
   clientTools?: ToolUnion[];
@@ -127,9 +136,10 @@ export interface BetaAgentRunOptions {
 
 export interface BetaAgentRunResult {
   content: string;
-  usage: { promptTokens: number; completionTokens: number };
+  usage: TokenUsage;
   anthropicFileIds: string[];
   stepsUsed: number;
+  documentSkillsUsed?: AnthropicDocumentSkillId[];
 }
 
 async function createBetaResponse(
@@ -149,14 +159,20 @@ async function createBetaResponse(
     effort: options.effort,
     thinkingEnabled: options.thinkingEnabled,
   });
+  const skillIds =
+    options.documentSkillIds?.length && createDocuments
+      ? options.documentSkillIds
+      : undefined;
 
   return client.beta.messages.create({
     model: options.model,
     max_tokens: maxTokens,
-    system: options.systemPrompt,
+    system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
     messages,
     betas,
-    ...(createDocuments ? { container: { skills: buildDocumentSkillParams() } } : {}),
+    ...(createDocuments
+      ? { container: { skills: buildDocumentSkillParams(skillIds) } }
+      : {}),
     ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
     tools: buildBetaTools({
       createDocuments,
@@ -178,18 +194,22 @@ export async function runBetaAgentWithDocuments(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let messages = toAnthropicMessages(options.messages, options.containerUploadBlocks);
 
-  let totalPrompt = 0;
-  let totalCompletion = 0;
+  let usage = emptyTokenUsage();
   let response: BetaMessage | null = null;
   const collectedFileIds = new Set<string>();
   let stepsUsed = 0;
+  const documentSkillsUsed =
+    options.documentSkillIds?.length && options.createDocuments
+      ? options.documentSkillIds
+      : options.createDocuments
+        ? (["docx"] as AnthropicDocumentSkillId[])
+        : undefined;
 
   for (let i = 0; i < MAX_PAUSE_TURN_CONTINUATIONS; i++) {
     stepsUsed += 1;
     response = await createBetaResponse(client, options, messages);
 
-    totalPrompt += response.usage.input_tokens;
-    totalCompletion += response.usage.output_tokens;
+    usage = addAnthropicUsage(usage, response.usage);
     extractFileIdsFromPayload(response.content).forEach((id) => collectedFileIds.add(id));
     logMissingFileIds("beta-run", response.content, extractText(response.content));
 
@@ -204,9 +224,10 @@ export async function runBetaAgentWithDocuments(
 
   return {
     content: extractText(response.content),
-    usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+    usage,
     anthropicFileIds: Array.from(collectedFileIds),
     stepsUsed,
+    documentSkillsUsed,
   };
 }
 
@@ -215,14 +236,14 @@ export type BetaAgentStreamEvent =
   | { type: "server_tool"; name: string }
   | { type: "mcp_tool"; name: string }
   | { type: "anthropic_file_ids"; fileIds: string[] }
-  | { type: "done"; usage: { promptTokens: number; completionTokens: number } };
+  | { type: "done"; usage: TokenUsage; stepsUsed?: number; documentSkillsUsed?: AnthropicDocumentSkillId[] };
 
 export async function* streamBetaAgentWithDocuments(
   options: BetaAgentRunOptions
 ): AsyncGenerator<BetaAgentStreamEvent> {
   if (options.createDocuments && !modelSupportsDocumentSkills(options.model)) {
     yield { type: "text", text: "Modelo não suporta geração de documentos." };
-    yield { type: "done", usage: { promptTokens: 0, completionTokens: 0 } };
+    yield { type: "done", usage: emptyTokenUsage() };
     return;
   }
 
@@ -240,19 +261,28 @@ export async function* streamBetaAgentWithDocuments(
     effort: options.effort,
     thinkingEnabled: options.thinkingEnabled,
   });
+  const skillIds =
+    options.documentSkillIds?.length && createDocuments
+      ? options.documentSkillIds
+      : undefined;
+  const documentSkillsUsed =
+    skillIds ?? (createDocuments ? (["docx"] as AnthropicDocumentSkillId[]) : undefined);
 
-  let totalPrompt = 0;
-  let totalCompletion = 0;
+  let usage = emptyTokenUsage();
   const collectedFileIds = new Set<string>();
+  let stepsUsed = 0;
 
   for (let turn = 0; turn < MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
+    stepsUsed += 1;
     const stream = client.beta.messages.stream({
       model: options.model,
       max_tokens: maxTokens,
-      system: options.systemPrompt,
+      system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
       messages,
       betas,
-      ...(createDocuments ? { container: { skills: buildDocumentSkillParams() } } : {}),
+      ...(createDocuments
+        ? { container: { skills: buildDocumentSkillParams(skillIds) } }
+        : {}),
       ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
       tools: buildBetaTools({
         createDocuments,
@@ -279,8 +309,7 @@ export async function* streamBetaAgentWithDocuments(
     }
 
     const final = await stream.finalMessage();
-    totalPrompt += final.usage.input_tokens;
-    totalCompletion += final.usage.output_tokens;
+    usage = addAnthropicUsage(usage, final.usage);
     extractFileIdsFromPayload(final.content).forEach((id) => collectedFileIds.add(id));
     logMissingFileIds("beta-stream", final.content, extractText(final.content));
 
@@ -296,7 +325,9 @@ export async function* streamBetaAgentWithDocuments(
 
     yield {
       type: "done",
-      usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+      usage,
+      stepsUsed,
+      documentSkillsUsed,
     };
     return;
   }
@@ -308,7 +339,9 @@ export async function* streamBetaAgentWithDocuments(
 
   yield {
     type: "done",
-    usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+    usage,
+    stepsUsed,
+    documentSkillsUsed,
   };
 }
 

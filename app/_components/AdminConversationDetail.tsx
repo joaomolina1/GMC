@@ -159,7 +159,12 @@ export function AdminConversationDetail({
                     Registos de utilização
                   </p>
                   <ul className="space-y-2">
-                    {detail.usage_logs.map((log) => (
+                    {detail.usage_logs.map((log) => {
+                      const meta = (log.metadata ?? {}) as Record<string, number | string | undefined>;
+                      const cacheRead = Number(meta.cache_read_input_tokens ?? 0);
+                      const cacheCreate = Number(meta.cache_creation_input_tokens ?? 0);
+                      const fresh = Number(meta.fresh_input_tokens ?? 0);
+                      return (
                       <li
                         key={String(log.id)}
                         className="rounded-lg border border-line px-3 py-2 text-xs text-slate-600"
@@ -168,8 +173,14 @@ export function AdminConversationDetail({
                         {Number(log.prompt_tokens) + Number(log.completion_tokens)} tokens ·{" "}
                         {formatCost(Number(log.cost_eur))} ·{" "}
                         {new Date(String(log.created_at)).toLocaleString("pt-PT")}
+                        {(cacheRead > 0 || cacheCreate > 0) && (
+                          <span className="mt-1 block text-[10px] text-emerald-700">
+                            cache: {cacheRead} lidos · {cacheCreate} criados · {fresh} fresh
+                            {meta.route ? ` · rota ${meta.route}` : ""}
+                          </span>
+                        )}
                       </li>
-                    ))}
+                    )})}
                   </ul>
                 </div>
               )}

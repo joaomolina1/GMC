@@ -1,10 +1,15 @@
-import type { EffortLevel, ChatMessage } from "@lib/ai/types";
+import type { EffortLevel, ChatMessage, TokenUsage } from "@lib/ai/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BetaContainerUploadBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { BetaRequestMCPServerURLDefinition } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
+import type { AnthropicDocumentSkillId } from "@lib/ai/anthropic-document-skills";
+import {
+  needsDocumentCreation,
+  resolveDocumentSkillsForTurn,
+} from "@lib/ai/document-skill-detect";
 import {
   runBetaAgentWithDocuments,
   streamBetaAgentWithDocuments,
@@ -20,6 +25,7 @@ import {
 import { getModelMaxTokens, DEFAULT_MAX_AGENT_STEPS } from "@lib/ai/model-limits";
 import { buildAgentToolRegistry } from "@lib/agents/tool-runtime";
 import type { ExecutedToolCall } from "@lib/agents/tool-runtime";
+import { usageCacheMetadata } from "@lib/ai/prompt-cache";
 
 export interface AgentConfig {
   model: string;
@@ -28,6 +34,7 @@ export interface AgentConfig {
   effort?: EffortLevel;
   thinkingEnabled?: boolean;
   webSearch?: boolean;
+  /** Agent has document-creation capability enabled in builder. */
   createDocuments?: boolean;
   webSearchConfig?: Record<string, unknown>;
   enabledTools?: string[];
@@ -50,12 +57,53 @@ export interface GeneratedFileRef {
 
 export interface RunAgentResult {
   content: string;
-  usage: { promptTokens: number; completionTokens: number };
+  usage: TokenUsage;
   costEur: number;
   generatedFiles?: GeneratedFileRef[];
   anthropicFileIds?: string[];
   toolCalls?: ExecutedToolCall[];
   stepsUsed?: number;
+  route?: "light" | "beta-documents" | "beta-session";
+  documentSkillsUsed?: AnthropicDocumentSkillId[];
+}
+
+function getLastUserText(messages: ChatMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    return message.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("\n");
+  }
+  return "";
+}
+
+export interface ResolvedAgentRoute {
+  route: "light" | "beta-documents" | "beta-session";
+  createDocumentsThisTurn: boolean;
+  documentSkillIds?: AnthropicDocumentSkillId[];
+}
+
+export function resolveAgentRoute(config: AgentConfig, messages: ChatMessage[]): ResolvedAgentRoute {
+  const needsMcpOrContainer = Boolean(
+    config.mcpServers?.length || config.containerUploadBlocks?.length
+  );
+  const userText = getLastUserText(messages);
+  const createDocumentsThisTurn =
+    Boolean(config.createDocuments) && needsDocumentCreation(userText);
+  const documentSkillIds = createDocumentsThisTurn
+    ? resolveDocumentSkillsForTurn(userText)
+    : undefined;
+
+  if (createDocumentsThisTurn) {
+    return { route: "beta-documents", createDocumentsThisTurn: true, documentSkillIds };
+  }
+  if (needsMcpOrContainer) {
+    return { route: "beta-session", createDocumentsThisTurn: false };
+  }
+  return { route: "light", createDocumentsThisTurn: false };
 }
 
 function buildProviderOptions(config: AgentConfig, messages: ChatMessage[]) {
@@ -84,15 +132,12 @@ function buildProviderOptions(config: AgentConfig, messages: ChatMessage[]) {
   };
 }
 
-function usesBetaPath(config: AgentConfig): boolean {
-  return Boolean(
-    config.createDocuments ||
-      config.mcpServers?.length ||
-      config.containerUploadBlocks?.length
-  );
-}
-
-function betaRunOptions(config: AgentConfig, systemPrompt: string, messages: ChatMessage[]) {
+function betaRunOptions(
+  config: AgentConfig,
+  systemPrompt: string,
+  messages: ChatMessage[],
+  route: ResolvedAgentRoute
+) {
   return {
     model: config.model,
     systemPrompt,
@@ -102,15 +147,16 @@ function betaRunOptions(config: AgentConfig, systemPrompt: string, messages: Cha
     thinkingEnabled: config.thinkingEnabled,
     webSearch: config.webSearch,
     webSearchConfig: config.webSearchConfig,
-    maxTokens: getModelMaxTokens(config.model, Boolean(config.createDocuments)),
-    createDocuments: config.createDocuments,
+    maxTokens: getModelMaxTokens(config.model, route.createDocumentsThisTurn),
+    createDocuments: route.createDocumentsThisTurn,
+    documentSkillIds: route.documentSkillIds,
     mcpServers: config.mcpServers,
     containerUploadBlocks: config.containerUploadBlocks,
   };
 }
 
-function withDocumentHint(systemPrompt: string, createDocuments: boolean): string {
-  if (!createDocuments) return systemPrompt;
+function withDocumentHint(systemPrompt: string, includeHint: boolean): string {
+  if (!includeHint) return systemPrompt;
   return `${systemPrompt}${DOCUMENT_CREATION_SYSTEM_HINT}`;
 }
 
@@ -118,21 +164,22 @@ export async function runAgent(
   config: AgentConfig,
   messages: ChatMessage[]
 ): Promise<RunAgentResult> {
-  const wantsDocuments = Boolean(config.createDocuments);
+  const route = resolveAgentRoute(config, messages);
 
-  if (wantsDocuments && !modelSupportsDocumentSkills(config.model)) {
+  if (route.createDocumentsThisTurn && !modelSupportsDocumentSkills(config.model)) {
     return {
       content: DOCUMENT_SKILLS_UNSUPPORTED_MESSAGE,
       usage: { promptTokens: 0, completionTokens: 0 },
       costEur: 0,
+      route: route.route,
     };
   }
 
-  const systemPrompt = withDocumentHint(config.systemPrompt, wantsDocuments);
+  const systemPrompt = withDocumentHint(config.systemPrompt, route.createDocumentsThisTurn);
 
-  if (usesBetaPath(config)) {
-    const run = config.createDocuments ? runBetaAgentWithDocuments : runBetaAgentSession;
-    const result = await run(betaRunOptions({ ...config, systemPrompt }, systemPrompt, messages));
+  if (route.route !== "light") {
+    const run = route.route === "beta-documents" ? runBetaAgentWithDocuments : runBetaAgentSession;
+    const result = await run(betaRunOptions(config, systemPrompt, messages, route));
     const costEur = computeModelCost(config.model, result.usage);
     return {
       content: result.content,
@@ -140,6 +187,8 @@ export async function runAgent(
       costEur,
       anthropicFileIds: result.anthropicFileIds,
       stepsUsed: result.stepsUsed,
+      route: route.route,
+      documentSkillsUsed: result.documentSkillsUsed,
     };
   }
 
@@ -151,6 +200,7 @@ export async function runAgent(
     content: result.content,
     usage: result.usage,
     costEur,
+    route: route.route,
     toolCalls: result.toolCalls?.map((t) => ({
       id: t.id,
       name: t.name,
@@ -169,38 +219,42 @@ export type StreamAgentEvent =
   | { type: "generated_files"; files: GeneratedFileRef[] }
   | {
       type: "done";
-      usage: { promptTokens: number; completionTokens: number };
+      usage: TokenUsage;
       costEur: number;
       toolCalls?: ExecutedToolCall[];
+      route?: ResolvedAgentRoute["route"];
+      documentSkillsUsed?: AnthropicDocumentSkillId[];
+      stepsUsed?: number;
     };
 
 export async function* streamAgent(
   config: AgentConfig,
   messages: ChatMessage[]
 ): AsyncGenerator<StreamAgentEvent> {
-  const wantsDocuments = Boolean(config.createDocuments);
+  const route = resolveAgentRoute(config, messages);
 
-  if (wantsDocuments && !modelSupportsDocumentSkills(config.model)) {
+  if (route.createDocumentsThisTurn && !modelSupportsDocumentSkills(config.model)) {
     yield { type: "text", text: DOCUMENT_SKILLS_UNSUPPORTED_MESSAGE };
     yield {
       type: "done",
       usage: { promptTokens: 0, completionTokens: 0 },
       costEur: 0,
+      route: route.route,
     };
     return;
   }
 
-  const systemPrompt = withDocumentHint(config.systemPrompt, wantsDocuments);
+  const systemPrompt = withDocumentHint(config.systemPrompt, route.createDocumentsThisTurn);
 
-  if (usesBetaPath({ ...config, systemPrompt })) {
-    let totalPrompt = 0;
-    let totalCompletion = 0;
-    const stream = config.createDocuments
-      ? streamBetaAgentWithDocuments
-      : streamBetaAgentSession;
+  if (route.route !== "light") {
+    let usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
+    let stepsUsed: number | undefined;
+    let documentSkillsUsed: AnthropicDocumentSkillId[] | undefined;
+    const stream =
+      route.route === "beta-documents" ? streamBetaAgentWithDocuments : streamBetaAgentSession;
 
     for await (const chunk of stream(
-      betaRunOptions({ ...config, systemPrompt }, systemPrompt, messages)
+      betaRunOptions(config, systemPrompt, messages, route)
     )) {
       if (chunk.type === "text") yield chunk;
       if (chunk.type === "server_tool") yield chunk;
@@ -209,27 +263,27 @@ export async function* streamAgent(
       }
       if (chunk.type === "anthropic_file_ids") yield chunk;
       if (chunk.type === "done") {
-        totalPrompt = chunk.usage.promptTokens;
-        totalCompletion = chunk.usage.completionTokens;
+        usage = chunk.usage;
+        stepsUsed = chunk.stepsUsed;
+        documentSkillsUsed = chunk.documentSkillsUsed;
       }
     }
 
-    const costEur = computeModelCost(config.model, {
-      promptTokens: totalPrompt,
-      completionTokens: totalCompletion,
-    });
+    const costEur = computeModelCost(config.model, usage);
 
     yield {
       type: "done",
-      usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+      usage,
       costEur,
+      route: route.route,
+      documentSkillsUsed,
+      stepsUsed,
     };
     return;
   }
 
   const provider = getProvider(config.model);
-  let totalPrompt = 0;
-  let totalCompletion = 0;
+  let usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
   const executedTools: ExecutedToolCall[] = [];
 
   for await (const chunk of provider.stream(buildProviderOptions({ ...config, systemPrompt }, messages))) {
@@ -251,8 +305,7 @@ export async function* streamAgent(
       };
     }
     if (chunk.type === "done" && chunk.usage) {
-      totalPrompt += chunk.usage.promptTokens;
-      totalCompletion += chunk.usage.completionTokens;
+      usage = chunk.usage;
       if (chunk.executedTools) {
         for (const t of chunk.executedTools) {
           executedTools.push({
@@ -267,15 +320,13 @@ export async function* streamAgent(
     }
   }
 
-  const costEur = computeModelCost(config.model, {
-    promptTokens: totalPrompt,
-    completionTokens: totalCompletion,
-  });
+  const costEur = computeModelCost(config.model, usage);
 
   yield {
     type: "done",
-    usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+    usage,
     costEur,
+    route: route.route,
     toolCalls: executedTools.length ? executedTools : undefined,
   };
 }
@@ -286,19 +337,7 @@ export function detectDocumentRequestWithoutTool(
   createDocuments: boolean
 ): string | null {
   if (createDocuments) return null;
-  const lower = userMessage.toLowerCase();
-  const hints = [
-    "powerpoint",
-    "pptx",
-    "excel",
-    "xlsx",
-    "word",
-    "docx",
-    "pdf",
-    "apresentação",
-    "folha de cálculo",
-  ];
-  if (hints.some((h) => lower.includes(h))) {
+  if (needsDocumentCreation(userMessage)) {
     return CREATE_DOCUMENTS_DISABLED_MESSAGE;
   }
   return null;
@@ -313,4 +352,20 @@ export function toGeneratedFileRefs(files: PersistedGeneratedFile[]): GeneratedF
     download_url: f.download_url,
     file_id: f.file_id,
   }));
+}
+
+export function buildUsageLogMetadata(options: {
+  usage: TokenUsage;
+  route?: string;
+  documentSkillsUsed?: AnthropicDocumentSkillId[];
+  stepsUsed?: number;
+  extra?: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    ...options.extra,
+    route: options.route,
+    document_skills: options.documentSkillsUsed,
+    steps_used: options.stepsUsed,
+    ...usageCacheMetadata(options.usage),
+  };
 }

@@ -53,6 +53,8 @@ export interface ToolCall {
 export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface StreamChunk {

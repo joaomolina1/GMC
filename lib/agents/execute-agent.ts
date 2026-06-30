@@ -7,6 +7,7 @@ import {
   persistAgentGeneratedFiles,
   runAgent,
 } from "@lib/agents/runtime";
+import { buildUsageLogMetadata } from "@lib/chat/agent";
 
 export function normalizeApiInput(input: unknown): string {
   if (input == null) {
@@ -134,14 +135,19 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
     completionTokens: result.usage.completionTokens,
     costEur: result.costEur,
     latencyMs: Date.now() - start,
-    metadata: {
-      agentId,
-      apiKeyId,
-      source: "api_v1",
-      generatedFiles: files.length,
-      toolCalls: result.toolCalls?.length ?? 0,
+    metadata: buildUsageLogMetadata({
+      usage: result.usage,
+      route: result.route,
+      documentSkillsUsed: result.documentSkillsUsed,
       stepsUsed: result.stepsUsed,
-    },
+      extra: {
+        agentId,
+        apiKeyId,
+        source: "api_v1",
+        generatedFiles: files.length,
+        toolCalls: result.toolCalls?.length ?? 0,
+      },
+    }),
   });
 
   return {

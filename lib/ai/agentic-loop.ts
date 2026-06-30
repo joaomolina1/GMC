@@ -2,6 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { AgentToolRegistry, ExecutedToolCall } from "@lib/agents/tool-runtime";
 import type { GenerateOptions, GenerateResult, StreamChunk, TokenUsage } from "@lib/ai/types";
+import {
+  addAnthropicUsage,
+  applyCacheToTools,
+  buildCachedSystem,
+  emptyTokenUsage,
+} from "@lib/ai/prompt-cache";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 8;
 
@@ -33,9 +39,9 @@ export async function runAgenticGenerate(
   const maxSteps = options.maxSteps ?? 12;
   const registry = options.registry;
   const tools = mergeTools(options.nativeTools, registry?.definitions ?? []);
+  const cachedTools = tools ? applyCacheToTools(tools) : undefined;
   let messages = options.messages.map(toAnthropicMessage);
-  let totalPrompt = 0;
-  let totalCompletion = 0;
+  let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
 
   for (let step = 0; step < maxSteps; step++) {
@@ -45,14 +51,13 @@ export async function runAgenticGenerate(
       response = await options.client.messages.create({
         model: options.model,
         max_tokens: options.maxTokens ?? 4096,
-        system: options.system,
+        system: buildCachedSystem(options.system) ?? options.system,
         messages,
-        tools,
+        tools: cachedTools,
         ...options.requestExtras,
       } as Anthropic.MessageCreateParamsNonStreaming);
 
-      totalPrompt += response.usage.input_tokens;
-      totalCompletion += response.usage.output_tokens;
+      usage = addAnthropicUsage(usage, response.usage);
 
       if (response.stop_reason === "pause_turn") {
         messages = [...messages, { role: "assistant", content: response.content }];
@@ -77,7 +82,7 @@ export async function runAgenticGenerate(
               input: b.input as Record<string, unknown>,
             }))
           : undefined,
-        usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+        usage,
         model: response.model,
         stopReason: response.stop_reason ?? undefined,
         executedTools,
@@ -114,9 +119,9 @@ export async function* runAgenticStream(
   const maxSteps = options.maxSteps ?? 12;
   const registry = options.registry;
   const tools = mergeTools(options.nativeTools, registry?.definitions ?? []);
+  const cachedTools = tools ? applyCacheToTools(tools) : undefined;
   let messages = options.messages.map(toAnthropicMessage);
-  let totalPrompt = 0;
-  let totalCompletion = 0;
+  let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
 
   for (let step = 0; step < maxSteps; step++) {
@@ -124,9 +129,9 @@ export async function* runAgenticStream(
       const stream = options.client.messages.stream({
         model: options.model,
         max_tokens: options.maxTokens ?? 4096,
-        system: options.system,
+        system: buildCachedSystem(options.system) ?? options.system,
         messages,
-        tools,
+        tools: cachedTools,
         ...options.requestExtras,
       } as Anthropic.MessageCreateParamsStreaming);
 
@@ -165,8 +170,7 @@ export async function* runAgenticStream(
       }
 
       const final = await stream.finalMessage();
-      totalPrompt += final.usage.input_tokens;
-      totalCompletion += final.usage.output_tokens;
+      usage = addAnthropicUsage(usage, final.usage);
 
       if (final.stop_reason === "pause_turn") {
         messages = [...messages, { role: "assistant", content: final.content }];
@@ -180,7 +184,7 @@ export async function* runAgenticStream(
       if (!registry || toolUses.length === 0) {
         yield {
           type: "done",
-          usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+          usage,
           executedTools,
         };
         return;
@@ -231,7 +235,7 @@ export async function* runAgenticStream(
 
   yield {
     type: "done",
-    usage: { promptTokens: totalPrompt, completionTokens: totalCompletion },
+    usage,
     executedTools,
   };
 }
@@ -275,5 +279,7 @@ export function mergeUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   return {
     promptTokens: a.promptTokens + b.promptTokens,
     completionTokens: a.completionTokens + b.completionTokens,
+    cacheCreationTokens: (a.cacheCreationTokens ?? 0) + (b.cacheCreationTokens ?? 0),
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
   };
 }
