@@ -367,7 +367,12 @@ export function FlowCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
-          <svg className="absolute left-0 top-0" width={CANVAS_W} height={CANVAS_H}>
+          {/* Edges below nodes — empty SVG areas pass clicks through to the canvas */}
+          <svg
+            className="pointer-events-none absolute left-0 top-0"
+            width={CANVAS_W}
+            height={CANVAS_H}
+          >
             {graph.edges.map((edge) => {
               const source = graph.nodes.find((n) => n.id === edge.source);
               const target = graph.nodes.find((n) => n.id === edge.target);
@@ -389,7 +394,8 @@ export function FlowCanvas({
                     fill="none"
                     stroke="transparent"
                     strokeWidth={18 / viewport.zoom}
-                    className="cursor-pointer"
+                    className="pointer-events-stroke cursor-pointer"
+                    onMouseDown={(ev) => ev.stopPropagation()}
                     onClick={(ev) => {
                       ev.stopPropagation();
                       selectEdge(edge.id);
@@ -434,6 +440,7 @@ export function FlowCanvas({
                   stroke="#0066b3"
                   strokeWidth={2 / viewport.zoom}
                   strokeDasharray="6 4"
+                  className="pointer-events-none"
                 />
               );
             })()}
@@ -447,30 +454,11 @@ export function FlowCanvas({
             </defs>
           </svg>
 
-          <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
-            {selectedEdgeId && (() => {
-              const edge = graph.edges.find((e) => e.id === selectedEdgeId);
-              if (!edge) return null;
-              const source = graph.nodes.find((n) => n.id === edge.source);
-              const target = graph.nodes.find((n) => n.id === edge.target);
-              if (!source || !target) return null;
-              const mid = edgeMidpoint(source, target, edge.data?.branch);
-              return (
-                <button
-                  type="button"
-                  title="Apagar ligação"
-                  className="absolute z-30 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md hover:border-rose-300 hover:bg-rose-50"
-                  style={{ left: mid.x - 14, top: mid.y - 14 }}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    removeEdge(selectedEdgeId);
-                  }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              );
-            })()}
-
+          {/* Nodes above edges — container is transparent to clicks except on node boxes */}
+          <div
+            className="pointer-events-none relative"
+            style={{ width: CANVAS_W, height: CANVAS_H }}
+          >
             {graph.nodes.map((node) => {
               const meta = nodeMeta(node.type);
               const selected = selectedNodeId === node.id;
@@ -479,7 +467,7 @@ export function FlowCanvas({
                 <div
                   key={node.id}
                   className={cn(
-                    "absolute select-none rounded-xl border-2 bg-white transition-shadow duration-300",
+                    "pointer-events-auto absolute select-none rounded-xl border-2 bg-white transition-shadow duration-300",
                     meta.tone,
                     selected && "ring-2 ring-brand-400 ring-offset-1",
                     execStatus === "running" &&
@@ -597,9 +585,33 @@ export function FlowCanvas({
               );
             })}
           </div>
+
+          {selectedEdgeId && (() => {
+            const edge = graph.edges.find((e) => e.id === selectedEdgeId);
+            if (!edge) return null;
+            const source = graph.nodes.find((n) => n.id === edge.source);
+            const target = graph.nodes.find((n) => n.id === edge.target);
+            if (!source || !target) return null;
+            const mid = edgeMidpoint(source, target, edge.data?.branch);
+            return (
+              <button
+                type="button"
+                title="Apagar ligação"
+                className="pointer-events-auto absolute z-20 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md hover:border-rose-300 hover:bg-rose-50"
+                style={{ left: mid.x - 14, top: mid.y - 14 }}
+                onMouseDown={(ev) => ev.stopPropagation()}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  removeEdge(selectedEdgeId);
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            );
+          })()}
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
-          Ctrl+scroll zoom · scroll pan · Alt+arrastar pan
+          Clique numa seta para a seleccionar · Ctrl+scroll zoom · scroll pan · Alt+arrastar pan
         </p>
       </div>
     </div>
