@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
+import { DEFAULT_AGENT_MODEL, canChangeAgentModel } from "@lib/agents/constants";
 
 export async function GET() {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("agents")
-    .select("*, agent_versions(id, version, status, published_at)")
+    .select("*")
     .order("updated_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -22,7 +23,23 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, description, system_prompt, model, skills } = body;
+  const { name, description, system_prompt, model } = body;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (model !== undefined && model !== DEFAULT_AGENT_MODEL && !canChangeAgentModel(profile?.role)) {
+    return NextResponse.json(
+      { error: "Apenas super_admin pode definir o modelo do agente" },
+      { status: 403 }
+    );
+  }
+
+  const initialModel =
+    model !== undefined && canChangeAgentModel(profile?.role) ? model : DEFAULT_AGENT_MODEL;
 
   const { data: agent, error: agentError } = await supabase
     .from("agents")
@@ -43,8 +60,8 @@ export async function POST(request: Request) {
       agent_id: agent.id,
       version: 1,
       system_prompt: system_prompt ?? "És um assistente útil do Grupo Media Capital.",
-      model: model ?? "claude-sonnet-4-20250514",
-      skills: skills ?? ["web_search", "read_document", "vision", "knowledge_search"],
+      model: initialModel,
+      skills: [],
       status: "draft",
       created_by: user.id,
     })

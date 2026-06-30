@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TEAM_SLUG="${VERCEL_TEAM_SLUG:-joaomolina1s-projects}"
-PROJECT_NAME="${VERCEL_PROJECT_NAME:-gmc}"
+PROJECT_NAME="${VERCEL_PROJECT_NAME:-gmcprototypes}"
 
 if [[ -z "${VERCEL_TOKEN:-}" ]]; then
   echo "ERROR: VERCEL_TOKEN is required"
@@ -26,6 +26,8 @@ add_env() {
 echo "→ Setting environment variables..."
 add_env NEXT_PUBLIC_SUPABASE_URL "${NEXT_PUBLIC_SUPABASE_URL:-https://wnhojvxnamxmpmdislcl.supabase.co}"
 add_env NEXT_PUBLIC_SUPABASE_ANON_KEY "${NEXT_PUBLIC_SUPABASE_ANON_KEY:?required}"
+add_env SUPABASE_URL "${SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL:-https://wnhojvxnamxmpmdislcl.supabase.co}}"
+add_env SUPABASE_ANON_KEY "${SUPABASE_ANON_KEY:-$NEXT_PUBLIC_SUPABASE_ANON_KEY}"
 add_env SUPABASE_SERVICE_ROLE_KEY "${SUPABASE_SERVICE_ROLE_KEY:?required}"
 add_env ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:?required}"
 

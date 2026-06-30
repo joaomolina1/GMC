@@ -1,6 +1,7 @@
 export interface MessageContent {
-  type: "text" | "image";
+  type: "text" | "image" | "document";
   text?: string;
+  title?: string;
   source?: { type: "base64"; media_type: string; data: string };
 }
 
@@ -15,13 +16,22 @@ export interface ToolDefinition {
   input_schema: Record<string, unknown>;
 }
 
+export type EffortLevel = "low" | "medium" | "high" | "max";
+
 export interface GenerateOptions {
   model: string;
   messages: ChatMessage[];
   system?: string;
+  /** @deprecated Prefer effort on supported models */
   temperature?: number;
+  effort?: EffortLevel;
+  thinkingEnabled?: boolean;
   maxTokens?: number;
-  tools?: ToolDefinition[];
+  maxSteps?: number;
+  /** Anthropic native server tools (e.g. web_search). */
+  nativeTools?: import("@anthropic-ai/sdk/resources/messages/messages").ToolUnion[];
+  /** Client-side tool registry for custom tool execution loop. */
+  toolRegistry?: import("@lib/agents/tool-runtime").AgentToolRegistry;
 }
 
 export interface GenerateResult {
@@ -36,18 +46,24 @@ export interface ToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  result?: string;
+  isError?: boolean;
 }
 
 export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface StreamChunk {
-  type: "text" | "tool_use" | "done";
+  type: "text" | "tool_use" | "tool_result" | "server_tool" | "done";
   text?: string;
   toolCall?: ToolCall;
+  serverToolName?: string;
   usage?: TokenUsage;
+  executedTools?: ToolCall[];
 }
 
 export interface EmbedOptions {

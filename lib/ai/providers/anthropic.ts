@@ -1,37 +1,17 @@
+import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   AIProvider,
-  ChatMessage,
   EmbedOptions,
   EmbedResult,
   GenerateOptions,
   GenerateResult,
   StreamChunk,
-  ToolCall,
   VisionOptions,
 } from "../types";
-
-function toAnthropicMessages(messages: ChatMessage[]) {
-  return messages.map((m) => {
-    if (typeof m.content === "string") {
-      return { role: m.role as "user" | "assistant", content: m.content };
-    }
-    return {
-      role: m.role as "user" | "assistant",
-      content: m.content.map((block) => {
-        if (block.type === "text") return { type: "text" as const, text: block.text! };
-        return {
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: block.source!.media_type as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-            data: block.source!.data,
-          },
-        };
-      }),
-    };
-  });
-}
+import { buildAnthropicRequestExtras } from "../anthropic-params";
+import { runAgenticGenerate, runAgenticStream } from "../agentic-loop";
+import { getModelMaxTokens } from "../model-limits";
 
 export class AnthropicProvider implements AIProvider {
   name = "anthropic";
@@ -42,106 +22,74 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
-    const response = await this.client.messages.create({
-      model: options.model,
-      max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature ?? 0.7,
-      system: options.system,
-      messages: toAnthropicMessages(options.messages),
-      tools: options.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-      })),
+    const requestExtras = buildAnthropicRequestExtras(options);
+    const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model);
+
+    const result = await runAgenticGenerate({
+      ...options,
+      client: this.client,
+      maxTokens,
+      registry: options.toolRegistry,
+      maxSteps: options.maxSteps,
+      requestExtras,
     });
 
-    let content = "";
-    const toolCalls: ToolCall[] = [];
-
-    for (const block of response.content) {
-      if (block.type === "text") content += block.text;
-      if (block.type === "tool_use") {
-        toolCalls.push({
-          id: block.id,
-          name: block.name,
-          input: block.input as Record<string, unknown>,
-        });
-      }
-    }
-
     return {
-      content,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
-      },
-      model: response.model,
-      stopReason: response.stop_reason ?? undefined,
+      content: result.content,
+      toolCalls: result.executedTools.length
+        ? result.executedTools.map((t) => ({
+            id: t.id,
+            name: t.name,
+            input: t.input,
+            result: t.result,
+            isError: t.isError,
+          }))
+        : result.toolCalls,
+      usage: result.usage,
+      model: result.model,
+      stopReason: result.stopReason,
     };
   }
 
   async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
-    const stream = await this.client.messages.create({
-      model: options.model,
-      max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature ?? 0.7,
-      system: options.system,
-      messages: toAnthropicMessages(options.messages),
-      tools: options.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-      })),
-      stream: true,
-    });
+    const requestExtras = buildAnthropicRequestExtras(options);
+    const maxTokens = options.maxTokens ?? getModelMaxTokens(options.model);
 
-    let currentTool: Partial<ToolCall> | null = null;
-    let toolInputJson = "";
-
-    for await (const event of stream) {
-      if (event.type === "content_block_delta") {
-        if (event.delta.type === "text_delta") {
-          yield { type: "text", text: event.delta.text };
-        }
-        if (event.delta.type === "input_json_delta") {
-          toolInputJson += event.delta.partial_json;
-        }
-      }
-      if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
-        currentTool = { id: event.content_block.id, name: event.content_block.name };
-        toolInputJson = "";
-      }
-      if (event.type === "content_block_stop" && currentTool) {
-        yield {
-          type: "tool_use",
-          toolCall: {
-            id: currentTool.id!,
-            name: currentTool.name!,
-            input: JSON.parse(toolInputJson || "{}"),
-          },
-        };
-        currentTool = null;
-      }
-      if (event.type === "message_delta" && event.usage) {
+    for await (const chunk of runAgenticStream({
+      ...options,
+      client: this.client,
+      maxTokens,
+      registry: options.toolRegistry,
+      maxSteps: options.maxSteps,
+      requestExtras,
+    })) {
+      if (chunk.type === "done") {
         yield {
           type: "done",
-          usage: {
-            promptTokens: event.usage.output_tokens,
-            completionTokens: event.usage.output_tokens,
-          },
+          usage: chunk.usage,
+          executedTools: chunk.executedTools?.map((t) => ({
+            id: t.id,
+            name: t.name,
+            input: t.input,
+            result: t.result,
+            isError: t.isError,
+          })),
         };
+        return;
       }
+      yield chunk;
     }
-    yield { type: "done" };
   }
 
   async embed(options: EmbedOptions): Promise<EmbedResult> {
-    // Anthropic doesn't have embeddings — use Voyage via simple hash fallback for Phase 1
+    const { getVoyageProvider, pseudoEmbedding } = await import("./voyage");
+    const voyage = getVoyageProvider();
+    if (voyage.isConfigured) {
+      return voyage.embed(options);
+    }
     const inputs = Array.isArray(options.input) ? options.input : [options.input];
-    const embeddings = inputs.map((text) => simpleEmbedding(text, 1536));
     return {
-      embeddings,
+      embeddings: inputs.map((text) => pseudoEmbedding(text, 1536)),
       usage: { totalTokens: inputs.join("").length / 4 },
     };
   }
@@ -149,7 +97,7 @@ export class AnthropicProvider implements AIProvider {
   async vision(options: VisionOptions): Promise<GenerateResult> {
     return this.generate({
       model: options.model,
-      maxTokens: options.maxTokens ?? 4096,
+      maxTokens: options.maxTokens ?? getModelMaxTokens(options.model),
       messages: [
         {
           role: "user",
@@ -168,15 +116,4 @@ export class AnthropicProvider implements AIProvider {
       ],
     });
   }
-}
-
-/** Deterministic pseudo-embedding for Phase 1 when no embedding API is configured */
-function simpleEmbedding(text: string, dims: number): number[] {
-  const vec = new Array(dims).fill(0);
-  for (let i = 0; i < text.length; i++) {
-    const idx = (text.charCodeAt(i) * (i + 1)) % dims;
-    vec[idx] += Math.sin(text.charCodeAt(i) * 0.1);
-  }
-  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
-  return vec.map((v) => v / norm);
 }

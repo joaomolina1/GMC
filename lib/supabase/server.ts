@@ -1,12 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getSupabaseEnv } from "./env";
+
+export function getServiceRoleKey(): string | undefined {
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    process.env.SUPABASE_SECRET_KEY?.trim() ||
+    undefined
+  );
+}
 
 export async function createClient() {
   const cookieStore = await cookies();
+  const { url, anonKey } = getSupabaseEnv();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -28,11 +38,23 @@ export async function createClient() {
 
 export async function createServiceClient() {
   const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const { url } = getSupabaseEnv();
+  const serviceRoleKey = getServiceRoleKey();
+  if (!serviceRoleKey) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createSupabaseClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Returns null when SUPABASE_SERVICE_ROLE_KEY is not configured. */
+export async function tryCreateServiceClient() {
+  try {
+    return await createServiceClient();
+  } catch {
+    return null;
+  }
 }
 
 export async function getUser() {
