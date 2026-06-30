@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
+import { canChangeAgentModel } from "@lib/agents/constants";
 
 export async function GET(
   _request: Request,
@@ -18,7 +19,19 @@ export async function GET(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
-  return NextResponse.json(data);
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  return NextResponse.json({
+    ...data,
+    permissions: {
+      canChangeModel: canChangeAgentModel(profile?.role),
+    },
+  });
 }
 
 export async function PATCH(

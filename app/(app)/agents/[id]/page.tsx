@@ -30,6 +30,7 @@ import { AgentChatPanel } from "@/_components/AgentChatPanel";
 import { cn } from "@lib/utils";
 import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
+import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
 import { TOOL_CREATE_DOCUMENTS } from "@lib/agents/agent-tools";
 import { MARKETPLACE_CATEGORIES } from "@lib/marketplace/constants";
 
@@ -158,7 +159,8 @@ export default function AgentBuilderPage() {
   const [category, setCategory] = useState("geral");
   const [tagsInput, setTagsInput] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [model, setModel] = useState(DEFAULT_AGENT_MODEL);
+  const [canChangeModel, setCanChangeModel] = useState(false);
   const [availableModels, setAvailableModels] = useState<
     Array<{ id: string; display_name: string; status?: string }>
   >([]);
@@ -226,6 +228,7 @@ export default function AgentBuilderPage() {
     const data = await res.json();
     if (!res.ok || !data?.id) return;
     setAgent(data);
+    setCanChangeModel(Boolean(data.permissions?.canChangeModel));
     setName(data.name ?? "");
     setDescription(data.description ?? "");
     setVisibility(data.visibility ?? "private");
@@ -262,7 +265,8 @@ export default function AgentBuilderPage() {
   }, [id, loadAgent, loadDocs, loadSkillPackages, loadMcpConnections]);
 
   useEffect(() => {
-    fetch("/api/models")
+    const modelsUrl = canChangeModel ? "/api/models?all=true&includeRetired=true" : "/api/models";
+    fetch(modelsUrl)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -291,7 +295,7 @@ export default function AgentBuilderPage() {
           setSkillStatuses(map);
         }
       });
-  }, []);
+  }, [canChangeModel]);
 
   async function saveNewVersion() {
     setSaving(true);
@@ -521,16 +525,26 @@ export default function AgentBuilderPage() {
       <div className="flex min-h-0 flex-1 divide-x divide-line">
         <div className="flex w-[min(44%,520px)] shrink-0 flex-col">
           <div className="grid shrink-0 grid-cols-1 gap-2 border-b border-line p-3 sm:grid-cols-3">
-            <Select label="Modelo" value={model} onChange={(e) => setModel(e.target.value)}>
+            <Select
+              label="Modelo"
+              value={model}
+              disabled={!canChangeModel}
+              onChange={(e) => setModel(e.target.value)}
+            >
               {(availableModels.length > 0
                 ? availableModels
-                : [{ id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6" }]
+                : [{ id: DEFAULT_AGENT_MODEL, display_name: "Claude 3.5 Haiku" }]
               ).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.display_name}
                 </option>
               ))}
             </Select>
+            {!canChangeModel && (
+              <p className="col-span-full text-[11px] text-slate-500">
+                O modelo é gerido pela plataforma. Apenas super_admin pode alterá-lo.
+              </p>
+            )}
             <Select label="Esforço" value={effort} onChange={(e) => setEffort(e.target.value as EffortLevel)}>
               {effortOptions.map((level) => (
                 <option key={level} value={level}>
