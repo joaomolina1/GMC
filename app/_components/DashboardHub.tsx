@@ -7,7 +7,6 @@ import {
   Plus,
   Bot,
   MessageSquare,
-  Settings2,
   Search,
   Store,
   Sparkles,
@@ -303,15 +302,9 @@ export function DashboardHub({ firstName }: { firstName: string }) {
                 </p>
                 <div className="mt-4 flex gap-2 border-t border-line pt-4">
                   <Link href={`/agents/${agent.id}`} className="flex-1">
-                    <Button variant="outline" size="sm" className="w-full">
-                      <Settings2 size={15} />
-                      Editar
-                    </Button>
-                  </Link>
-                  <Link href={`/agents/${agent.id}/chat`} className="flex-1">
                     <Button size="sm" className="w-full">
                       <MessageSquare size={15} />
-                      Chat
+                      Abrir
                     </Button>
                   </Link>
                 </div>

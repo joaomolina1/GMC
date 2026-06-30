@@ -22,6 +22,18 @@ interface AgentChatPanelProps {
   agentName?: string;
   className?: string;
   compact?: boolean;
+  conversationId?: string;
+  onConversationIdChange?: (conversationId: string | undefined) => void;
+  onConversationActivity?: () => void;
+}
+
+function mapGeneratedFiles(raw: unknown): GeneratedFileView[] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const obj = raw as { generated_files?: GeneratedFileView[] };
+  if (!Array.isArray(obj.generated_files) || obj.generated_files.length === 0) {
+    return undefined;
+  }
+  return obj.generated_files;
 }
 
 export function AgentChatPanel({
@@ -29,27 +41,98 @@ export function AgentChatPanel({
   agentName = "Agente",
   className,
   compact = false,
+  conversationId: controlledConversationId,
+  onConversationIdChange,
+  onConversationActivity,
 }: AgentChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [conversationId, setConversationId] = useState<string>();
+  const [internalConversationId, setInternalConversationId] = useState<string>();
+  const [loadingConversation, setLoadingConversation] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [attachments, setAttachments] = useState<
     Array<{ storage_path: string; filename: string; mime: string; kind: string }>
   >([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const loadSeqRef = useRef(0);
+  const skipLoadForIdRef = useRef<string | null>(null);
+
+  const conversationId = controlledConversationId ?? internalConversationId;
+
+  function setConversationId(next: string | undefined) {
+    setInternalConversationId(next);
+    onConversationIdChange?.(next);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loadingConversation]);
 
-  function clearConversation() {
+  useEffect(() => {
+    if (controlledConversationId === undefined && internalConversationId !== undefined) {
+      return;
+    }
+
+    const seq = ++loadSeqRef.current;
+
+    if (!controlledConversationId) {
+      setMessages([]);
+      setInput("");
+      setAttachments([]);
+      setInternalConversationId(undefined);
+      return;
+    }
+
+    if (skipLoadForIdRef.current === controlledConversationId) {
+      skipLoadForIdRef.current = null;
+      setInternalConversationId(controlledConversationId);
+      return;
+    }
+
+    async function loadConversation(id: string) {
+      setLoadingConversation(true);
+      try {
+        const res = await fetch(`/api/conversations/${id}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Falha ao carregar conversa");
+        if (seq !== loadSeqRef.current) return;
+
+        const loaded: Message[] = (data.messages ?? [])
+          .filter((m: { role: string }) => m.role === "user" || m.role === "assistant")
+          .map((m: { role: "user" | "assistant"; text: string; raw_content: unknown }) => ({
+            role: m.role,
+            content: m.text,
+            files: mapGeneratedFiles(m.raw_content),
+          }));
+
+        setMessages(loaded);
+        setInternalConversationId(id);
+        setInput("");
+        setAttachments([]);
+      } catch {
+        if (seq !== loadSeqRef.current) return;
+        setMessages([]);
+        setConversationId(undefined);
+      } finally {
+        if (seq === loadSeqRef.current) setLoadingConversation(false);
+      }
+    }
+
+    void loadConversation(controlledConversationId);
+  }, [controlledConversationId]);
+
+  function startNewConversation() {
     if (streaming) return;
-    if (messages.length > 0 && !window.confirm("Limpar esta conversa de teste?")) return;
     setMessages([]);
     setConversationId(undefined);
     setInput("");
     setAttachments([]);
+  }
+
+  function clearConversation() {
+    if (streaming) return;
+    if (messages.length > 0 && !window.confirm("Iniciar nova conversa?")) return;
+    startNewConversation();
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -64,7 +147,7 @@ export function AgentChatPanel({
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || streaming) return;
+    if (!input.trim() || streaming || loadingConversation) return;
 
     const userMsg = input.trim();
     const currentAttachments = [...attachments];
@@ -145,7 +228,9 @@ export function AgentChatPanel({
             });
           }
           if (data.type === "done" && data.conversationId) {
+            skipLoadForIdRef.current = data.conversationId;
             setConversationId(data.conversationId);
+            onConversationActivity?.();
           }
           if (data.type === "server_tool") {
             const label =
@@ -238,9 +323,11 @@ export function AgentChatPanel({
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-slate-900">{agentName}</h3>
             <p className="text-[11px] text-slate-400">
-              {messages.length === 0
-                ? "Playground de teste"
-                : `${messages.length} mensagem${messages.length !== 1 ? "s" : ""}`}
+              {loadingConversation
+                ? "A carregar conversa…"
+                : messages.length === 0
+                  ? "Nova conversa"
+                  : `${messages.length} mensagem${messages.length !== 1 ? "s" : ""}`}
             </p>
           </div>
         </div>
@@ -249,28 +336,37 @@ export function AgentChatPanel({
           variant="outline"
           size="sm"
           onClick={clearConversation}
-          disabled={streaming || messages.length === 0}
+          disabled={streaming || loadingConversation || messages.length === 0}
           className="shrink-0"
-          title="Limpar conversa"
+          title="Nova conversa"
         >
           <Eraser size={14} />
-          {!compact && "Limpar"}
+          {!compact && "Nova"}
         </Button>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-white to-slate-50/80 shadow-sm">
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
-          {messages.length === 0 && (
+          {loadingConversation ? (
+            <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-center">
+              <span className="inline-flex items-center gap-1.5 text-slate-400">
+                <span className="h-2 w-2 animate-bounce rounded-full bg-brand-400 [animation-delay:-0.3s]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-brand-400 [animation-delay:-0.15s]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-brand-400" />
+                <span className="ml-1 text-xs">A carregar histórico…</span>
+              </span>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-md">
                 <Sparkles size={26} />
               </span>
               <h3 className="mt-4 text-base font-semibold text-slate-900">
-                Teste o agente aqui
+                Converse com o agente
               </h3>
               <p className="mt-1 max-w-sm text-sm text-slate-500">
-                Edite o system prompt à esquerda e converse para validar o comportamento. Guarde
-                antes de testar alterações importantes.
+                Edite o system prompt à esquerda e teste aqui. As conversas ficam guardadas no
+                histórico (expurgo automático após 60 dias).
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {suggestions.map((s) => (
@@ -285,7 +381,7 @@ export function AgentChatPanel({
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           {messages.map((msg, i) => {
             const isStreamingEmpty =
@@ -398,11 +494,11 @@ export function AgentChatPanel({
             placeholder="Escreve uma mensagem… (Enter para enviar, Shift+Enter para nova linha)"
             rows={1}
             className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm leading-relaxed focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
-            disabled={streaming}
+            disabled={streaming || loadingConversation}
           />
           <Button
             type="submit"
-            disabled={streaming || !input.trim()}
+            disabled={streaming || loadingConversation || !input.trim()}
             className="h-10 w-10 shrink-0 p-0"
           >
             <Send size={16} />

@@ -176,7 +176,7 @@ export default function MarketplaceDetailPage() {
           </Card>
 
           <Card className="space-y-3">
-            <Link href={`/agents/${agent.id}/chat`}>
+            <Link href={`/agents/${agent.id}`}>
               <Button className="w-full">
                 <MessageSquare size={16} />
                 Experimentar

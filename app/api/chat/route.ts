@@ -77,6 +77,11 @@ export async function POST(request: Request) {
       .select("id")
       .single();
     convId = conv?.id;
+  } else {
+    await supabase
+      .from("conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", convId);
   }
 
   await supabase.from("messages").insert({
@@ -203,6 +208,11 @@ export async function POST(request: Request) {
           model: version.model,
           cost_eur: finalCost,
         });
+
+        await supabase
+          .from("conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", convId);
 
         await logUsage(supabase, {
           userId: user.id,

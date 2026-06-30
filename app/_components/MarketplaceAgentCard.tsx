@@ -116,7 +116,7 @@ export function MarketplaceAgentCard({
       </div>
 
       <div className="mt-4 flex items-center gap-2 border-t border-line pt-4">
-        <Link href={`/agents/${agent.id}/chat`} className="flex-1">
+        <Link href={`/agents/${agent.id}`} className="flex-1">
           <Button variant="outline" size="sm" className="w-full">
             <MessageSquare size={15} />
             Experimentar

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Save,
   Upload,
@@ -27,6 +27,7 @@ import { Card } from "@/_design_system/Card";
 import { Input, Textarea, Select } from "@/_design_system/Input";
 import { Badge } from "@/_design_system/Badge";
 import { AgentChatPanel } from "@/_components/AgentChatPanel";
+import { ConversationHistorySidebar } from "@/_components/ConversationHistorySidebar";
 import { cn } from "@lib/utils";
 import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
@@ -148,8 +149,26 @@ const docTone: Record<string, "success" | "warning" | "danger"> = {
 };
 
 export default function AgentBuilderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <div className="h-8 w-48 animate-pulse rounded bg-slate-100" />
+          <Card className="h-64 animate-pulse" />
+        </div>
+      }
+    >
+      <AgentBuilderWorkspace />
+    </Suspense>
+  );
+}
+
+function AgentBuilderWorkspace() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const conversationId = searchParams.get("c") ?? undefined;
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [tab, setTab] = useState<Tab>("general");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -496,6 +515,17 @@ export default function AgentBuilderPage() {
   const effortOptions: EffortLevel[] =
     model.includes("opus") ? ["low", "medium", "high", "max"] : ["low", "medium", "high"];
 
+  const setActiveConversation = useCallback(
+    (nextId: string | undefined) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextId) params.set("c", nextId);
+      else params.delete("c");
+      const qs = params.toString();
+      router.replace(qs ? `/agents/${id}?${qs}` : `/agents/${id}`, { scroll: false });
+    },
+    [id, router, searchParams]
+  );
+
   return (
     <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line pb-3">
@@ -688,8 +718,24 @@ export default function AgentBuilderPage() {
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col p-3">
-          <AgentChatPanel agentId={id} agentName={name} compact className="h-full" />
+        <div className="flex min-w-0 flex-1 divide-x divide-line">
+          <ConversationHistorySidebar
+            agentId={id}
+            activeConversationId={conversationId}
+            onSelect={setActiveConversation}
+            refreshKey={historyRefresh}
+          />
+          <div className="flex min-w-0 flex-1 flex-col p-3">
+            <AgentChatPanel
+              agentId={id}
+              agentName={name}
+              compact
+              className="h-full"
+              conversationId={conversationId}
+              onConversationIdChange={setActiveConversation}
+              onConversationActivity={() => setHistoryRefresh((n) => n + 1)}
+            />
+          </div>
         </div>
       </div>
     </div>
