@@ -96,6 +96,8 @@ export default function AdminPage() {
   const [creatingKey, setCreatingKey] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [roleUpdateError, setRoleUpdateError] = useState<string | null>(null);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 
   async function loadRoles() {
     const res = await fetch("/api/admin/roles");
@@ -161,12 +163,36 @@ export default function AdminPage() {
   }, [tab]);
 
   async function updateRole(userId: string, role: string) {
-    await fetch("/api/admin/users", {
+    const previousRole = users.find((u) => u.id === userId)?.role;
+    if (previousRole === role) return;
+
+    setRoleUpdateError(null);
+    setUpdatingUserId(userId);
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+
+    const res = await fetch("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, role }),
     });
-    await loadAll();
+
+    setUpdatingUserId(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const message =
+        typeof body.error === "string" ? body.error : "Não foi possível atualizar o role";
+      setRoleUpdateError(message);
+      if (previousRole) {
+        setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: previousRole } : u)));
+      }
+      return;
+    }
+
+    const updated = await res.json();
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, ...updated, role: updated.role ?? role } : u))
+    );
   }
 
   async function saveRolePolicy(policy: RolePolicy) {
@@ -371,6 +397,11 @@ export default function AdminPage() {
             <CardHeader>
               <CardTitle>Utilizadores e roles</CardTitle>
             </CardHeader>
+            {roleUpdateError && (
+              <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {roleUpdateError}
+              </p>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -394,6 +425,7 @@ export default function AdminPage() {
                       <Select
                         value={u.role}
                         onChange={(e) => updateRole(u.id, e.target.value)}
+                        disabled={updatingUserId === u.id}
                         className="min-h-9 min-w-[9.5rem] py-1.5 text-xs leading-normal"
                       >
                         <option value="user">user</option>
