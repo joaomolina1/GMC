@@ -394,7 +394,7 @@ export default function AdminPage() {
                       <Select
                         value={u.role}
                         onChange={(e) => updateRole(u.id, e.target.value)}
-                        className="h-8 min-w-[120px] text-xs"
+                        className="min-h-9 min-w-[9.5rem] py-1.5 text-xs leading-normal"
                       >
                         <option value="user">user</option>
                         <option value="power_user">power_user</option>
