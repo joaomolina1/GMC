@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2, GripVertical, Check, Loader2, Minus, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { cn } from "@lib/utils";
 import { FLOW_NODE_TYPES } from "@lib/flows/constants";
@@ -27,6 +27,8 @@ const CANVAS_H = 1600;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 2;
 const DEFAULT_ZOOM = 1;
+
+const EDGE_HIT_WIDTH = 20;
 
 type PortSide = "in" | "out-true" | "out-false" | "out";
 
@@ -264,14 +266,47 @@ export function FlowCanvas({
     panStart.current = null;
   };
 
-  const onWheel = (e: React.WheelEvent) => {
-    if (!canvasRef.current) return;
-    if (e.ctrlKey || e.metaKey) {
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const onWheelNative = (e: WheelEvent) => {
       e.preventDefault();
-      const rect = canvasRef.current.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const delta = e.deltaY > 0 ? -0.08 : 0.08;
+
+      // Shift+scroll = pan; roda do rato ou pinch (ctrl) = zoom
+      const wantsPan = e.shiftKey && !e.ctrlKey && !e.metaKey;
+      if (wantsPan) {
+        setViewport((v) => ({
+          ...v,
+          panX: v.panX - e.deltaX,
+          panY: v.panY - e.deltaY,
+        }));
+        return;
+      }
+
+      const pinchZoom = e.ctrlKey || e.metaKey;
+      const mouseWheelZoom =
+        !pinchZoom &&
+        (e.deltaMode === 1 || (e.deltaMode === 0 && Math.abs(e.deltaY) >= 48));
+      const shouldZoom = pinchZoom || mouseWheelZoom;
+
+      if (!shouldZoom) {
+        setViewport((v) => ({
+          ...v,
+          panX: v.panX - e.deltaX,
+          panY: v.panY - e.deltaY,
+        }));
+        return;
+      }
+
+      const delta = pinchZoom
+        ? e.deltaY > 0
+          ? -0.08
+          : 0.08
+        : -e.deltaY * 0.002;
       setViewport((v) => {
         const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta));
         const scale = nextZoom / v.zoom;
@@ -281,14 +316,25 @@ export function FlowCanvas({
           panY: my - (my - v.panY) * scale,
         };
       });
-      return;
-    }
-    setViewport((v) => ({
-      ...v,
-      panX: v.panX - e.deltaX,
-      panY: v.panY - e.deltaY,
-    }));
-  };
+    };
+
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelNative);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!selectedEdgeId) return;
+      e.preventDefault();
+      onChange({ ...graph, edges: graph.edges.filter((edge) => edge.id !== selectedEdgeId) });
+      setSelectedEdgeId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedEdgeId, graph, onChange]);
 
   const hasInputPort = (type: FlowNodeType) => type !== "trigger";
   const hasOutputPort = (type: FlowNodeType) => type !== "output";
@@ -346,17 +392,17 @@ export function FlowCanvas({
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        onWheel={onWheel}
         onMouseDown={(e) => {
           if (e.button === 1 || (e.button === 0 && e.altKey)) {
             e.preventDefault();
             setIsPanning(true);
             panStart.current = { x: e.clientX, y: e.clientY, panX: viewport.panX, panY: viewport.panY };
+            return;
           }
-        }}
-        onClick={() => {
-          setSelectedEdgeId(null);
-          onSelectNode(null);
+          if (e.button === 0 && e.target === e.currentTarget) {
+            setSelectedEdgeId(null);
+            onSelectNode(null);
+          }
         }}
       >
         <div
@@ -366,8 +412,15 @@ export function FlowCanvas({
             height: CANVAS_H,
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            if (e.target === e.currentTarget) {
+              setSelectedEdgeId(null);
+              onSelectNode(null);
+            }
+          }}
         >
-          {/* Edges below nodes — empty SVG areas pass clicks through to the canvas */}
+          {/* Visual edges */}
           <svg
             className="pointer-events-none absolute left-0 top-0"
             width={CANVAS_W}
@@ -388,33 +441,20 @@ export function FlowCanvas({
               const path = edgePath(sp.x, sp.y, tp.x, tp.y);
               const selected = selectedEdgeId === edge.id;
               return (
-                <g key={edge.id}>
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth={18 / viewport.zoom}
-                    className="pointer-events-stroke cursor-pointer"
-                    onMouseDown={(ev) => ev.stopPropagation()}
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      selectEdge(edge.id);
-                    }}
-                  />
+                <g key={`vis-${edge.id}`}>
                   <path
                     d={path}
                     fill="none"
                     stroke={selected ? "#0066b3" : "#64748b"}
                     strokeWidth={(selected ? 3 : 2) / viewport.zoom}
                     markerEnd={selected ? "url(#flow-arrow-selected)" : "url(#flow-arrow)"}
-                    className="pointer-events-none"
                   />
                   {edge.data?.branch && (
                     <text
                       x={(sp.x + tp.x) / 2}
                       y={(sp.y + tp.y) / 2 - 8}
                       textAnchor="middle"
-                      className="pointer-events-none fill-amber-700 text-[10px] font-semibold"
+                      className="fill-amber-700 text-[10px] font-semibold"
                     >
                       {edge.data.branch}
                     </text>
@@ -440,7 +480,6 @@ export function FlowCanvas({
                   stroke="#0066b3"
                   strokeWidth={2 / viewport.zoom}
                   strokeDasharray="6 4"
-                  className="pointer-events-none"
                 />
               );
             })()}
@@ -454,10 +493,17 @@ export function FlowCanvas({
             </defs>
           </svg>
 
-          {/* Nodes above edges — container is transparent to clicks except on node boxes */}
+          {/* Nodes */}
           <div
             className="pointer-events-none relative"
             style={{ width: CANVAS_W, height: CANVAS_H }}
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              if (e.target === e.currentTarget) {
+                setSelectedEdgeId(null);
+                onSelectNode(null);
+              }
+            }}
           >
             {graph.nodes.map((node) => {
               const meta = nodeMeta(node.type);
@@ -505,45 +551,6 @@ export function FlowCanvas({
                     setSelectedEdgeId(null);
                   }}
                 >
-                  {hasInputPort(node.type) && (
-                    <button
-                      type="button"
-                      data-port="in"
-                      title="Entrada"
-                      className={cn(
-                        "absolute left-0 top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:bg-brand-500",
-                        connectionDrag && "bg-brand-500"
-                      )}
-                      onMouseUp={(ev) => completeConnection(ev, node.id)}
-                    />
-                  )}
-                  {hasOutputPort(node.type) &&
-                    (isCondition(node.type) ? (
-                      <>
-                        <button
-                          type="button"
-                          data-port="out-true"
-                          title="Saída verdadeiro"
-                          className="absolute right-0 top-[30%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow"
-                          onMouseDown={(ev) => startConnection(ev, node.id, "true")}
-                        />
-                        <button
-                          type="button"
-                          data-port="out-false"
-                          title="Saída falso"
-                          className="absolute right-0 top-[70%] z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow"
-                          onMouseDown={(ev) => startConnection(ev, node.id, "false")}
-                        />
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        data-port="out"
-                        title="Saída"
-                        className="absolute right-0 top-1/2 z-10 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow"
-                        onMouseDown={(ev) => startConnection(ev, node.id)}
-                      />
-                    ))}
                   <div className="flex cursor-grab items-start gap-1 p-2.5 active:cursor-grabbing">
                     <GripVertical size={14} className="mt-0.5 shrink-0 text-slate-300" />
                     <div className="min-w-0 flex-1">
@@ -586,6 +593,104 @@ export function FlowCanvas({
             })}
           </div>
 
+          {/* Edge hit targets above nodes */}
+          <svg
+            className="absolute left-0 top-0 z-20"
+            width={CANVAS_W}
+            height={CANVAS_H}
+            style={{ pointerEvents: "none" }}
+          >
+            {graph.edges.map((edge) => {
+              const source = graph.nodes.find((n) => n.id === edge.source);
+              const target = graph.nodes.find((n) => n.id === edge.target);
+              if (!source || !target) return null;
+              const outPort: PortSide =
+                source.type === "condition"
+                  ? edge.data?.branch === "false"
+                    ? "out-false"
+                    : "out-true"
+                  : "out";
+              const sp = portPosition(source, outPort);
+              const tp = portPosition(target, "in");
+              const path = edgePath(sp.x, sp.y, tp.x, tp.y);
+              return (
+                <path
+                  key={`hit-${edge.id}`}
+                  data-edge-hit
+                  d={path}
+                  fill="none"
+                  stroke="rgba(0,0,0,0.001)"
+                  strokeWidth={EDGE_HIT_WIDTH / viewport.zoom}
+                  style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                  onMouseDown={(ev) => {
+                    ev.stopPropagation();
+                    selectEdge(edge.id);
+                  }}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Ports above edge hits */}
+          <div
+            className="pointer-events-none absolute left-0 top-0 z-30"
+            style={{ width: CANVAS_W, height: CANVAS_H }}
+          >
+            {graph.nodes.map((node) => (
+              <div
+                key={`ports-${node.id}`}
+                className="pointer-events-none absolute"
+                style={{
+                  left: node.position.x,
+                  top: node.position.y,
+                  width: NODE_W,
+                  minHeight: NODE_H,
+                }}
+              >
+                {hasInputPort(node.type) && (
+                  <button
+                    type="button"
+                    data-port="in"
+                    title="Entrada"
+                    className={cn(
+                      "pointer-events-auto absolute left-0 top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:bg-brand-500",
+                      connectionDrag && "bg-brand-500"
+                    )}
+                    onMouseDown={(ev) => ev.stopPropagation()}
+                    onMouseUp={(ev) => completeConnection(ev, node.id)}
+                  />
+                )}
+                {hasOutputPort(node.type) &&
+                  (isCondition(node.type) ? (
+                    <>
+                      <button
+                        type="button"
+                        data-port="out-true"
+                        title="Saída verdadeiro"
+                        className="pointer-events-auto absolute right-0 top-[30%] z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow"
+                        onMouseDown={(ev) => startConnection(ev, node.id, "true")}
+                      />
+                      <button
+                        type="button"
+                        data-port="out-false"
+                        title="Saída falso"
+                        className="pointer-events-auto absolute right-0 top-[70%] z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow"
+                        onMouseDown={(ev) => startConnection(ev, node.id, "false")}
+                      />
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      data-port="out"
+                      title="Saída"
+                      className="pointer-events-auto absolute right-0 top-1/2 z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow"
+                      onMouseDown={(ev) => startConnection(ev, node.id)}
+                    />
+                  ))}
+              </div>
+            ))}
+          </div>
+
           {selectedEdgeId && (() => {
             const edge = graph.edges.find((e) => e.id === selectedEdgeId);
             if (!edge) return null;
@@ -597,8 +702,8 @@ export function FlowCanvas({
               <button
                 type="button"
                 title="Apagar ligação"
-                className="pointer-events-auto absolute z-20 flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md hover:border-rose-300 hover:bg-rose-50"
-                style={{ left: mid.x - 14, top: mid.y - 14 }}
+                className="pointer-events-auto absolute z-40 flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-500 shadow-md hover:border-rose-300 hover:bg-rose-50"
+                style={{ left: mid.x - 16, top: mid.y - 16 }}
                 onMouseDown={(ev) => ev.stopPropagation()}
                 onClick={(ev) => {
                   ev.stopPropagation();
@@ -611,7 +716,7 @@ export function FlowCanvas({
           })()}
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
-          Clique numa seta para a seleccionar · Ctrl+scroll zoom · scroll pan · Alt+arrastar pan
+          Clique na ligação para seleccionar · Delete para apagar · Roda do rato zoom · Scroll trackpad pan · Alt+arrastar pan
         </p>
       </div>
     </div>
