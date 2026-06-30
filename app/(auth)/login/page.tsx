@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
+  const [signupEmailSent, setSignupEmailSent] = useState<string | null>(null);
   const entraEnabled = isEntraConfigured();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,13 +34,23 @@ export default function LoginPage() {
             "Registo restrito a domínios corporativos autorizados. Use o SSO Microsoft ou contacte o administrador."
           );
         }
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName } },
         });
         if (error) throw error;
-        router.push("/");
+
+        if (data.session) {
+          router.push("/");
+          router.refresh();
+          return;
+        }
+
+        setSignupEmailSent(email.trim());
+        setPassword("");
+        setFullName("");
+        return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -124,14 +135,47 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-2xl font-bold text-slate-900">
-            {isSignUp ? "Criar conta" : "Bem-vindo de volta"}
+            {signupEmailSent
+              ? "Confirme o seu email"
+              : isSignUp
+                ? "Criar conta"
+                : "Bem-vindo de volta"}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            {isSignUp
-              ? "Registe-se para começar a usar a plataforma."
-              : "Inicie sessão para aceder aos seus agentes."}
+            {signupEmailSent
+              ? "Falta apenas um passo para activar a sua conta."
+              : isSignUp
+                ? "Registe-se para começar a usar a plataforma."
+                : "Inicie sessão para aceder aos seus agentes."}
           </p>
 
+          {signupEmailSent ? (
+            <div className="mt-8 space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
+                <p className="font-medium">Email de confirmação enviado</p>
+                <p className="mt-2 leading-relaxed text-emerald-800">
+                  Enviámos um email para{" "}
+                  <span className="font-semibold">{signupEmailSent}</span> para confirmar a sua
+                  conta. Abra a mensagem e clique no link de confirmação antes de iniciar sessão.
+                </p>
+                <p className="mt-2 text-emerald-700">
+                  Se não encontrar o email, verifique a pasta de spam ou lixo.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={() => {
+                  setSignupEmailSent(null);
+                  setIsSignUp(false);
+                  setError("");
+                }}
+              >
+                Ir para login
+              </Button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             {isSignUp && (
               <Input
@@ -169,8 +213,9 @@ export default function LoginPage() {
               {loading ? "A processar..." : isSignUp ? "Registar" : "Entrar"}
             </Button>
           </form>
+          )}
 
-          {entraEnabled && !isSignUp && (
+          {!signupEmailSent && entraEnabled && !isSignUp && (
             <>
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
@@ -193,16 +238,22 @@ export default function LoginPage() {
             </>
           )}
 
+          {!signupEmailSent && (
           <p className="mt-6 text-center text-sm text-slate-500">
             {isSignUp ? "Já tem conta?" : "Não tem conta?"}{" "}
             <button
               type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setSignupEmailSent(null);
+                setError("");
+              }}
               className="font-semibold text-brand-600 hover:text-brand-700 hover:underline"
             >
               {isSignUp ? "Entrar" : "Registar"}
             </button>
           </p>
+          )}
         </div>
       </div>
     </div>
