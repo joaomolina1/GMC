@@ -38,6 +38,19 @@ interface Viewport {
   zoom: number;
 }
 
+const DEFAULT_VIEWPORT: Viewport = { panX: 40, panY: 40, zoom: DEFAULT_ZOOM };
+
+function normalizeViewport(viewport: Viewport | null | undefined): Viewport {
+  if (!viewport || typeof viewport.panX !== "number" || typeof viewport.panY !== "number") {
+    return DEFAULT_VIEWPORT;
+  }
+  const zoom =
+    typeof viewport.zoom === "number" && Number.isFinite(viewport.zoom)
+      ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewport.zoom))
+      : DEFAULT_ZOOM;
+  return { panX: viewport.panX, panY: viewport.panY, zoom };
+}
+
 interface ConnectionDrag {
   sourceId: string;
   branch?: "true" | "false";
@@ -94,7 +107,17 @@ export function FlowCanvas({
   nodeExecutionState = {},
 }: FlowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<Viewport>({ panX: 40, panY: 40, zoom: DEFAULT_ZOOM });
+  const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+
+  const updateViewport = useCallback((updater: Viewport | ((prev: Viewport) => Viewport)) => {
+    setViewport((prev) => {
+      const base = normalizeViewport(prev);
+      const next = typeof updater === "function" ? updater(base) : updater;
+      return normalizeViewport(next);
+    });
+  }, []);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
   const [dragging, setDragging] = useState<{
@@ -109,7 +132,7 @@ export function FlowCanvas({
 
   const fitView = useCallback(() => {
     if (!canvasRef.current || graph.nodes.length === 0) {
-      setViewport({ panX: 40, panY: 40, zoom: DEFAULT_ZOOM });
+      updateViewport(DEFAULT_VIEWPORT);
       return;
     }
     const rect = canvasRef.current.getBoundingClientRect();
@@ -123,19 +146,19 @@ export function FlowCanvas({
     const contentW = maxX - minX + pad * 2;
     const contentH = maxY - minY + pad * 2;
     const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(rect.width / contentW, rect.height / contentH)));
-    setViewport({
+    updateViewport({
       zoom,
       panX: (rect.width - contentW * zoom) / 2 - minX * zoom + pad * zoom,
       panY: (rect.height - contentH * zoom) / 2 - minY * zoom + pad * zoom,
     });
-  }, [graph.nodes]);
+  }, [graph.nodes, updateViewport]);
 
   const zoomBy = (delta: number) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const cx = rect.width / 2;
     const cy = rect.height / 2;
-    setViewport((v) => {
+    updateViewport((v) => {
       const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta));
       const scale = nextZoom / v.zoom;
       return {
@@ -208,7 +231,7 @@ export function FlowCanvas({
     e.preventDefault();
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
+    const pos = screenToCanvas(e.clientX, e.clientY, rect, viewportRef.current);
     setConnectionDrag({ sourceId, branch, x: pos.x, y: pos.y });
     onSelectNode(sourceId);
     setSelectedEdgeId(null);
@@ -226,12 +249,13 @@ export function FlowCanvas({
   const onMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (isPanning && panStart.current && canvasRef.current) {
-        const dx = e.clientX - panStart.current.x;
-        const dy = e.clientY - panStart.current.y;
-        setViewport((v) => ({
+        const start = panStart.current;
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        updateViewport((v) => ({
           ...v,
-          panX: panStart.current!.panX + dx,
-          panY: panStart.current!.panY + dy,
+          panX: start.panX + dx,
+          panY: start.panY + dy,
         }));
         return;
       }
@@ -240,13 +264,13 @@ export function FlowCanvas({
       const rect = canvasRef.current.getBoundingClientRect();
 
       if (connectionDrag) {
-        const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
+        const pos = screenToCanvas(e.clientX, e.clientY, rect, viewportRef.current);
         setConnectionDrag({ ...connectionDrag, x: pos.x, y: pos.y });
         return;
       }
 
       if (!dragging) return;
-      const pos = screenToCanvas(e.clientX, e.clientY, rect, viewport);
+      const pos = screenToCanvas(e.clientX, e.clientY, rect, viewportRef.current);
       onChange({
         ...graph,
         nodes: graph.nodes.map((n) =>
@@ -256,7 +280,7 @@ export function FlowCanvas({
         ),
       });
     },
-    [connectionDrag, dragging, graph, isPanning, onChange, viewport]
+    [connectionDrag, dragging, graph, isPanning, onChange, updateViewport]
   );
 
   const onMouseUp = () => {
@@ -265,6 +289,9 @@ export function FlowCanvas({
     setIsPanning(false);
     panStart.current = null;
   };
+
+  const updateViewportRef = useRef(updateViewport);
+  updateViewportRef.current = updateViewport;
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -279,7 +306,7 @@ export function FlowCanvas({
       // Shift+scroll = pan; roda do rato ou pinch (ctrl) = zoom
       const wantsPan = e.shiftKey && !e.ctrlKey && !e.metaKey;
       if (wantsPan) {
-        setViewport((v) => ({
+        updateViewportRef.current((v) => ({
           ...v,
           panX: v.panX - e.deltaX,
           panY: v.panY - e.deltaY,
@@ -294,7 +321,7 @@ export function FlowCanvas({
       const shouldZoom = pinchZoom || mouseWheelZoom;
 
       if (!shouldZoom) {
-        setViewport((v) => ({
+        updateViewportRef.current((v) => ({
           ...v,
           panX: v.panX - e.deltaX,
           panY: v.panY - e.deltaY,
@@ -307,7 +334,7 @@ export function FlowCanvas({
           ? -0.08
           : 0.08
         : -e.deltaY * 0.002;
-      setViewport((v) => {
+      updateViewportRef.current((v) => {
         const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom + delta));
         const scale = nextZoom / v.zoom;
         return {
@@ -396,7 +423,12 @@ export function FlowCanvas({
           if (e.button === 1 || (e.button === 0 && e.altKey)) {
             e.preventDefault();
             setIsPanning(true);
-            panStart.current = { x: e.clientX, y: e.clientY, panX: viewport.panX, panY: viewport.panY };
+            panStart.current = {
+              x: e.clientX,
+              y: e.clientY,
+              panX: viewportRef.current.panX,
+              panY: viewportRef.current.panY,
+            };
             return;
           }
           if (e.button === 0 && e.target === e.currentTarget) {
@@ -541,7 +573,7 @@ export function FlowCanvas({
                     if ((ev.target as HTMLElement).closest("button")) return;
                     if (!canvasRef.current) return;
                     const rect = canvasRef.current.getBoundingClientRect();
-                    const pos = screenToCanvas(ev.clientX, ev.clientY, rect, viewport);
+                    const pos = screenToCanvas(ev.clientX, ev.clientY, rect, viewportRef.current);
                     setDragging({
                       nodeId: node.id,
                       offsetX: pos.x - node.position.x,
