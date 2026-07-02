@@ -8,6 +8,13 @@ import {
   buildCachedSystem,
   emptyTokenUsage,
 } from "@lib/ai/prompt-cache";
+import {
+  appendStepText,
+  executeClientToolUses,
+  extractClientToolUses,
+  extractInformativeServerToolCalls,
+  maxStepsInterruptedNote,
+} from "@lib/ai/client-tool-loop";
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 8;
 
@@ -43,6 +50,7 @@ export async function runAgenticGenerate(
   let messages = options.messages.map(toAnthropicMessage);
   let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
+  let accumulatedContent = "";
 
   for (let step = 0; step < maxSteps; step++) {
     let response: Anthropic.Message | null = null;
@@ -58,8 +66,10 @@ export async function runAgenticGenerate(
       } as Anthropic.MessageCreateParamsNonStreaming);
 
       usage = addAnthropicUsage(usage, response.usage);
+      executedTools.push(...extractInformativeServerToolCalls(response.content));
 
       if (response.stop_reason === "pause_turn") {
+        accumulatedContent = appendStepText(accumulatedContent, extractText(response.content));
         messages = [...messages, { role: "assistant", content: response.content }];
         continue;
       }
@@ -68,13 +78,13 @@ export async function runAgenticGenerate(
 
     if (!response) throw new Error("No response from Anthropic");
 
-    const toolUses = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-    );
+    accumulatedContent = appendStepText(accumulatedContent, extractText(response.content));
+
+    const toolUses = extractClientToolUses(response.content);
 
     if (!registry || toolUses.length === 0) {
       return {
-        content: extractText(response.content),
+        content: accumulatedContent,
         toolCalls: toolUses.length
           ? toolUses.map((b) => ({
               id: b.id,
@@ -91,26 +101,18 @@ export async function runAgenticGenerate(
 
     messages = [...messages, { role: "assistant", content: response.content }];
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const toolUse of toolUses) {
-      const executed = await registry.execute(
-        toolUse.name,
-        toolUse.input as Record<string, unknown>,
-        toolUse.id
-      );
-      executedTools.push(executed);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: executed.result,
-        is_error: executed.isError,
-      });
-    }
-
+    const { executed, toolResults } = await executeClientToolUses(registry, toolUses);
+    executedTools.push(...executed);
     messages = [...messages, { role: "user", content: toolResults }];
   }
 
-  throw new Error(`Limite de passos do agente atingido (${maxSteps})`);
+  return {
+    content: accumulatedContent + maxStepsInterruptedNote(maxSteps),
+    usage,
+    model: options.model,
+    stopReason: "max_steps",
+    executedTools,
+  };
 }
 
 export async function* runAgenticStream(
@@ -123,8 +125,16 @@ export async function* runAgenticStream(
   let messages = options.messages.map(toAnthropicMessage);
   let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
+  let emittedTextThisStep = false;
+  let hadPriorStepText = false;
 
   for (let step = 0; step < maxSteps; step++) {
+    emittedTextThisStep = false;
+
+    if (hadPriorStepText) {
+      yield { type: "text", text: "\n\n" };
+    }
+
     for (let pause = 0; pause < MAX_PAUSE_TURN_CONTINUATIONS; pause++) {
       const stream = options.client.messages.stream({
         model: options.model,
@@ -141,6 +151,8 @@ export async function* runAgenticStream(
       for await (const event of stream) {
         if (event.type === "content_block_delta") {
           if (event.delta.type === "text_delta") {
+            emittedTextThisStep = true;
+            hadPriorStepText = true;
             yield { type: "text", text: event.delta.text };
           }
           if (event.delta.type === "input_json_delta") {
@@ -171,15 +183,22 @@ export async function* runAgenticStream(
 
       const final = await stream.finalMessage();
       usage = addAnthropicUsage(usage, final.usage);
+      executedTools.push(...extractInformativeServerToolCalls(final.content));
 
       if (final.stop_reason === "pause_turn") {
+        if (!emittedTextThisStep) {
+          const pauseText = extractText(final.content);
+          if (pauseText) {
+            emittedTextThisStep = true;
+            hadPriorStepText = true;
+            yield { type: "text", text: pauseText };
+          }
+        }
         messages = [...messages, { role: "assistant", content: final.content }];
         continue;
       }
 
-      const toolUses = final.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-      );
+      const toolUses = extractClientToolUses(final.content);
 
       if (!registry || toolUses.length === 0) {
         yield {
@@ -192,7 +211,9 @@ export async function* runAgenticStream(
 
       messages = [...messages, { role: "assistant", content: final.content }];
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      const { executed, toolResults } = await executeClientToolUses(registry, toolUses);
+      executedTools.push(...executed);
+
       for (const toolUse of toolUses) {
         yield {
           type: "tool_use",
@@ -202,30 +223,18 @@ export async function* runAgenticStream(
             input: toolUse.input as Record<string, unknown>,
           },
         };
+      }
 
-        const executed = await registry.execute(
-          toolUse.name,
-          toolUse.input as Record<string, unknown>,
-          toolUse.id
-        );
-        executedTools.push(executed);
-
+      for (const result of executed) {
         yield {
           type: "tool_result",
           toolCall: {
-            id: toolUse.id,
-            name: toolUse.name,
-            input: toolUse.input as Record<string, unknown>,
+            id: result.id,
+            name: result.name,
+            input: result.input,
           },
-          text: executed.result,
+          text: result.result,
         };
-
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: executed.result,
-          is_error: executed.isError,
-        });
       }
 
       messages = [...messages, { role: "user", content: toolResults }];
@@ -233,6 +242,7 @@ export async function* runAgenticStream(
     }
   }
 
+  yield { type: "text", text: maxStepsInterruptedNote(maxSteps) };
   yield {
     type: "done",
     usage,

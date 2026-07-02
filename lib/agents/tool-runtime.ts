@@ -190,9 +190,7 @@ const handlers: Record<string, ToolHandler> = {
 };
 
 /** Map UI tool ids to runtime tool names. */
-const TOOL_ID_ALIASES: Record<string, string> = {
-  sql_query: "run_sql",
-};
+const TOOL_ID_ALIASES: Record<string, string> = {};
 
 export function resolveRuntimeToolIds(enabledToolIds: string[]): string[] {
   const runtimeIds = new Set<string>();

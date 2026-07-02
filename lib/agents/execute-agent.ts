@@ -140,6 +140,7 @@ export async function runAgentViaApi(options: RunAgentApiOptions) {
       route: result.route,
       documentSkillsUsed: result.documentSkillsUsed,
       stepsUsed: result.stepsUsed,
+      toolCalls: result.toolCalls,
       extra: {
         agentId,
         apiKeyId,

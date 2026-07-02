@@ -132,12 +132,22 @@ function buildProviderOptions(config: AgentConfig, messages: ChatMessage[]) {
   };
 }
 
+function buildToolRegistry(config: AgentConfig) {
+  if (!config.enabledTools?.length || !config.supabase) return undefined;
+  return buildAgentToolRegistry(config.enabledTools, {
+    agentId: config.agentId,
+    userId: config.userId,
+    supabase: config.supabase,
+  });
+}
+
 function betaRunOptions(
   config: AgentConfig,
   systemPrompt: string,
   messages: ChatMessage[],
   route: ResolvedAgentRoute
 ) {
+  const toolRegistry = buildToolRegistry(config);
   return {
     model: config.model,
     systemPrompt,
@@ -148,10 +158,13 @@ function betaRunOptions(
     webSearch: config.webSearch,
     webSearchConfig: config.webSearchConfig,
     maxTokens: getModelMaxTokens(config.model, route.createDocumentsThisTurn),
+    maxSteps: config.maxSteps ?? DEFAULT_MAX_AGENT_STEPS,
     createDocuments: route.createDocumentsThisTurn,
     documentSkillIds: route.documentSkillIds,
     mcpServers: config.mcpServers,
     containerUploadBlocks: config.containerUploadBlocks,
+    clientTools: toolRegistry?.definitions,
+    toolRegistry,
   };
 }
 
@@ -189,6 +202,7 @@ export async function runAgent(
       stepsUsed: result.stepsUsed,
       route: route.route,
       documentSkillsUsed: result.documentSkillsUsed,
+      toolCalls: result.toolCalls,
     };
   }
 
@@ -250,6 +264,7 @@ export async function* streamAgent(
     let usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
     let stepsUsed: number | undefined;
     let documentSkillsUsed: AnthropicDocumentSkillId[] | undefined;
+    const executedTools: ExecutedToolCall[] = [];
     const stream =
       route.route === "beta-documents" ? streamBetaAgentWithDocuments : streamBetaAgentSession;
 
@@ -261,11 +276,20 @@ export async function* streamAgent(
       if (chunk.type === "mcp_tool") {
         yield { type: "server_tool", name: `mcp:${chunk.name}` };
       }
+      if (chunk.type === "client_tool") {
+        yield {
+          type: "client_tool",
+          name: chunk.name,
+          phase: chunk.phase,
+          result: chunk.result,
+        };
+      }
       if (chunk.type === "anthropic_file_ids") yield chunk;
       if (chunk.type === "done") {
         usage = chunk.usage;
         stepsUsed = chunk.stepsUsed;
         documentSkillsUsed = chunk.documentSkillsUsed;
+        if (chunk.toolCalls) executedTools.push(...chunk.toolCalls);
       }
     }
 
@@ -278,6 +302,7 @@ export async function* streamAgent(
       route: route.route,
       documentSkillsUsed,
       stepsUsed,
+      toolCalls: executedTools.length ? executedTools : undefined,
     };
     return;
   }
@@ -359,6 +384,7 @@ export function buildUsageLogMetadata(options: {
   route?: string;
   documentSkillsUsed?: AnthropicDocumentSkillId[];
   stepsUsed?: number;
+  toolCalls?: ExecutedToolCall[];
   extra?: Record<string, unknown>;
 }): Record<string, unknown> {
   return {
@@ -366,6 +392,11 @@ export function buildUsageLogMetadata(options: {
     route: options.route,
     document_skills: options.documentSkillsUsed,
     steps_used: options.stepsUsed,
+    tool_calls: options.toolCalls?.map((t) => ({
+      id: t.id,
+      name: t.name,
+      is_error: t.isError,
+    })),
     ...usageCacheMetadata(options.usage),
   };
 }

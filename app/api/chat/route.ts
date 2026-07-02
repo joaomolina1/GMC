@@ -14,6 +14,7 @@ import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
 import type { GeneratedFileRef } from "@lib/chat/agent";
 import type { TokenUsage } from "@lib/ai/types";
+import type { ExecutedToolCall } from "@lib/agents/tool-runtime";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -128,6 +129,7 @@ export async function POST(request: Request) {
   let finalRoute: string | undefined;
   let finalDocumentSkills: string[] | undefined;
   let finalStepsUsed: number | undefined;
+  let finalToolCalls: ExecutedToolCall[] | undefined;
   let generatedFiles: GeneratedFileRef[] = [];
   const fileStorage = (await tryCreateServiceClient()) ?? supabase;
 
@@ -174,6 +176,7 @@ export async function POST(request: Request) {
             finalRoute = chunk.route;
             finalDocumentSkills = chunk.documentSkillsUsed;
             finalStepsUsed = chunk.stepsUsed;
+            finalToolCalls = chunk.toolCalls;
           }
         }
 
@@ -227,6 +230,7 @@ export async function POST(request: Request) {
             route: finalRoute,
             documentSkillsUsed: finalDocumentSkills as AnthropicDocumentSkillId[] | undefined,
             stepsUsed: finalStepsUsed,
+            toolCalls: finalToolCalls,
             extra: {
               agentId,
               conversationId: convId,

@@ -14,7 +14,6 @@ import {
   Eye,
   Library,
   Globe,
-  Database,
   Code,
   Sparkles,
   FileOutput,
@@ -128,18 +127,16 @@ const CORE_TOOLS = [
   "knowledge_search",
 ];
 
-const PLUGIN_TOOLS = ["http_request", "fetch_url", "sql_query"];
+const PLUGIN_TOOLS = ["http_request", "fetch_url"];
 
 const PLUGIN_TOOL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {
   http_request: { label: "HTTP Request", desc: "Chamadas REST a APIs externas (loop agêntico)", icon: Globe, tone: "bg-indigo-50 text-indigo-600" },
   fetch_url: { label: "Fetch URL", desc: "Extrai texto de páginas web públicas", icon: Globe, tone: "bg-sky-50 text-sky-600" },
-  sql_query: { label: "SQL Query", desc: "Queries SELECT read-only na BD GMC", icon: Database, tone: "bg-cyan-50 text-cyan-600" },
   run_code: { label: "Run Code", desc: "JavaScript sandboxed para cálculos", icon: Code, tone: "bg-orange-50 text-orange-600" },
 };
 
 const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, unknown>> = {
   http_request: { allowed_hosts: ["*.mediacapital.pt"], timeout_ms: 10000 },
-  sql_query: { max_rows: 100 },
   run_code: { timeout_ms: 5000 },
 };
 
