@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, GripVertical, Check, Loader2, Minus, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { Plus, Trash2, GripVertical, Check, Loader2, Minus, ZoomIn, ZoomOut, Maximize2, Undo2, Redo2 } from "lucide-react";
 import { cn } from "@lib/utils";
 import { FLOW_NODE_TYPES } from "@lib/flows/constants";
 import type {
@@ -30,6 +30,7 @@ const MAX_ZOOM = 2;
 const DEFAULT_ZOOM = 1;
 
 const EDGE_HIT_WIDTH = 20;
+const MAX_UNDO_HISTORY = 40;
 
 type PortSide = "in" | "out-true" | "out-false" | "out";
 
@@ -149,6 +150,52 @@ export function FlowCanvas({
   } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const historyRef = useRef<{ past: FlowGraph[]; future: FlowGraph[] }>({ past: [], future: [] });
+  const skipHistoryRef = useRef(false);
+  const dragHistoryPushedRef = useRef(false);
+
+  const commitGraph = useCallback(
+    (next: FlowGraph) => {
+      if (skipHistoryRef.current) {
+        skipHistoryRef.current = false;
+        onChange(next);
+        return;
+      }
+      historyRef.current.past.push(graph);
+      if (historyRef.current.past.length > MAX_UNDO_HISTORY) {
+        historyRef.current.past.shift();
+      }
+      historyRef.current.future = [];
+      onChange(next);
+    },
+    [graph, onChange]
+  );
+
+  const undo = useCallback(() => {
+    const previous = historyRef.current.past.pop();
+    if (!previous) return;
+    historyRef.current.future.push(graph);
+    skipHistoryRef.current = true;
+    onChange(previous);
+  }, [graph, onChange]);
+
+  const redo = useCallback(() => {
+    const next = historyRef.current.future.pop();
+    if (!next) return;
+    historyRef.current.past.push(graph);
+    skipHistoryRef.current = true;
+    onChange(next);
+  }, [graph, onChange]);
+
+  const pushDragHistory = useCallback(() => {
+    if (dragHistoryPushedRef.current) return;
+    historyRef.current.past.push(graph);
+    if (historyRef.current.past.length > MAX_UNDO_HISTORY) {
+      historyRef.current.past.shift();
+    }
+    historyRef.current.future = [];
+    dragHistoryPushedRef.current = true;
+  }, [graph]);
 
   const nodeMeta = (type: FlowNodeType) => FLOW_NODE_TYPES.find((n) => n.type === type)!;
 
@@ -203,22 +250,22 @@ export function FlowCanvas({
       },
       data: { ...meta.defaultData },
     };
-    onChange({ ...graph, nodes: [...graph.nodes, node] });
+    commitGraph({ ...graph, nodes: [...graph.nodes, node] });
     onSelectNode(id);
   };
 
   const removeNode = useCallback((nodeId: string) => {
-    onChange({
+    commitGraph({
       nodes: graph.nodes.filter((n) => n.id !== nodeId),
       edges: graph.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
       viewport: graph.viewport,
     });
     if (selectedNodeId === nodeId) onSelectNode(null);
     setSelectedEdgeId(null);
-  }, [graph, onChange, onSelectNode, selectedNodeId]);
+  }, [graph, commitGraph, onSelectNode, selectedNodeId]);
 
   const removeEdge = (edgeId: string) => {
-    onChange({ ...graph, edges: graph.edges.filter((e) => e.id !== edgeId) });
+    commitGraph({ ...graph, edges: graph.edges.filter((e) => e.id !== edgeId) });
     if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
   };
 
@@ -242,7 +289,7 @@ export function FlowCanvas({
       target,
       ...(branch ? { data: { branch } } : {}),
     };
-    onChange({ ...graph, edges: [...graph.edges, edge] });
+    commitGraph({ ...graph, edges: [...graph.edges, edge] });
   };
 
   const startConnection = (
@@ -307,6 +354,7 @@ export function FlowCanvas({
   );
 
   const onMouseUp = () => {
+    dragHistoryPushedRef.current = false;
     setDragging(null);
     setConnectionDrag(null);
     setIsPanning(false);
@@ -374,12 +422,22 @@ export function FlowCanvas({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       e.preventDefault();
       if (selectedEdgeId) {
-        onChange({ ...graph, edges: graph.edges.filter((edge) => edge.id !== selectedEdgeId) });
+        commitGraph({ ...graph, edges: graph.edges.filter((edge) => edge.id !== selectedEdgeId) });
         setSelectedEdgeId(null);
         return;
       }
@@ -389,7 +447,7 @@ export function FlowCanvas({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedEdgeId, selectedNodeId, graph, onChange, removeNode]);
+  }, [selectedEdgeId, selectedNodeId, graph, commitGraph, removeNode, undo, redo]);
 
   const hasInputPort = (type: FlowNodeType) => type !== "trigger";
   const hasOutputPort = (type: FlowNodeType) => type !== "output";
@@ -411,6 +469,22 @@ export function FlowCanvas({
           </button>
         ))}
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            title="Desfazer (Ctrl+Z)"
+            className="rounded-lg border border-line bg-white p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40"
+            onClick={undo}
+          >
+            <Undo2 size={14} />
+          </button>
+          <button
+            type="button"
+            title="Refazer (Ctrl+Shift+Z)"
+            className="rounded-lg border border-line bg-white p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40"
+            onClick={redo}
+          >
+            <Redo2 size={14} />
+          </button>
           <button
             type="button"
             title="Zoom out"
@@ -614,6 +688,7 @@ export function FlowCanvas({
                     if ((ev.target as HTMLElement).closest("button")) return;
                     if (!canvasRef.current) return;
                     ev.currentTarget.setPointerCapture(ev.pointerId);
+                    pushDragHistory();
                     const rect = canvasRef.current.getBoundingClientRect();
                     const pos = screenToCanvas(ev.clientX, ev.clientY, rect, viewportRef.current);
                     setDragging({
@@ -794,8 +869,44 @@ export function FlowCanvas({
             );
           })()}
         </div>
+        {graph.nodes.length > 0 && (
+          <div
+            className="pointer-events-none absolute bottom-8 right-3 z-50 overflow-hidden rounded-lg border border-line bg-white/90 p-1 shadow-sm"
+            aria-hidden
+          >
+            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className="h-20 w-32">
+              {graph.edges.map((edge) => {
+                const source = graph.nodes.find((n) => n.id === edge.source);
+                const target = graph.nodes.find((n) => n.id === edge.target);
+                if (!source || !target) return null;
+                return (
+                  <line
+                    key={`mini-${edge.id}`}
+                    x1={source.position.x + NODE_W / 2}
+                    y1={source.position.y + NODE_H / 2}
+                    x2={target.position.x + NODE_W / 2}
+                    y2={target.position.y + NODE_H / 2}
+                    stroke="#94a3b8"
+                    strokeWidth={8}
+                  />
+                );
+              })}
+              {graph.nodes.map((node) => (
+                <rect
+                  key={`mini-${node.id}`}
+                  x={node.position.x}
+                  y={node.position.y}
+                  width={NODE_W}
+                  height={NODE_H}
+                  rx={8}
+                  fill={selectedNodeId === node.id ? "#0066b3" : "#cbd5e1"}
+                />
+              ))}
+            </svg>
+          </div>
+        )}
         <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
-          Clique na ligação para seleccionar · Delete apaga nó/ligação · Ctrl+roda zoom · Scroll pan · Alt+arrastar pan
+          Clique na ligação para seleccionar · Delete apaga nó/ligação · Ctrl+Z desfazer · Ctrl+roda zoom · Scroll pan · Alt+arrastar pan
         </p>
       </div>
     </div>

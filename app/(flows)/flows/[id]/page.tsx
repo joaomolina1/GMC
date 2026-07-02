@@ -63,6 +63,8 @@ export default function FlowBuilderPage() {
   const [showRuns, setShowRuns] = useState(searchParams.get("run") === "1");
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [flowLoaded, setFlowLoaded] = useState(false);
+  const [autosaving, setAutosaving] = useState(false);
 
   const selectedNode = graph.nodes.find((n) => n.id === selectedNodeId) ?? null;
 
@@ -83,6 +85,7 @@ export default function FlowBuilderPage() {
     if (current?.graph) {
       setGraph(current.graph as FlowGraph);
     }
+    setFlowLoaded(true);
   }, [id]);
 
   const loadRuns = useCallback(async () => {
@@ -104,6 +107,27 @@ export default function FlowBuilderPage() {
         )
       );
   }, [id, loadFlow, loadRuns]);
+
+  useEffect(() => {
+    if (!flowLoaded || running || saving) return;
+    const timer = setTimeout(() => {
+      setAutosaving(true);
+      void (async () => {
+        await fetch(`/api/flows/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, description }),
+        });
+        await fetch(`/api/flows/${id}/versions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ graph, updateInPlace: true }),
+        });
+        setAutosaving(false);
+      })();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [flowLoaded, graph, name, description, id, running, saving]);
 
   function updateNodeData(nodeId: string, patch: Record<string, unknown>) {
     setGraph((g) => ({
@@ -259,7 +283,10 @@ export default function FlowBuilderPage() {
           </h2>
           <Badge tone={status === "published" ? "success" : "warning"}>{status}</Badge>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {autosaving && !saving && (
+            <span className="text-[11px] text-slate-400">Autosave…</span>
+          )}
           <Button variant="outline" size="sm" onClick={saveVersion} disabled={saving}>
             {saved ? <Check size={14} /> : <Save size={14} />}
             {saving ? "A guardar..." : saved ? "Guardado" : "Guardar v+"}
