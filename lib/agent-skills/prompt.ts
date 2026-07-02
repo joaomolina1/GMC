@@ -1,9 +1,16 @@
+export interface SkillExtraFile {
+  path: string;
+  content: string;
+  anthropic_file_id?: string;
+  content_hash?: string;
+}
+
 export interface AgentSkillPackageRow {
   id: string;
   name: string;
   description: string;
   skill_md: string;
-  extra_files?: Array<{ path: string; content: string }>;
+  extra_files?: SkillExtraFile[];
 }
 
 /**

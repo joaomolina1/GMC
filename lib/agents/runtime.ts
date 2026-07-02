@@ -5,6 +5,7 @@ import { streamAgent, runAgent, toGeneratedFileRefs } from "@lib/chat/agent";
 import { buildAgentSkillsPrompt } from "@lib/agent-skills/prompt";
 import {
   buildSkillContainerHint,
+  persistSkillPackageFileCache,
   uploadSkillPackagesToContainer,
 } from "@lib/agent-skills/container-files";
 import { buildKnowledgeContext } from "@lib/chat/rag";
@@ -66,6 +67,7 @@ export async function buildAgentRuntimeConfig(options: {
         containerUploadBlocks = uploaded.uploadBlocks;
         if (uploaded.fileIds.length > 0) {
           skillsPrompt += buildSkillContainerHint(skillPackages);
+          void persistSkillPackageFileCache(supabase, uploaded.updatedPackages);
         }
       }
     }
