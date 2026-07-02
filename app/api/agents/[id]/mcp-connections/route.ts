@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
+import { normalizeMcpAuthSecretRef } from "@lib/agents/mcp-connections";
 
 async function assertAgentAccess(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -87,13 +88,24 @@ export async function POST(
     return NextResponse.json({ error: "URL inválida" }, { status: 400 });
   }
 
+  const normalizedAuthRef = normalizeMcpAuthSecretRef(auth_secret_ref);
+  if (auth_secret_ref?.trim() && !normalizedAuthRef) {
+    return NextResponse.json(
+      {
+        error:
+          "Token inválido — use env:NOME_VAR ou apenas o nome da variável de ambiente (ex. MCP_GMAIL_TOKEN)",
+      },
+      { status: 400 }
+    );
+  }
+
   const { data, error } = await supabase
     .from("agent_mcp_connections")
     .insert({
       agent_id: agentId,
       name: name.trim().replace(/\s+/g, "_").toLowerCase(),
       server_url: server_url.trim(),
-      auth_secret_ref: auth_secret_ref?.trim() || null,
+      auth_secret_ref: normalizedAuthRef,
       allowed_tools: allowed_tools?.length ? allowed_tools : null,
       enabled: enabled !== false,
       created_by: user.id,
@@ -132,7 +144,16 @@ export async function PATCH(
   const updates: Record<string, unknown> = {};
   if (enabled !== undefined) updates.enabled = enabled;
   if (allowed_tools !== undefined) updates.allowed_tools = allowed_tools;
-  if (auth_secret_ref !== undefined) updates.auth_secret_ref = auth_secret_ref || null;
+  if (auth_secret_ref !== undefined) {
+    const normalizedAuthRef = normalizeMcpAuthSecretRef(auth_secret_ref);
+    if (auth_secret_ref?.trim() && !normalizedAuthRef) {
+      return NextResponse.json(
+        { error: "Token inválido — use env:NOME_VAR ou apenas o nome da variável" },
+        { status: 400 }
+      );
+    }
+    updates.auth_secret_ref = normalizedAuthRef;
+  }
 
   const { data, error } = await supabase
     .from("agent_mcp_connections")

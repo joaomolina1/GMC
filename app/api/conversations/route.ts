@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
-import { purgeExpiredConversations } from "@lib/chat/conversations";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -14,8 +13,6 @@ export async function GET(request: Request) {
   if (!agentId) {
     return NextResponse.json({ error: "agentId é obrigatório" }, { status: 400 });
   }
-
-  await purgeExpiredConversations();
 
   const { data, error } = await supabase
     .from("conversations")

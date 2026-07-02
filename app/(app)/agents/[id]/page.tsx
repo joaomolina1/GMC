@@ -1092,8 +1092,9 @@ function AdvancedTabContent({
     return (
       <div className="space-y-4">
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Liga servidores MCP (Gmail, Drive, Supabase, etc.) via API Anthropic. O token pode ser o
-          valor directo ou <code>env:NOME_VAR</code> para ler de variável de ambiente no servidor.
+          Liga servidores MCP (Gmail, Drive, Supabase, etc.) via API Anthropic. O token deve ser o
+          nome de uma variável de ambiente no servidor (ex. <code>MCP_GMAIL_TOKEN</code> ou{" "}
+          <code>env:MCP_GMAIL_TOKEN</code>) — nunca o valor secreto em texto.
         </p>
         <Input
           label="Nome"
@@ -1108,8 +1109,8 @@ function AdvancedTabContent({
           placeholder="https://..."
         />
         <Input
-          label="Token (opcional)"
-          type="password"
+          label="Variável de ambiente (opcional)"
+          hint="Nome da env var no servidor, ex. MCP_GMAIL_TOKEN"
           value={mcpToken}
           onChange={(e) => setMcpToken(e.target.value)}
         />

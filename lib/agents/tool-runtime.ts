@@ -1,6 +1,7 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedQuery } from "@lib/ai/embeddings";
+import { isAllowedOutboundUrl } from "@lib/security/url-policy";
 
 const TOOL_OUTPUT_MAX_CHARS = 12_000;
 const TOOL_TIMEOUT_MS = 30_000;
@@ -76,19 +77,6 @@ function truncateOutput(text: string): string {
   return `${text.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n…[truncado]`;
 }
 
-function isAllowedUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (!["http:", "https:"].includes(parsed.protocol)) return false;
-    const host = parsed.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")) return false;
-    if (/^10\.|^172\.(1[6-9]|2\d|3[01])\.|^192\.168\./.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -139,7 +127,7 @@ const handlers: Record<string, ToolHandler> = {
   async http_request(input) {
     const url = String(input.url ?? "");
     const method = String(input.method ?? "GET").toUpperCase();
-    if (!isAllowedUrl(url)) return { content: "URL não permitida", isError: true };
+    if (!isAllowedOutboundUrl(url)) return { content: "URL não permitida", isError: true };
 
     const headers = (input.headers as Record<string, string> | undefined) ?? {};
     const body = input.body != null ? String(input.body) : undefined;
@@ -164,7 +152,7 @@ const handlers: Record<string, ToolHandler> = {
 
   async fetch_url(input) {
     const url = String(input.url ?? "");
-    if (!isAllowedUrl(url)) return { content: "URL não permitida", isError: true };
+    if (!isAllowedOutboundUrl(url)) return { content: "URL não permitida", isError: true };
 
     const res = await withTimeout(
       fetch(url, { headers: { "User-Agent": "GMC-Agent/1.0" } }),

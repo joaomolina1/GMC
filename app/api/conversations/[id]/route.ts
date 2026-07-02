@@ -24,6 +24,10 @@ export async function GET(
     return NextResponse.json({ error: "Conversa não encontrada" }, { status: 404 });
   }
 
+  if (conversation.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { data: messages, error: msgError } = await supabase
     .from("messages")
     .select("id, role, content, created_at")
@@ -64,6 +68,19 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("user_id")
+    .eq("id", id)
+    .single();
+
+  if (!conversation) {
+    return NextResponse.json({ error: "Conversa não encontrada" }, { status: 404 });
+  }
+  if (conversation.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { error } = await supabase.from("conversations").delete().eq("id", id);
 

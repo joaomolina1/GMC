@@ -12,6 +12,7 @@ import { buildChatMessages } from "@lib/chat/messages";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
+import { canChatWithAgent } from "@lib/agents/access";
 import type { GeneratedFileRef } from "@lib/chat/agent";
 import type { TokenUsage } from "@lib/ai/types";
 import type { ExecutedToolCall } from "@lib/agents/tool-runtime";
@@ -52,6 +53,13 @@ export async function POST(request: Request) {
 
   if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
 
+  if (!canChatWithAgent(user.id, agent)) {
+    return NextResponse.json(
+      { error: "Este agente não está publicado ou não tem permissão para conversar" },
+      { status: 403 }
+    );
+  }
+
   const { data: version } = await supabase
     .from("agent_versions")
     .select("*")
@@ -79,10 +87,21 @@ export async function POST(request: Request) {
       .single();
     convId = conv?.id;
   } else {
+    const { data: existingConv } = await supabase
+      .from("conversations")
+      .select("user_id")
+      .eq("id", convId)
+      .single();
+
+    if (!existingConv || existingConv.user_id !== user.id) {
+      return NextResponse.json({ error: "Conversa não encontrada" }, { status: 404 });
+    }
+
     await supabase
       .from("conversations")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", convId);
+      .eq("id", convId)
+      .eq("user_id", user.id);
   }
 
   await supabase.from("messages").insert({

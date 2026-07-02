@@ -29,13 +29,30 @@ export async function loadAgentMcpConnections(
   return (data ?? []) as AgentMcpConnection[];
 }
 
+/** Normalize user input to env:VAR_NAME (secrets are never stored in plaintext). */
+export function normalizeMcpAuthSecretRef(raw: string | undefined | null): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("env:")) {
+    const key = trimmed.slice(4).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
+    return `env:${key}`;
+  }
+
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+    return `env:${trimmed}`;
+  }
+
+  return null;
+}
+
 function resolveAuthToken(ref: string | null): string | null {
   if (!ref?.trim()) return null;
-  if (ref.startsWith("env:")) {
-    const key = ref.slice(4).trim();
-    return process.env[key]?.trim() || null;
-  }
-  return ref.trim();
+  if (!ref.startsWith("env:")) return null;
+  const key = ref.slice(4).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
+  return process.env[key]?.trim() || null;
 }
 
 export function buildAnthropicMcpServers(
