@@ -502,6 +502,17 @@ function AgentBuilderWorkspace() {
     setDocAction(null);
   }
 
+  const setActiveConversation = useCallback(
+    (nextId: string | undefined) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextId) params.set("c", nextId);
+      else params.delete("c");
+      const qs = params.toString();
+      router.replace(qs ? `/agents/${id}?${qs}` : `/agents/${id}`, { scroll: false });
+    },
+    [id, router, searchParams]
+  );
+
   if (!agent) {
     return (
       <div className="space-y-4">
@@ -514,17 +525,6 @@ function AgentBuilderWorkspace() {
   const thinkingSupported = modelSupportsThinking(model);
   const effortOptions: EffortLevel[] =
     model.includes("opus") ? ["low", "medium", "high", "max"] : ["low", "medium", "high"];
-
-  const setActiveConversation = useCallback(
-    (nextId: string | undefined) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (nextId) params.set("c", nextId);
-      else params.delete("c");
-      const qs = params.toString();
-      router.replace(qs ? `/agents/${id}?${qs}` : `/agents/${id}`, { scroll: false });
-    },
-    [id, router, searchParams]
-  );
 
   return (
     <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col">
