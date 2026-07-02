@@ -18,6 +18,7 @@ interface FlowCanvasProps {
   selectedNodeId: string | null;
   onSelectNode: (id: string | null) => void;
   nodeExecutionState?: Record<string, FlowNodeExecutionStatus>;
+  flowId?: string;
 }
 
 const NODE_W = 176;
@@ -105,9 +106,26 @@ export function FlowCanvas({
   selectedNodeId,
   onSelectNode,
   nodeExecutionState = {},
+  flowId,
 }: FlowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
+  const viewportStorageKey = flowId ? `gmc-flow-viewport:${flowId}` : null;
+
+  const readStoredViewport = (): Viewport | null => {
+    if (graph.viewport) return normalizeViewport(graph.viewport);
+    if (!viewportStorageKey || typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(viewportStorageKey);
+      if (!raw) return null;
+      return normalizeViewport(JSON.parse(raw) as Viewport);
+    } catch {
+      return null;
+    }
+  };
+
+  const [viewport, setViewport] = useState<Viewport>(
+    () => readStoredViewport() ?? DEFAULT_VIEWPORT
+  );
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
 
@@ -115,9 +133,13 @@ export function FlowCanvas({
     setViewport((prev) => {
       const base = normalizeViewport(prev);
       const next = typeof updater === "function" ? updater(base) : updater;
-      return normalizeViewport(next);
+      const normalized = normalizeViewport(next);
+      if (viewportStorageKey && typeof window !== "undefined") {
+        localStorage.setItem(viewportStorageKey, JSON.stringify(normalized));
+      }
+      return normalized;
     });
-  }, []);
+  }, [viewportStorageKey]);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
   const [dragging, setDragging] = useState<{
@@ -185,14 +207,15 @@ export function FlowCanvas({
     onSelectNode(id);
   };
 
-  const removeNode = (nodeId: string) => {
+  const removeNode = useCallback((nodeId: string) => {
     onChange({
       nodes: graph.nodes.filter((n) => n.id !== nodeId),
       edges: graph.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      viewport: graph.viewport,
     });
     if (selectedNodeId === nodeId) onSelectNode(null);
     setSelectedEdgeId(null);
-  };
+  }, [graph, onChange, onSelectNode, selectedNodeId]);
 
   const removeEdge = (edgeId: string) => {
     onChange({ ...graph, edges: graph.edges.filter((e) => e.id !== edgeId) });
@@ -354,14 +377,19 @@ export function FlowCanvas({
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (!selectedEdgeId) return;
       e.preventDefault();
-      onChange({ ...graph, edges: graph.edges.filter((edge) => edge.id !== selectedEdgeId) });
-      setSelectedEdgeId(null);
+      if (selectedEdgeId) {
+        onChange({ ...graph, edges: graph.edges.filter((edge) => edge.id !== selectedEdgeId) });
+        setSelectedEdgeId(null);
+        return;
+      }
+      if (selectedNodeId) {
+        removeNode(selectedNodeId);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedEdgeId, graph, onChange]);
+  }, [selectedEdgeId, selectedNodeId, graph, onChange, removeNode]);
 
   const hasInputPort = (type: FlowNodeType) => type !== "trigger";
   const hasOutputPort = (type: FlowNodeType) => type !== "output";
@@ -417,11 +445,18 @@ export function FlowCanvas({
         ref={canvasRef}
         className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle,_#cbd5e1_1px,_transparent_1px)] [background-size:20px_20px]"
         onMouseMove={onMouseMove}
+        onPointerUp={(e) => {
+          if (canvasRef.current?.hasPointerCapture(e.pointerId)) {
+            canvasRef.current.releasePointerCapture(e.pointerId);
+          }
+          onMouseUp();
+        }}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           if (e.button === 1 || (e.button === 0 && e.altKey)) {
             e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
             setIsPanning(true);
             panStart.current = {
               x: e.clientX,
@@ -431,6 +466,12 @@ export function FlowCanvas({
             };
             return;
           }
+          if (e.button === 0 && e.target === e.currentTarget) {
+            setSelectedEdgeId(null);
+            onSelectNode(null);
+          }
+        }}
+        onMouseDown={(e) => {
           if (e.button === 0 && e.target === e.currentTarget) {
             setSelectedEdgeId(null);
             onSelectNode(null);
@@ -568,10 +609,11 @@ export function FlowCanvas({
                     setSelectedEdgeId(null);
                     onSelectNode(node.id);
                   }}
-                  onMouseDown={(ev) => {
+                  onPointerDown={(ev) => {
                     if ((ev.target as HTMLElement).closest("[data-port]")) return;
                     if ((ev.target as HTMLElement).closest("button")) return;
                     if (!canvasRef.current) return;
+                    ev.currentTarget.setPointerCapture(ev.pointerId);
                     const rect = canvasRef.current.getBoundingClientRect();
                     const pos = screenToCanvas(ev.clientX, ev.clientY, rect, viewportRef.current);
                     setDragging({
@@ -581,6 +623,11 @@ export function FlowCanvas({
                     });
                     onSelectNode(node.id);
                     setSelectedEdgeId(null);
+                  }}
+                  onPointerUp={(ev) => {
+                    if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
+                      ev.currentTarget.releasePointerCapture(ev.pointerId);
+                    }
                   }}
                 >
                   <div className="flex cursor-grab items-start gap-1 p-2.5 active:cursor-grabbing">
@@ -748,7 +795,7 @@ export function FlowCanvas({
           })()}
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
-          Clique na ligação para seleccionar · Delete para apagar · Roda do rato zoom · Scroll trackpad pan · Alt+arrastar pan
+          Clique na ligação para seleccionar · Delete apaga nó/ligação · Ctrl+roda zoom · Scroll pan · Alt+arrastar pan
         </p>
       </div>
     </div>

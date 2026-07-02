@@ -23,6 +23,7 @@ export interface FlowEdge {
 export interface FlowGraph {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  viewport?: { panX: number; panY: number; zoom: number };
 }
 
 export interface FlowRunInput {

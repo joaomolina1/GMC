@@ -358,6 +358,7 @@ export default function FlowBuilderPage() {
             selectedNodeId={selectedNodeId}
             onSelectNode={setSelectedNodeId}
             nodeExecutionState={nodeExecutionState}
+            flowId={id}
           />
         </div>
 
