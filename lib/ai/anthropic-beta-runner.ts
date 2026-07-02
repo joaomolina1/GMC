@@ -25,6 +25,7 @@ import { MCP_BETA } from "@lib/agents/mcp-connections";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import {
   addAnthropicUsage,
+  applyCacheToHistoryMessages,
   applyCacheToTools,
   buildCachedSystem,
   emptyTokenUsage,
@@ -91,7 +92,7 @@ function toAnthropicMessages(
     }
   }
 
-  return converted;
+  return applyCacheToHistoryMessages(converted);
 }
 
 function extractText(content: BetaContentBlock[]): string {

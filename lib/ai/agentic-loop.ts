@@ -4,6 +4,7 @@ import type { AgentToolRegistry, ExecutedToolCall } from "@lib/agents/tool-runti
 import type { GenerateOptions, GenerateResult, StreamChunk, TokenUsage } from "@lib/ai/types";
 import {
   addAnthropicUsage,
+  applyCacheToHistoryMessages,
   applyCacheToTools,
   buildCachedSystem,
   emptyTokenUsage,
