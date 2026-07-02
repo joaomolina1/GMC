@@ -58,3 +58,52 @@ export function resolveDocumentSkillsForTurn(text: string): AnthropicDocumentSki
   if (needsDocumentCreation(text)) return ["docx"];
   return [];
 }
+
+const DEFAULT_CONTEXT_TURNS = 6;
+
+/** Collect recent user message text for document-intent detection across the thread. */
+export function collectUserTextFromMessages(
+  messages: Array<{ role: string; content: unknown }>,
+  maxTurns = DEFAULT_CONTEXT_TURNS
+): string {
+  const parts: string[] = [];
+
+  for (let i = messages.length - 1; i >= 0 && parts.length < maxTurns; i--) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+
+    if (typeof message.content === "string") {
+      if (message.content.trim()) parts.unshift(message.content);
+      continue;
+    }
+
+    if (Array.isArray(message.content)) {
+      const text = message.content
+        .filter((block): block is { type: "text"; text?: string } =>
+          typeof block === "object" && block !== null && block.type === "text"
+        )
+        .map((block) => block.text ?? "")
+        .join("\n")
+        .trim();
+      if (text) parts.unshift(text);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/** Detect document skills using recent conversation context, not only the latest turn. */
+export function resolveDocumentSkillsFromContext(
+  messages: Array<{ role: string; content: unknown }>
+): AnthropicDocumentSkillId[] {
+  return resolveDocumentSkillsForTurn(collectUserTextFromMessages(messages));
+}
+
+/** Whether the conversation context implies document creation this turn. */
+export function needsDocumentCreationFromContext(
+  messages: Array<{ role: string; content: unknown }>
+): boolean {
+  const context = collectUserTextFromMessages(messages);
+  if (detectDocumentSkillsFromText(context).length > 0) return true;
+  return FILE_CREATION_HINTS.some((p) => p.test(context));
+}

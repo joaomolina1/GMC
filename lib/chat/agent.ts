@@ -8,7 +8,8 @@ import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills
 import type { AnthropicDocumentSkillId } from "@lib/ai/anthropic-document-skills";
 import {
   needsDocumentCreation,
-  resolveDocumentSkillsForTurn,
+  needsDocumentCreationFromContext,
+  resolveDocumentSkillsFromContext,
 } from "@lib/ai/document-skill-detect";
 import {
   runBetaAgentWithDocuments,
@@ -67,19 +68,6 @@ export interface RunAgentResult {
   documentSkillsUsed?: AnthropicDocumentSkillId[];
 }
 
-function getLastUserText(messages: ChatMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (message.role !== "user") continue;
-    if (typeof message.content === "string") return message.content;
-    return message.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text ?? "")
-      .join("\n");
-  }
-  return "";
-}
-
 export interface ResolvedAgentRoute {
   route: "light" | "beta-documents" | "beta-session";
   createDocumentsThisTurn: boolean;
@@ -90,11 +78,10 @@ export function resolveAgentRoute(config: AgentConfig, messages: ChatMessage[]):
   const needsMcpOrContainer = Boolean(
     config.mcpServers?.length || config.containerUploadBlocks?.length
   );
-  const userText = getLastUserText(messages);
   const createDocumentsThisTurn =
-    Boolean(config.createDocuments) && needsDocumentCreation(userText);
+    Boolean(config.createDocuments) && needsDocumentCreationFromContext(messages);
   const documentSkillIds = createDocumentsThisTurn
-    ? resolveDocumentSkillsForTurn(userText)
+    ? resolveDocumentSkillsFromContext(messages)
     : undefined;
 
   if (createDocumentsThisTurn) {

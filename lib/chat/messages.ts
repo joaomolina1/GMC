@@ -21,6 +21,22 @@ type StorageClient = {
   };
 };
 
+interface StoredGeneratedFile {
+  filename: string;
+  mime: string;
+  storage_path?: string;
+  download_url?: string;
+}
+
+function formatGeneratedFilesContext(files: StoredGeneratedFile[] | undefined): string {
+  if (!files?.length) return "";
+  const lines = files.map((file) => {
+    const link = file.download_url ? ` (${file.download_url})` : "";
+    return `- ${file.filename} [${file.mime}]${link}`;
+  });
+  return `\n\n[Ficheiros gerados pelo assistente]\n${lines.join("\n")}`;
+}
+
 /**
  * Build chat messages with native multimodal content (images, PDFs) and
  * server-side text extraction for Office documents.
@@ -36,7 +52,18 @@ export async function buildChatMessages(
     const content = m.content;
 
     if (typeof content === "object" && content !== null && "text" in content) {
-      const stored = content as { text: string; attachments?: StoredAttachment[] };
+      const stored = content as {
+        text: string;
+        attachments?: StoredAttachment[];
+        generated_files?: StoredGeneratedFile[];
+      };
+
+      if (role === "assistant") {
+        const text = `${stored.text}${formatGeneratedFilesContext(stored.generated_files)}`;
+        messages.push({ role, content: text });
+        continue;
+      }
+
       const attachments = stored.attachments ?? [];
 
       if (role === "user" && attachments.length > 0) {
