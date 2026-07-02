@@ -1,4 +1,5 @@
 import type { TokenUsage } from "@lib/ai/types";
+import type Anthropic from "@anthropic-ai/sdk";
 
 export const CACHE_CONTROL_EPHEMERAL = { type: "ephemeral" as const };
 
@@ -21,6 +22,39 @@ export function applyCacheToTools<T extends { cache_control?: unknown }>(tools: 
   return tools.map((tool, index) =>
     index === tools.length - 1 ? { ...tool, cache_control: CACHE_CONTROL_EPHEMERAL } : { ...tool }
   );
+}
+
+function addCacheControlToMessageContent(
+  content: Anthropic.MessageParam["content"]
+): Anthropic.MessageParam["content"] {
+  if (typeof content === "string") {
+    return [{ type: "text", text: content, cache_control: CACHE_CONTROL_EPHEMERAL }];
+  }
+  if (!Array.isArray(content) || content.length === 0) return content;
+
+  const lastIndex = content.length - 1;
+  const last = content[lastIndex];
+  if (!last || last.type !== "text") return content;
+
+  return [
+    ...content.slice(0, lastIndex),
+    { ...last, cache_control: CACHE_CONTROL_EPHEMERAL },
+  ];
+}
+
+/** Cache the penultimate message so the stable prefix includes history minus the latest turn. */
+export function applyCacheToHistoryMessages(
+  messages: Anthropic.MessageParam[]
+): Anthropic.MessageParam[] {
+  if (messages.length <= 1) return messages;
+  const cacheIndex = messages.length - 2;
+  return messages.map((message, index) => {
+    if (index !== cacheIndex) return message;
+    return {
+      ...message,
+      content: addCacheControlToMessageContent(message.content),
+    };
+  });
 }
 
 export interface AnthropicUsageFields {

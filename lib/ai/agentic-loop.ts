@@ -47,7 +47,7 @@ export async function runAgenticGenerate(
   const registry = options.registry;
   const tools = mergeTools(options.nativeTools, registry?.definitions ?? []);
   const cachedTools = tools ? applyCacheToTools(tools) : undefined;
-  let messages = options.messages.map(toAnthropicMessage);
+  let messages = applyCacheToHistoryMessages(options.messages.map(toAnthropicMessage));
   let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
   let accumulatedContent = "";
@@ -122,7 +122,7 @@ export async function* runAgenticStream(
   const registry = options.registry;
   const tools = mergeTools(options.nativeTools, registry?.definitions ?? []);
   const cachedTools = tools ? applyCacheToTools(tools) : undefined;
-  let messages = options.messages.map(toAnthropicMessage);
+  let messages = applyCacheToHistoryMessages(options.messages.map(toAnthropicMessage));
   let usage = emptyTokenUsage();
   const executedTools: ExecutedToolCall[] = [];
   let emittedTextThisStep = false;
