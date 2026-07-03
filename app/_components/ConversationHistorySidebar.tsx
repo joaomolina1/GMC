@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessageSquarePlus, MessagesSquare, Trash2 } from "lucide-react";
+import { MessageSquarePlus, MessagesSquare, PanelLeftClose, Trash2 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { cn } from "@lib/utils";
 import type { ConversationListItem } from "@lib/chat/conversations";
@@ -12,6 +12,7 @@ interface ConversationHistorySidebarProps {
   onSelect: (conversationId: string | undefined) => void;
   refreshKey?: number;
   className?: string;
+  onCollapse?: () => void;
 }
 
 function formatRelativeTime(iso: string): string {
@@ -33,6 +34,7 @@ export function ConversationHistorySidebar({
   onSelect,
   refreshKey = 0,
   className,
+  onCollapse,
 }: ConversationHistorySidebarProps) {
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,16 +76,28 @@ export function ConversationHistorySidebar({
           <MessagesSquare size={15} className="shrink-0 text-slate-500" />
           <span className="truncate text-xs font-semibold text-slate-700">Histórico</span>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2"
-          onClick={() => onSelect(undefined)}
-          title="Nova conversa"
-        >
-          <MessageSquarePlus size={14} />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => onSelect(undefined)}
+            title="Nova conversa"
+          >
+            <MessageSquarePlus size={14} />
+          </Button>
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              title="Ocultar histórico"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-600"
+            >
+              <PanelLeftClose size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">

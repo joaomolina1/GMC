@@ -6,11 +6,18 @@ import {
   Globe,
   Code,
   FileOutput,
+  Sparkles,
+  Settings2,
+  Wrench,
+  Package,
+  Plug,
+  History,
   type LucideIcon,
 } from "lucide-react";
 import { TOOL_CREATE_DOCUMENTS } from "@lib/agents/agent-tools";
 
 export type BuilderTab =
+  | "instructions"
   | "general"
   | "knowledge"
   | "tools"
@@ -18,14 +25,46 @@ export type BuilderTab =
   | "connectors"
   | "versions";
 
-export const BUILDER_TABS: { id: BuilderTab; label: string }[] = [
-  { id: "general", label: "Geral" },
-  { id: "knowledge", label: "Knowledge" },
-  { id: "tools", label: "Tools" },
-  { id: "skills", label: "Skills" },
-  { id: "connectors", label: "Conectores" },
-  { id: "versions", label: "Versões" },
+export const BUILDER_TABS: { id: BuilderTab; label: string; icon: LucideIcon }[] = [
+  { id: "instructions", label: "Instruções", icon: Sparkles },
+  { id: "general", label: "Definições", icon: Settings2 },
+  { id: "knowledge", label: "Knowledge", icon: Library },
+  { id: "tools", label: "Tools", icon: Wrench },
+  { id: "skills", label: "Skills", icon: Package },
+  { id: "connectors", label: "Conectores", icon: Plug },
+  { id: "versions", label: "Versões", icon: History },
 ];
+
+export const TAB_INTRO: Record<BuilderTab, { title: string; desc: string }> = {
+  instructions: {
+    title: "Instruções",
+    desc: "Modelo, esforço e o system prompt que define o comportamento do agente.",
+  },
+  general: {
+    title: "Definições",
+    desc: "Nome, descrição, visibilidade e categoria no marketplace.",
+  },
+  knowledge: {
+    title: "Knowledge",
+    desc: "Documentos indexados para pesquisa semântica (RAG).",
+  },
+  tools: {
+    title: "Tools",
+    desc: "Capacidades técnicas — web search, documentos, visão e plugins.",
+  },
+  skills: {
+    title: "Skills",
+    desc: "Pacotes de skills no formato Claude (SKILL.md + ficheiros).",
+  },
+  connectors: {
+    title: "Conectores",
+    desc: "Servidores MCP externos ligados via API Anthropic.",
+  },
+  versions: {
+    title: "Versões",
+    desc: "Histórico de versões guardadas e publicação.",
+  },
+};
 
 export const TOOL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {
   web_search: {

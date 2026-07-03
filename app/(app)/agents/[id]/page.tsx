@@ -4,14 +4,13 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Save,
-  Upload,
   ArrowLeft,
   Check,
-  ChevronDown,
+  MessagesSquare,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
-import { Input, Textarea, Select } from "@/_design_system/Input";
+import { Select } from "@/_design_system/Input";
 import { Badge } from "@/_design_system/Badge";
 import { AgentChatPanel } from "@/_components/AgentChatPanel";
 import { ConversationHistorySidebar } from "@/_components/ConversationHistorySidebar";
@@ -24,6 +23,7 @@ import {
   BUILDER_TABS,
   CORE_TOOLS,
   DEFAULT_TOOL_CONFIGS,
+  TAB_INTRO,
   type BuilderTab,
 } from "./agent-builder/constants";
 import type { Agent, AgentVersion, McpConnectionRow, SkillPackageRow } from "./agent-builder/types";
@@ -52,8 +52,8 @@ function AgentBuilderWorkspace() {
   const conversationId = searchParams.get("c") ?? undefined;
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [tab, setTab] = useState<Tab>("general");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("instructions");
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState("private");
@@ -407,146 +407,175 @@ function AgentBuilderWorkspace() {
   const thinkingSupported = modelSupportsThinking(model);
   const effortOptions: EffortLevel[] =
     model.includes("opus") ? ["low", "medium", "high", "max"] : ["low", "medium", "high"];
+  const intro = TAB_INTRO[tab];
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line pb-3">
+    <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3">
+      {/* Header */}
+      <header className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={() => router.push("/")}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+            title="Voltar"
           >
             <ArrowLeft size={16} />
           </button>
-          <h2 className="truncate text-lg font-semibold text-slate-900">{name}</h2>
-          {activeVersion != null && <Badge tone="neutral">v{activeVersion}</Badge>}
-          <Badge tone={agent.status === "published" ? "success" : "warning"}>{agent.status}</Badge>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-lg font-semibold text-slate-900">
+                {name || "Novo agente"}
+              </h2>
+              {activeVersion != null && <Badge tone="neutral">v{activeVersion}</Badge>}
+              <Badge tone={agent.status === "published" ? "success" : "warning"}>
+                {agent.status}
+              </Badge>
+            </div>
+            <p className="truncate text-xs text-slate-400">
+              {description || "Configure prompt, tools, skills e knowledge"}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {saveError && <p className="text-xs text-rose-600">{saveError}</p>}
+        <div className="flex items-center gap-3">
+          {saveError && <p className="max-w-[16rem] truncate text-xs text-rose-600">{saveError}</p>}
           {savedAt && !saveError && (
-            <p className="text-xs text-slate-400">Guardado às {savedAt}</p>
+            <p className="hidden text-xs text-slate-400 sm:block">Guardado às {savedAt}</p>
           )}
           <Button onClick={saveNewVersion} disabled={saving}>
             {saved ? <Check size={16} /> : <Save size={16} />}
             {saving ? "A guardar..." : saved ? "Guardado" : "Guardar"}
           </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex min-h-0 flex-1 divide-x divide-line">
-        <div className="flex w-[min(44%,520px)] shrink-0 flex-col">
-          <div className="grid shrink-0 grid-cols-1 gap-2 border-b border-line p-3 sm:grid-cols-3">
-            <Select
-              label="Modelo"
-              value={model}
-              disabled={!canChangeModel}
-              onChange={(e) => setModel(e.target.value)}
-            >
-              {(availableModels.length > 0
-                ? availableModels
-                : [{ id: DEFAULT_AGENT_MODEL, display_name: "Claude Haiku 4.5" }]
-              ).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.display_name}
-                </option>
-              ))}
-            </Select>
-            {!canChangeModel && (
-              <p className="col-span-full text-[11px] text-slate-500">
-                O modelo é gerido pela plataforma. Apenas super_admin pode alterá-lo.
-              </p>
-            )}
-            <Select label="Esforço" value={effort} onChange={(e) => setEffort(e.target.value as EffortLevel)}>
-              {effortOptions.map((level) => (
-                <option key={level} value={level}>
-                  {level === "low"
-                    ? "Baixo"
-                    : level === "medium"
-                      ? "Médio"
-                      : level === "high"
-                        ? "Alto"
-                        : "Máximo"}
-                </option>
-              ))}
-            </Select>
-            <div className="flex flex-col justify-end">
-              <label className="mb-1 text-sm font-medium text-slate-700">Pensamento</label>
-              <button
-                type="button"
-                disabled={!thinkingSupported}
-                onClick={() => setThinkingEnabled((v) => !v)}
-                className={cn(
-                  "flex h-10 items-center justify-between rounded-xl border px-3 text-sm transition-colors",
-                  !thinkingSupported && "cursor-not-allowed opacity-50",
-                  thinkingEnabled
-                    ? "border-brand-300 bg-brand-50 text-brand-700"
-                    : "border-line bg-white text-slate-600"
-                )}
-                title={
-                  thinkingSupported
-                    ? "Ativa pensamento adaptativo (extended thinking)"
-                    : "Modelo sem suporte a pensamento"
-                }
-              >
-                <span>{thinkingEnabled ? "Ativo" : "Desligado"}</span>
-                <span
+      {/* Two-zone workspace */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
+        {/* ── Zone 1: Configure ───────────────────────────── */}
+        <section className="flex min-h-0 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+          <nav className="flex w-14 shrink-0 flex-col gap-1 border-r border-line bg-slate-50/70 p-2 lg:w-44">
+            {BUILDER_TABS.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  title={t.label}
                   className={cn(
-                    "h-5 w-9 rounded-full p-0.5 transition-colors",
-                    thinkingEnabled ? "bg-brand-500" : "bg-slate-300"
+                    "flex items-center justify-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors lg:justify-start",
+                    active
+                      ? "bg-brand-500 text-white shadow-sm"
+                      : "text-slate-500 hover:bg-white hover:text-slate-800"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "block h-4 w-4 rounded-full bg-white shadow transition-transform",
-                      thinkingEnabled && "translate-x-4"
-                    )}
-                  />
-                </span>
-              </button>
+                  <Icon size={16} className="shrink-0" />
+                  <span className="hidden lg:inline">{t.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="shrink-0 border-b border-line px-5 py-3">
+              <h3 className="text-sm font-semibold text-slate-900">{intro.title}</h3>
+              <p className="mt-0.5 text-xs text-slate-400">{intro.desc}</p>
             </div>
-          </div>
 
-          <div className="flex min-h-0 flex-1 flex-col p-3">
-            <label className="mb-1.5 text-sm font-medium text-slate-700">System prompt</label>
-            <Textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed"
-              placeholder="Instruções do agente..."
-            />
-          </div>
-
-          <div className="shrink-0 border-t border-line">
-            <button
-              type="button"
-              onClick={() => setAdvancedOpen((o) => !o)}
-              className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Configuração avançada
-              <ChevronDown
-                size={16}
-                className={cn("transition-transform", advancedOpen && "rotate-180")}
-              />
-            </button>
-            {advancedOpen && (
-              <div className="max-h-[40vh] overflow-y-auto border-t border-line p-3">
-                <div className="mb-3 flex gap-1 overflow-x-auto">
-                  {BUILDER_TABS.map((t) => (
+            {tab === "instructions" ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="grid shrink-0 grid-cols-1 gap-3 border-b border-line p-4 sm:grid-cols-3">
+                  <Select
+                    label="Modelo"
+                    value={model}
+                    disabled={!canChangeModel}
+                    onChange={(e) => setModel(e.target.value)}
+                  >
+                    {(availableModels.length > 0
+                      ? availableModels
+                      : [{ id: DEFAULT_AGENT_MODEL, display_name: "Claude Haiku 4.5" }]
+                    ).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.display_name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
+                    label="Esforço"
+                    value={effort}
+                    onChange={(e) => setEffort(e.target.value as EffortLevel)}
+                  >
+                    {effortOptions.map((level) => (
+                      <option key={level} value={level}>
+                        {level === "low"
+                          ? "Baixo"
+                          : level === "medium"
+                            ? "Médio"
+                            : level === "high"
+                              ? "Alto"
+                              : "Máximo"}
+                      </option>
+                    ))}
+                  </Select>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-slate-700">Pensamento</label>
                     <button
-                      key={t.id}
-                      onClick={() => setTab(t.id)}
+                      type="button"
+                      disabled={!thinkingSupported}
+                      onClick={() => setThinkingEnabled((v) => !v)}
                       className={cn(
-                        "whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium",
-                        tab === t.id
-                          ? "bg-brand-500 text-white"
-                          : "text-slate-500 hover:bg-slate-100"
+                        "flex h-[42px] items-center justify-between rounded-lg border px-3 text-sm transition-colors",
+                        !thinkingSupported && "cursor-not-allowed opacity-50",
+                        thinkingEnabled
+                          ? "border-brand-300 bg-brand-50 text-brand-700"
+                          : "border-slate-200 bg-white text-slate-600"
                       )}
+                      title={
+                        thinkingSupported
+                          ? "Ativa pensamento adaptativo (extended thinking)"
+                          : "Modelo sem suporte a pensamento"
+                      }
                     >
-                      {t.label}
+                      <span>{thinkingEnabled ? "Ativo" : "Desligado"}</span>
+                      <span
+                        className={cn(
+                          "h-5 w-9 rounded-full p-0.5 transition-colors",
+                          thinkingEnabled ? "bg-brand-500" : "bg-slate-300"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                            thinkingEnabled && "translate-x-4"
+                          )}
+                        />
+                      </span>
                     </button>
-                  ))}
+                  </div>
+                  {!canChangeModel && (
+                    <p className="col-span-full text-[11px] text-slate-500">
+                      O modelo é gerido pela plataforma. Apenas super_admin pode alterá-lo.
+                    </p>
+                  )}
                 </div>
+
+                <div className="flex min-h-0 flex-1 flex-col p-4">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="text-sm font-medium text-slate-700">System prompt</label>
+                    <span className="text-[11px] text-slate-400">
+                      {systemPrompt.length} caracteres
+                    </span>
+                  </div>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    className="min-h-0 flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+                    placeholder="Descreve o comportamento, tom e regras do agente…"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
                 <AdvancedTabContent
                   tab={tab}
                   name={name}
@@ -598,15 +627,28 @@ function AgentBuilderWorkspace() {
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="flex min-w-0 flex-1 divide-x divide-line">
-          <ConversationHistorySidebar
-            agentId={id}
-            activeConversationId={conversationId}
-            onSelect={setActiveConversation}
-            refreshKey={historyRefresh}
-          />
+        {/* ── Zone 2: Test ────────────────────────────────── */}
+        <section className="flex min-h-0 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+          {historyOpen ? (
+            <ConversationHistorySidebar
+              agentId={id}
+              activeConversationId={conversationId}
+              onSelect={setActiveConversation}
+              refreshKey={historyRefresh}
+              onCollapse={() => setHistoryOpen(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              title="Mostrar histórico"
+              className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-line bg-slate-50/70 py-3 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <MessagesSquare size={16} />
+            </button>
+          )}
           <div className="flex min-w-0 flex-1 flex-col p-3">
             <AgentChatPanel
               agentId={id}
@@ -618,7 +660,7 @@ function AgentBuilderWorkspace() {
               onConversationActivity={() => setHistoryRefresh((n) => n + 1)}
             />
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
