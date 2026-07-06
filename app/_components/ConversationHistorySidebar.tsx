@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessageSquarePlus, MessagesSquare, PanelLeftClose, Trash2 } from "lucide-react";
+import { MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelRightClose, Trash2 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { cn } from "@lib/utils";
 import type { ConversationListItem } from "@lib/chat/conversations";
@@ -13,6 +13,7 @@ interface ConversationHistorySidebarProps {
   refreshKey?: number;
   className?: string;
   onCollapse?: () => void;
+  side?: "left" | "right";
 }
 
 function formatRelativeTime(iso: string): string {
@@ -35,6 +36,7 @@ export function ConversationHistorySidebar({
   refreshKey = 0,
   className,
   onCollapse,
+  side = "left",
 }: ConversationHistorySidebarProps) {
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,10 +66,14 @@ export function ConversationHistorySidebar({
     await loadConversations();
   }
 
+  const onRight = side === "right";
+  const CollapseIcon = onRight ? PanelRightClose : PanelLeftClose;
+
   return (
     <aside
       className={cn(
-        "flex w-[min(240px,28%)] shrink-0 flex-col border-r border-line bg-slate-50/60",
+        "flex w-[min(240px,28%)] shrink-0 flex-col bg-slate-50/60",
+        onRight ? "border-l border-line" : "border-r border-line",
         className
       )}
     >
@@ -94,7 +100,7 @@ export function ConversationHistorySidebar({
               title="Ocultar histórico"
               className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-600"
             >
-              <PanelLeftClose size={15} />
+              <CollapseIcon size={15} />
             </button>
           )}
         </div>

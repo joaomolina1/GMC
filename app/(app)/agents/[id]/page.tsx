@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   Check,
   MessagesSquare,
+  PanelLeftClose,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -53,6 +55,7 @@ function AgentBuilderWorkspace() {
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [tab, setTab] = useState<Tab>("instructions");
+  const [configureOpen, setConfigureOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -449,7 +452,14 @@ function AgentBuilderWorkspace() {
       </header>
 
       {/* Two-zone workspace */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 gap-3",
+          configureOpen
+            ? "grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]"
+            : "grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)]"
+        )}
+      >
         {/* ── Zone 1: Configure ───────────────────────────── */}
         <section className="flex min-h-0 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
           <nav className="flex w-14 shrink-0 flex-col gap-1 border-r border-line bg-slate-50/70 p-2 lg:w-44">
@@ -460,7 +470,10 @@ function AgentBuilderWorkspace() {
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setTab(t.id)}
+                  onClick={() => {
+                    setTab(t.id);
+                    setConfigureOpen(true);
+                  }}
                   title={t.label}
                   className={cn(
                     "flex items-center justify-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors lg:justify-start",
@@ -474,8 +487,20 @@ function AgentBuilderWorkspace() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setConfigureOpen((open) => !open)}
+              title={configureOpen ? "Encolher painel" : "Expandir painel"}
+              className="mt-auto flex items-center justify-center gap-2 rounded-lg px-2.5 py-2 text-slate-400 transition-colors hover:bg-white hover:text-slate-600 lg:justify-start"
+            >
+              {configureOpen ? <PanelLeftClose size={16} /> : <ChevronRight size={16} />}
+              <span className="hidden text-xs font-medium lg:inline">
+                {configureOpen ? "Encolher" : "Expandir"}
+              </span>
+            </button>
           </nav>
 
+          {configureOpen ? (
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="shrink-0 border-b border-line px-5 py-3">
               <h3 className="text-sm font-semibold text-slate-900">{intro.title}</h3>
@@ -627,28 +652,11 @@ function AgentBuilderWorkspace() {
               </div>
             )}
           </div>
+          ) : null}
         </section>
 
         {/* ── Zone 2: Test ────────────────────────────────── */}
         <section className="flex min-h-0 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
-          {historyOpen ? (
-            <ConversationHistorySidebar
-              agentId={id}
-              activeConversationId={conversationId}
-              onSelect={setActiveConversation}
-              refreshKey={historyRefresh}
-              onCollapse={() => setHistoryOpen(false)}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-              title="Mostrar histórico"
-              className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-line bg-slate-50/70 py-3 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            >
-              <MessagesSquare size={16} />
-            </button>
-          )}
           <div className="flex min-w-0 flex-1 flex-col p-3">
             <AgentChatPanel
               agentId={id}
@@ -660,6 +668,25 @@ function AgentBuilderWorkspace() {
               onConversationActivity={() => setHistoryRefresh((n) => n + 1)}
             />
           </div>
+          {historyOpen ? (
+            <ConversationHistorySidebar
+              agentId={id}
+              activeConversationId={conversationId}
+              onSelect={setActiveConversation}
+              refreshKey={historyRefresh}
+              onCollapse={() => setHistoryOpen(false)}
+              side="right"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              title="Mostrar histórico"
+              className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-line bg-slate-50/70 py-3 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <MessagesSquare size={16} />
+            </button>
+          )}
         </section>
       </div>
     </div>

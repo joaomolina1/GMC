@@ -143,6 +143,8 @@ export function FlowCanvas({
   }, [viewportStorageKey]);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
+  const connectionDragRef = useRef<ConnectionDrag | null>(null);
+  connectionDragRef.current = connectionDrag;
   const [dragging, setDragging] = useState<{
     nodeId: string;
     offsetX: number;
@@ -292,28 +294,38 @@ export function FlowCanvas({
     commitGraph({ ...graph, edges: [...graph.edges, edge] });
   };
 
+  const finishConnectionAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const drag = connectionDragRef.current;
+      if (!drag) return;
+      const hit = document.elementFromPoint(clientX, clientY);
+      const inPort = hit?.closest('[data-port="in"]');
+      const targetId = inPort?.closest("[data-node-id]")?.getAttribute("data-node-id");
+      if (targetId && targetId !== drag.sourceId) {
+        addEdge(drag.sourceId, targetId, drag.branch);
+      }
+      connectionDragRef.current = null;
+      setConnectionDrag(null);
+    },
+    [graph, commitGraph]
+  );
+
   const startConnection = (
-    e: React.MouseEvent,
+    e: React.PointerEvent,
     sourceId: string,
     branch?: "true" | "false"
   ) => {
     e.stopPropagation();
     e.preventDefault();
     if (!canvasRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     const rect = canvasRef.current.getBoundingClientRect();
     const pos = screenToCanvas(e.clientX, e.clientY, rect, viewportRef.current);
-    setConnectionDrag({ sourceId, branch, x: pos.x, y: pos.y });
+    const drag = { sourceId, branch, x: pos.x, y: pos.y };
+    connectionDragRef.current = drag;
+    setConnectionDrag(drag);
     onSelectNode(sourceId);
     setSelectedEdgeId(null);
-  };
-
-  const completeConnection = (e: React.MouseEvent, targetId: string) => {
-    e.stopPropagation();
-    if (!connectionDrag) return;
-    if (connectionDrag.sourceId !== targetId) {
-      addEdge(connectionDrag.sourceId, targetId, connectionDrag.branch);
-    }
-    setConnectionDrag(null);
   };
 
   const onMouseMove = useCallback(
@@ -356,10 +368,45 @@ export function FlowCanvas({
   const onMouseUp = () => {
     dragHistoryPushedRef.current = false;
     setDragging(null);
-    setConnectionDrag(null);
-    setIsPanning(false);
-    panStart.current = null;
+    if (!connectionDragRef.current) {
+      setIsPanning(false);
+      panStart.current = null;
+    }
   };
+
+  useEffect(() => {
+    if (!connectionDrag) return;
+    const onUp = (e: PointerEvent) => {
+      finishConnectionAt(e.clientX, e.clientY);
+    };
+    window.addEventListener("pointerup", onUp);
+    return () => window.removeEventListener("pointerup", onUp);
+  }, [connectionDrag, finishConnectionAt]);
+
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMove = (e: PointerEvent) => {
+      const start = panStart.current;
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      updateViewportRef.current((v) => ({
+        ...v,
+        panX: start.panX + dx,
+        panY: start.panY + dy,
+      }));
+    };
+    const onUp = () => {
+      setIsPanning(false);
+      panStart.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [isPanning]);
 
   const updateViewportRef = useRef(updateViewport);
   updateViewportRef.current = updateViewport;
@@ -374,8 +421,9 @@ export function FlowCanvas({
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
-      // Shift+scroll = pan; roda do rato ou pinch (ctrl) = zoom
-      const wantsPan = e.shiftKey && !e.ctrlKey && !e.metaKey;
+      // Shift+scroll, roda horizontal (tilt) ou trackpad = pan; roda vertical = zoom
+      const horizontalPan = Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX !== 0;
+      const wantsPan = (e.shiftKey && !e.ctrlKey && !e.metaKey) || horizontalPan;
       if (wantsPan) {
         updateViewportRef.current((v) => ({
           ...v,
@@ -526,11 +574,11 @@ export function FlowCanvas({
           onMouseUp();
         }}
         onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-        onPointerDown={(e) => {
+        onPointerDownCapture={(e) => {
           if (e.button === 1 || (e.button === 0 && e.altKey)) {
             e.preventDefault();
-            e.currentTarget.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            canvasRef.current?.setPointerCapture(e.pointerId);
             setIsPanning(true);
             panStart.current = {
               x: e.clientX,
@@ -538,12 +586,10 @@ export function FlowCanvas({
               panX: viewportRef.current.panX,
               panY: viewportRef.current.panY,
             };
-            return;
           }
-          if (e.button === 0 && e.target === e.currentTarget) {
-            setSelectedEdgeId(null);
-            onSelectNode(null);
-          }
+        }}
+        onAuxClick={(e) => {
+          if (e.button === 1) e.preventDefault();
         }}
         onMouseDown={(e) => {
           if (e.button === 0 && e.target === e.currentTarget) {
@@ -793,6 +839,7 @@ export function FlowCanvas({
             {graph.nodes.map((node) => (
               <div
                 key={`ports-${node.id}`}
+                data-node-id={node.id}
                 className="pointer-events-none absolute"
                 style={{
                   left: node.position.x,
@@ -807,11 +854,10 @@ export function FlowCanvas({
                     data-port="in"
                     title="Entrada"
                     className={cn(
-                      "pointer-events-auto absolute left-0 top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:bg-brand-500",
-                      connectionDrag && "bg-brand-500"
+                      "pointer-events-auto absolute left-0 top-1/2 z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow hover:bg-brand-500",
+                      connectionDrag && "bg-brand-500 ring-2 ring-brand-200"
                     )}
-                    onMouseDown={(ev) => ev.stopPropagation()}
-                    onMouseUp={(ev) => completeConnection(ev, node.id)}
+                    onPointerDown={(ev) => ev.stopPropagation()}
                   />
                 )}
                 {hasOutputPort(node.type) &&
@@ -821,15 +867,15 @@ export function FlowCanvas({
                         type="button"
                         data-port="out-true"
                         title="Saída verdadeiro"
-                        className="pointer-events-auto absolute right-0 top-[30%] z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow"
-                        onMouseDown={(ev) => startConnection(ev, node.id, "true")}
+                        className="pointer-events-auto absolute right-0 top-[30%] z-10 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-emerald-500 shadow hover:ring-2 hover:ring-emerald-200"
+                        onPointerDown={(ev) => startConnection(ev, node.id, "true")}
                       />
                       <button
                         type="button"
                         data-port="out-false"
                         title="Saída falso"
-                        className="pointer-events-auto absolute right-0 top-[70%] z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow"
-                        onMouseDown={(ev) => startConnection(ev, node.id, "false")}
+                        className="pointer-events-auto absolute right-0 top-[70%] z-10 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-rose-500 shadow hover:ring-2 hover:ring-rose-200"
+                        onPointerDown={(ev) => startConnection(ev, node.id, "false")}
                       />
                     </>
                   ) : (
@@ -837,8 +883,8 @@ export function FlowCanvas({
                       type="button"
                       data-port="out"
                       title="Saída"
-                      className="pointer-events-auto absolute right-0 top-1/2 z-10 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow"
-                      onMouseDown={(ev) => startConnection(ev, node.id)}
+                      className="pointer-events-auto absolute right-0 top-1/2 z-10 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-white bg-brand-500 shadow hover:ring-2 hover:ring-brand-200"
+                      onPointerDown={(ev) => startConnection(ev, node.id)}
                     />
                   ))}
               </div>
@@ -906,7 +952,7 @@ export function FlowCanvas({
           </div>
         )}
         <p className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
-          Clique na ligação para seleccionar · Delete apaga nó/ligação · Ctrl+Z desfazer · Ctrl+roda zoom · Scroll pan · Alt+arrastar pan
+          Ligações: arrastar da saída para a entrada · Meio do rato ou Alt+arrastar pan · Roda horizontal pan · Ctrl+roda zoom
         </p>
       </div>
     </div>
