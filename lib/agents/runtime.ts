@@ -67,7 +67,7 @@ export async function buildAgentRuntimeConfig(options: {
         const uploaded = await uploadSkillPackagesToContainer(skillPackages);
         containerUploadBlocks = uploaded.uploadBlocks;
         if (uploaded.fileIds.length > 0) {
-          skillsPrompt += buildSkillContainerHint(skillPackages);
+          skillsPrompt += buildSkillContainerHint(uploaded.uploadedPaths, uploaded.skippedCount);
           void persistSkillPackageFileCache(supabase, uploaded.updatedPackages);
         }
       }
