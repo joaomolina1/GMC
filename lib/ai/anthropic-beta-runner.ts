@@ -20,6 +20,7 @@ import {
   buildDocumentSkillParams,
 } from "@lib/ai/anthropic-document-skills";
 import { extractFileIdsFromPayload, logMissingFileIds } from "@lib/ai/extract-generated-files";
+import { listDownloadableFilesForContainer } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS, getModelMaxTokens } from "@lib/ai/model-limits";
 import { modelSupportsDocumentSkills } from "@lib/ai/document-skills-guard";
 import { MCP_BETA } from "@lib/agents/mcp-connections";
@@ -40,6 +41,36 @@ import {
 
 const MAX_PAUSE_TURN_CONTINUATIONS = 12;
 const PROMPT_CACHING_BETA = "prompt-caching-2024-07-31";
+
+function uploadedSkillFileIds(
+  blocks?: BetaContainerUploadBlockParam[]
+): Set<string> {
+  const ids = new Set<string>();
+  for (const block of blocks ?? []) {
+    if (block.file_id) ids.add(block.file_id);
+  }
+  return ids;
+}
+
+async function resolveCollectedFileIds(options: {
+  collected: Set<string>;
+  containerId?: string;
+  excludeFileIds: Set<string>;
+}): Promise<string[]> {
+  if (options.collected.size > 0) {
+    return Array.from(options.collected);
+  }
+  if (!options.containerId) return [];
+
+  const fromContainer = await listDownloadableFilesForContainer(
+    options.containerId,
+    options.excludeFileIds
+  );
+  for (const id of fromContainer) {
+    options.collected.add(id);
+  }
+  return Array.from(options.collected);
+}
 
 function toAnthropicMessages(
   messages: ChatMessage[],
@@ -242,10 +273,12 @@ async function runBetaAgentCore(options: BetaAgentRunOptions): Promise<BetaAgent
 
   let usage = emptyTokenUsage();
   const collectedFileIds = new Set<string>();
+  const excludeFileIds = uploadedSkillFileIds(options.containerUploadBlocks);
   const executedTools: ExecutedToolCall[] = [];
   let stepsUsed = 0;
   let accumulatedContent = "";
   let stopReason: string | undefined;
+  let lastContainerId: string | undefined;
 
   const documentSkillsUsed =
     options.documentSkillIds?.length && options.createDocuments
@@ -261,6 +294,7 @@ async function runBetaAgentCore(options: BetaAgentRunOptions): Promise<BetaAgent
     for (let pause = 0; pause < MAX_PAUSE_TURN_CONTINUATIONS; pause++) {
       response = await createBetaResponse(client, options, messages);
       usage = addAnthropicUsage(usage, response.usage);
+      if (response.container?.id) lastContainerId = response.container.id;
       extractFileIdsFromPayload(response.content).forEach((id) => collectedFileIds.add(id));
       executedTools.push(...extractInformativeServerToolCalls(response.content));
 
@@ -295,10 +329,16 @@ async function runBetaAgentCore(options: BetaAgentRunOptions): Promise<BetaAgent
     stopReason = "max_steps";
   }
 
+  const anthropicFileIds = await resolveCollectedFileIds({
+    collected: collectedFileIds,
+    containerId: lastContainerId,
+    excludeFileIds,
+  });
+
   return {
     content: accumulatedContent,
     usage,
-    anthropicFileIds: Array.from(collectedFileIds),
+    anthropicFileIds,
     stepsUsed,
     documentSkillsUsed,
     toolCalls: executedTools.length ? executedTools : undefined,
@@ -359,10 +399,12 @@ async function* streamBetaAgentCore(
 
   let usage = emptyTokenUsage();
   const collectedFileIds = new Set<string>();
+  const excludeFileIds = uploadedSkillFileIds(options.containerUploadBlocks);
   const executedTools: ExecutedToolCall[] = [];
   let stepsUsed = 0;
   let hadPriorStepText = false;
   let stopReason: string | undefined;
+  let lastContainerId: string | undefined;
 
   for (let step = 0; step < maxSteps; step++) {
     stepsUsed += 1;
@@ -412,6 +454,7 @@ async function* streamBetaAgentCore(
 
       const final = await stream.finalMessage();
       usage = addAnthropicUsage(usage, final.usage);
+      if (final.container?.id) lastContainerId = final.container.id;
       extractFileIdsFromPayload(final.content).forEach((id) => collectedFileIds.add(id));
       executedTools.push(...extractInformativeServerToolCalls(final.content));
       logMissingFileIds("beta-stream", final.content, extractText(final.content));
@@ -461,7 +504,11 @@ async function* streamBetaAgentCore(
     stopReason = "max_steps";
   }
 
-  const fileIds = Array.from(collectedFileIds);
+  const fileIds = await resolveCollectedFileIds({
+    collected: collectedFileIds,
+    containerId: lastContainerId,
+    excludeFileIds,
+  });
   if (fileIds.length > 0) {
     yield { type: "anthropic_file_ids", fileIds };
   }

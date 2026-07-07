@@ -229,7 +229,7 @@ export async function POST(request: Request) {
           }
         } else if (messageClaimsDownloadableFiles(fullContent)) {
           const warning =
-            "⚠️ Os ficheiros listados não ficaram disponíveis para download. Peça novamente «gera o PPTX» — quando funcionar, aparece um botão verde abaixo desta mensagem.";
+            "⚠️ Os ficheiros listados não ficaram disponíveis para download. Peça novamente e confirme que aparecem **botões verdes** abaixo desta mensagem. O agente deve criar ficheiros em `/mnt/user-data/outputs/` com bash.";
           fullContent += `\n\n${warning}`;
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: "files_error", message: warning })}\n\n`)

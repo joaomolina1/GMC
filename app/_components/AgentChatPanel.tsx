@@ -27,8 +27,8 @@ function MissingDownloadNotice({
       <p className="font-medium">Sem ficheiro para descarregar</p>
       <p className="mt-1 text-xs leading-relaxed text-amber-800">
         O agente listou ficheiros em texto, mas nenhum foi guardado na plataforma. Inicie uma{" "}
-        <strong>nova conversa</strong> e peça de novo, por exemplo: «gera o PPTX». Quando
-        funcionar, aparece um <strong>botão verde</strong> de download abaixo desta mensagem.
+        <strong>nova conversa</strong> e peça de novo. Quando funcionar, aparecem{" "}
+        <strong>botões verdes</strong> de download abaixo desta mensagem (não listas em markdown).
       </p>
     </div>
   );

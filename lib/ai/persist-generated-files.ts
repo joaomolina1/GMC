@@ -15,6 +15,30 @@ function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
+/** List downloadable files created in a code-execution container (session scope). */
+export async function listDownloadableFilesForContainer(
+  containerId: string,
+  excludeFileIds: Set<string> = new Set()
+): Promise<string[]> {
+  if (!containerId || !process.env.ANTHROPIC_API_KEY) return [];
+
+  const client = getAnthropicClient();
+  const betas = [...ANTHROPIC_DOCUMENT_BETAS];
+  const fileIds: string[] = [];
+
+  try {
+    for await (const file of client.beta.files.list({ scope_id: containerId, betas })) {
+      if (!file.id || excludeFileIds.has(file.id)) continue;
+      if (file.downloadable === false) continue;
+      fileIds.push(file.id);
+    }
+  } catch (err) {
+    console.warn("[generated-files] container list failed:", containerId, err);
+  }
+
+  return fileIds;
+}
+
 function sanitizeFilename(name: string): string {
   return name.replace(/[^\w.\-() ]+/g, "_").slice(0, 180) || "documento";
 }
