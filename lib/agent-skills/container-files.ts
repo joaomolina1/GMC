@@ -243,5 +243,7 @@ export function buildSkillContainerHint(uploadedPaths: string[], skippedCount = 
 Os seguintes ficheiros estão disponíveis no sandbox de code execution (directório de input):
 ${lines}
 Usa estes scripts/templates quando a skill SKILL.md os referenciar.
-Quando exportares PPTX/PDF/etc., grava sempre em \`/mnt/user-data/outputs/\` com nome claro (ex: apresentacao.pptx).${skipNote}`;
+
+**Regra crítica de download:** qualquer ficheiro para o utilizador (HTML, PPTX, PDF) tem de ser **criado com bash** directamente em \`/mnt/user-data/outputs/\` (ex: \`mkdir -p /mnt/user-data/outputs/slides && cat > /mnt/user-data/outputs/slides/1.html << 'EOF'\`). Não uses text_editor para outputs; não copies com \`cp\` — isso não gera \`file_id\` para download.
+Nunca listes ficheiros em markdown como se fossem descarregáveis; só a plataforma mostra botões verdes quando o \`file_id\` foi capturado.${skipNote}`;
 }

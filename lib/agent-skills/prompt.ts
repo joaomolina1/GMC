@@ -39,7 +39,8 @@ ${pkg.skill_md}${extras ? `\n\n${extras}` : ""}`;
 Tens skills personalizadas instaladas neste agente. **Antes de responder**, verifica se a tarefa do utilizador corresponde ao catálogo abaixo.
 Se corresponder, **segue as instruções da skill em detalhe** — não improvises um workflow alternativo.
 Usa code execution com os ficheiros do container quando a skill o indicar.
-Quando a skill gerar um ficheiro (PPTX, etc.), guarda-o na pasta de outputs do sandbox para ficar disponível para download.
+Quando a skill gerar um ficheiro (HTML, PPTX, etc.), **cria-o directamente em** \`/mnt/user-data/outputs/\` **com bash** (ex: \`cat > /mnt/user-data/outputs/slide_1.html << 'EOF'\`). Copiar ficheiros para outputs **não** activa download — só ficheiros criados lá têm \`file_id\`.
+Nunca inventes listas de ficheiros em markdown; o download só existe quando a plataforma mostra botões verdes.
 
 ### Catálogo
 ${catalog}

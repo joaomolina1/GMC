@@ -20,8 +20,8 @@ function addFileId(ids: Set<string>, value: unknown): void {
   }
 }
 
-/** Anthropic puts created files in bash_code_execution_result.content[].file_id */
-function extractFromBashExecutionResult(result: Record<string, unknown>, ids: Set<string>): void {
+/** Anthropic puts created files in *_code_execution_result.content[].file_id */
+function extractFromCodeExecutionResult(result: Record<string, unknown>, ids: Set<string>): void {
   const outputs = result.content;
   if (!Array.isArray(outputs)) return;
   for (const item of outputs) {
@@ -29,6 +29,12 @@ function extractFromBashExecutionResult(result: Record<string, unknown>, ids: Se
     const row = item as Record<string, unknown>;
     addFileId(ids, row.file_id);
     addFileId(ids, row.fileId);
+  }
+  const stdout = result.stdout;
+  if (typeof stdout === "string") {
+    for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
+      ids.add(match[0]);
+    }
   }
 }
 
@@ -53,22 +59,25 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
 
     const record = value as Record<string, unknown>;
 
-    if (record.type === "bash_code_execution_result") {
-      extractFromBashExecutionResult(record, ids);
-      const stdout = record.stdout;
-      if (typeof stdout === "string") {
-        for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
-          ids.add(match[0]);
-        }
-      }
+    if (
+      record.type === "bash_code_execution_result" ||
+      record.type === "code_execution_result"
+    ) {
+      extractFromCodeExecutionResult(record, ids);
     }
 
-    if (record.type === "bash_code_execution_tool_result") {
+    if (
+      record.type === "bash_code_execution_tool_result" ||
+      record.type === "code_execution_tool_result"
+    ) {
       const content = record.content;
       if (content && typeof content === "object") {
         const inner = content as Record<string, unknown>;
-        if (inner.type === "bash_code_execution_result") {
-          extractFromBashExecutionResult(inner, ids);
+        if (
+          inner.type === "bash_code_execution_result" ||
+          inner.type === "code_execution_result"
+        ) {
+          extractFromCodeExecutionResult(inner, ids);
         }
         walk(inner, depth + 1);
       }
@@ -76,10 +85,6 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
 
     for (const key of FILE_ID_KEYS) {
       addFileId(ids, record[key]);
-    }
-
-    if (record.type === "code_execution_tool_result") {
-      walk(record.content, depth + 1);
     }
 
     for (const nested of Object.values(record)) {
@@ -97,7 +102,10 @@ export function messageClaimsDownloadableFiles(text: string): boolean {
     /dispon[ií]ve(?:is|l)\s+para\s+download/i.test(text) ||
     /ficheiros?\s+dispon[ií]ve/i.test(text) ||
     /pronto[s]?\s+para\s+download/i.test(text) ||
-    /(?:^|\n)\s*[-*]\s*[`']?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/im.test(text)
+    /bot[oõ]es?\s+verdes?/i.test(text) ||
+    /descarregar\s+os\s+ficheiros/i.test(text) ||
+    /(?:^|\n)\s*[-*✅]\s*[*`']?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/im.test(text) ||
+    /✅\s*\*?\*?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/i.test(text)
   );
 }
 
