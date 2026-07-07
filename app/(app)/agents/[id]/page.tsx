@@ -55,7 +55,7 @@ function AgentBuilderWorkspace() {
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [tab, setTab] = useState<Tab>("instructions");
-  const [configureOpen, setConfigureOpen] = useState(true);
+  const [configureOpen, setConfigureOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

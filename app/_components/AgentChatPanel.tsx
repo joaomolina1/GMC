@@ -278,6 +278,18 @@ export function AgentChatPanel({
               return updated;
             });
           }
+          if (data.type === "files_error" && data.message) {
+            assistantContent += `\n\n⚠️ ${data.message}`;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: assistantContent,
+                files: assistantFiles,
+              };
+              return updated;
+            });
+          }
         }
       }
 

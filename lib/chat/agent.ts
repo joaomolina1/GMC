@@ -75,14 +75,20 @@ export interface ResolvedAgentRoute {
 }
 
 export function resolveAgentRoute(config: AgentConfig, messages: ChatMessage[]): ResolvedAgentRoute {
+  const hasCustomSkillContainer = Boolean(config.containerUploadBlocks?.length);
   const needsMcpOrContainer = Boolean(
-    config.mcpServers?.length || config.containerUploadBlocks?.length
+    config.mcpServers?.length || hasCustomSkillContainer
   );
   const createDocumentsThisTurn =
     Boolean(config.createDocuments) && needsDocumentCreationFromContext(messages);
   const documentSkillIds = createDocumentsThisTurn
     ? resolveDocumentSkillsFromContext(messages)
     : undefined;
+
+  // Custom skill packages use code execution + container files — not native pptx/xlsx skills.
+  if (createDocumentsThisTurn && hasCustomSkillContainer) {
+    return { route: "beta-session", createDocumentsThisTurn: true };
+  }
 
   if (createDocumentsThisTurn) {
     return { route: "beta-documents", createDocumentsThisTurn: true, documentSkillIds };

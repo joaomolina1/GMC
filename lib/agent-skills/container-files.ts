@@ -147,5 +147,6 @@ export function buildSkillContainerHint(packages: AgentSkillPackageRow[]): strin
 ## Ficheiros de skill no container
 Os seguintes ficheiros estão disponíveis no sandbox de code execution (directório de input):
 ${paths.map((p) => `- ${p}`).join("\n")}
-Usa estes scripts/templates quando a skill SKILL.md os referenciar.`;
+Usa estes scripts/templates quando a skill SKILL.md os referenciar.
+Quando exportares PPTX/PDF/etc., grava sempre em \`/mnt/user-data/outputs/\` com nome claro (ex: apresentacao.pptx).`;
 }
