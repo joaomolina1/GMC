@@ -20,5 +20,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error?.message ?? "Ficheiro não encontrado" }, { status: 404 });
   }
 
-  return NextResponse.json({ url: data.signedUrl });
+  const wantsJson = request.headers.get("accept")?.includes("application/json");
+  if (wantsJson) {
+    return NextResponse.json({ url: data.signedUrl });
+  }
+
+  return NextResponse.redirect(data.signedUrl);
 }

@@ -35,8 +35,11 @@ ${pkg.skill_md}${extras ? `\n\n${extras}` : ""}`;
 
   return `
 
-## Agent Skills (formato Claude)
-Tens as seguintes skills instaladas. Quando a tarefa do utilizador corresponder à descrição de uma skill, segue as instruções dessa skill em detalhe.
+## Agent Skills instaladas (OBRIGATÓRIO seguir)
+Tens skills personalizadas instaladas neste agente. **Antes de responder**, verifica se a tarefa do utilizador corresponde ao catálogo abaixo.
+Se corresponder, **segue as instruções da skill em detalhe** — não improvises um workflow alternativo.
+Usa code execution com os ficheiros do container quando a skill o indicar.
+Quando a skill gerar um ficheiro (PPTX, etc.), guarda-o na pasta de outputs do sandbox para ficar disponível para download.
 
 ### Catálogo
 ${catalog}

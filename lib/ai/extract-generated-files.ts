@@ -3,7 +3,10 @@ const FILE_ID_KEYS = new Set([
   "fileId",
   "output_file_id",
   "generated_file_id",
+  "id",
 ]);
+
+const FILE_ID_PATTERN = /^file_[a-zA-Z0-9_-]+$/;
 
 export interface FileExtractionResult {
   fileIds: string[];
@@ -34,7 +37,9 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
     for (const key of FILE_ID_KEYS) {
       const candidate = record[key];
       if (typeof candidate === "string" && candidate.trim()) {
-        ids.add(candidate.trim());
+        const value = candidate.trim();
+        if (key === "id" && !FILE_ID_PATTERN.test(value)) continue;
+        ids.add(value);
       }
     }
 
@@ -42,6 +47,12 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
       const content = record.content as Record<string, unknown> | undefined;
       if (content?.type === "bash_code_execution_result") {
         walk(content, depth + 1);
+        const stdout = content.stdout;
+        if (typeof stdout === "string") {
+          for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
+            ids.add(match[0]);
+          }
+        }
       }
     }
 

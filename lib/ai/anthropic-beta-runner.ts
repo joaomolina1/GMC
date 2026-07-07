@@ -208,7 +208,7 @@ async function createBetaResponse(
     system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
     messages,
     betas,
-    ...(createDocuments
+    ...(skillIds
       ? { container: { skills: buildDocumentSkillParams(skillIds) } }
       : {}),
     ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
@@ -366,7 +366,7 @@ async function* streamBetaAgentCore(
         system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
         messages,
         betas,
-        ...(createDocuments
+        ...(skillIds
           ? { container: { skills: buildDocumentSkillParams(skillIds) } }
           : {}),
         ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),

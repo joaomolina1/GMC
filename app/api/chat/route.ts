@@ -215,6 +215,16 @@ export async function POST(request: Request) {
                 `data: ${JSON.stringify({ type: "files", files: generatedFiles })}\n\n`
               )
             );
+          } else {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "files_error",
+                  message:
+                    "O agente gerou um ficheiro mas o download falhou ao guardar. Tente pedir novamente ou contacte o administrador.",
+                })}\n\n`
+              )
+            );
           }
         }
 

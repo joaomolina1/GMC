@@ -62,7 +62,8 @@ export async function buildAgentRuntimeConfig(options: {
       .in("id", skillPackageIds);
     if (skillPackages?.length) {
       skillsPrompt = buildAgentSkillsPrompt(skillPackages);
-      if (createDocuments || skillPackages.some((p) => (p.extra_files?.length ?? 0) > 0)) {
+      const hasExtraFiles = skillPackages.some((p) => (p.extra_files?.length ?? 0) > 0);
+      if (hasExtraFiles || createDocuments) {
         const uploaded = await uploadSkillPackagesToContainer(skillPackages);
         containerUploadBlocks = uploaded.uploadBlocks;
         if (uploaded.fileIds.length > 0) {

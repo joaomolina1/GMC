@@ -16,10 +16,14 @@ export function GeneratedFilesList({ files }: { files: GeneratedFileView[] }) {
 
   return (
     <div className="mt-3 space-y-2">
-      {files.map((file) => (
+      {files.map((file) => {
+        const href = file.storage_path
+          ? `/api/files/download?path=${encodeURIComponent(file.storage_path)}`
+          : file.download_url;
+        return (
         <a
-          key={file.storage_path}
-          href={file.download_url}
+          key={file.storage_path || file.download_url}
+          href={href}
           download={file.filename}
           target="_blank"
           rel="noopener noreferrer"
@@ -36,7 +40,8 @@ export function GeneratedFilesList({ files }: { files: GeneratedFileView[] }) {
           </span>
           <Download size={16} className="shrink-0 text-emerald-700" />
         </a>
-      ))}
+        );
+      })}
     </div>
   );
 }
