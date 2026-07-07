@@ -15,6 +15,7 @@ import { buildAnthropicRequestExtras } from "@lib/ai/anthropic-params";
 import {
   ANTHROPIC_DOCUMENT_BETAS,
   type AnthropicDocumentSkillId,
+  buildCodeExecutionTool,
   buildDocumentCreationTools,
   buildDocumentSkillParams,
 } from "@lib/ai/anthropic-document-skills";
@@ -113,13 +114,22 @@ function buildBetas(options: { mcpServers?: BetaRequestMCPServerURLDefinition[];
 
 function buildBetaTools(options: {
   createDocuments?: boolean;
+  hasContainerUploads?: boolean;
   webSearch?: boolean;
   webSearchConfig?: Record<string, unknown>;
   clientTools?: ToolUnion[];
 }): ToolUnion[] | undefined {
   const tools: ToolUnion[] = [...(options.clientTools ?? [])];
+  const needsCodeExecution = Boolean(options.createDocuments || options.hasContainerUploads);
+
   if (options.createDocuments) {
     tools.push(...buildDocumentCreationTools(options.webSearch !== false, options.webSearchConfig));
+  } else if (needsCodeExecution) {
+    // container_upload blocks require code_execution even without native document skills
+    tools.push(buildCodeExecutionTool());
+    if (options.webSearch !== false) {
+      tools.push(...buildAnthropicServerTools(["web_search"]));
+    }
   } else if (options.webSearch !== false) {
     tools.push(...buildAnthropicServerTools(["web_search"]));
   }
@@ -186,6 +196,7 @@ async function createBetaResponse(
   messages: BetaMessageParam[]
 ) {
   const createDocuments = Boolean(options.createDocuments);
+  const hasContainerUploads = Boolean(options.containerUploadBlocks?.length);
   const maxTokens =
     options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
   const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
@@ -214,6 +225,7 @@ async function createBetaResponse(
     ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
     tools: buildBetaTools({
       createDocuments,
+      hasContainerUploads,
       webSearch: options.webSearch,
       webSearchConfig: options.webSearchConfig,
       clientTools: options.clientTools,
@@ -324,6 +336,7 @@ async function* streamBetaAgentCore(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let messages = toAnthropicMessages(options.messages, options.containerUploadBlocks);
   const createDocuments = Boolean(options.createDocuments);
+  const hasContainerUploads = Boolean(options.containerUploadBlocks?.length);
   const maxTokens =
     options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
   const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
@@ -372,6 +385,7 @@ async function* streamBetaAgentCore(
         ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
         tools: buildBetaTools({
           createDocuments,
+          hasContainerUploads,
           webSearch: options.webSearch,
           webSearchConfig: options.webSearchConfig,
           clientTools: options.clientTools,

@@ -21,16 +21,18 @@ export function buildDocumentSkillParams(
   }));
 }
 
+export function buildCodeExecutionTool(): ToolUnion {
+  return {
+    type: "code_execution_20250825",
+    name: "code_execution",
+  };
+}
+
 export function buildDocumentCreationTools(
   webSearch: boolean,
   webSearchConfig?: Record<string, unknown>
 ): ToolUnion[] {
-  const tools: ToolUnion[] = [
-    {
-      type: "code_execution_20250825",
-      name: "code_execution",
-    },
-  ];
+  const tools: ToolUnion[] = [buildCodeExecutionTool()];
 
   if (webSearch) {
     const webSearchTool: WebSearchTool20250305 = {
