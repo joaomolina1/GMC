@@ -10,6 +10,29 @@ import {
   type GeneratedFileView,
 } from "@/_components/GeneratedFilesList";
 import { cn } from "@lib/utils";
+import { messageClaimsDownloadableFiles } from "@lib/ai/extract-generated-files";
+
+function MissingDownloadNotice({
+  content,
+  files,
+}: {
+  content: string;
+  files?: GeneratedFileView[];
+}) {
+  if (files && files.length > 0) return null;
+  if (!messageClaimsDownloadableFiles(content)) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+      <p className="font-medium">Sem ficheiro para descarregar</p>
+      <p className="mt-1 text-xs leading-relaxed text-amber-800">
+        O agente listou ficheiros em texto, mas nenhum foi guardado na plataforma. Inicie uma{" "}
+        <strong>nova conversa</strong> e peça de novo, por exemplo: «gera o PPTX». Quando
+        funcionar, aparece um <strong>botão verde</strong> de download abaixo desta mensagem.
+      </p>
+    </div>
+  );
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -444,6 +467,9 @@ export function AgentChatPanel({
                         <ChatMessageContent content={msg.content} role={msg.role} />
                         {msg.role === "assistant" && msg.files && msg.files.length > 0 && (
                           <GeneratedFilesList files={msg.files} />
+                        )}
+                        {msg.role === "assistant" && (
+                          <MissingDownloadNotice content={msg.content} files={msg.files} />
                         )}
                       </>
                     )}

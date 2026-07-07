@@ -14,6 +14,7 @@ import { assertRateLimit } from "@lib/enterprise/rate-limit";
 import { assertModelAllowedForUser } from "@lib/enterprise/role-policies";
 import { canChatWithAgentResolved } from "@lib/agents/access";
 import type { GeneratedFileRef } from "@lib/chat/agent";
+import { messageClaimsDownloadableFiles } from "@lib/ai/extract-generated-files";
 import type { TokenUsage } from "@lib/ai/types";
 import type { ExecutedToolCall } from "@lib/agents/tool-runtime";
 
@@ -226,6 +227,13 @@ export async function POST(request: Request) {
               )
             );
           }
+        } else if (messageClaimsDownloadableFiles(fullContent)) {
+          const warning =
+            "⚠️ Os ficheiros listados não ficaram disponíveis para download. Peça novamente «gera o PPTX» — quando funcionar, aparece um botão verde abaixo desta mensagem.";
+          fullContent += `\n\n${warning}`;
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "files_error", message: warning })}\n\n`)
+          );
         }
 
         controller.enqueue(

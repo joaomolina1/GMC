@@ -3,7 +3,6 @@ const FILE_ID_KEYS = new Set([
   "fileId",
   "output_file_id",
   "generated_file_id",
-  "id",
 ]);
 
 const FILE_ID_PATTERN = /^file_[a-zA-Z0-9_-]+$/;
@@ -11,6 +10,26 @@ const FILE_ID_PATTERN = /^file_[a-zA-Z0-9_-]+$/;
 export interface FileExtractionResult {
   fileIds: string[];
   scannedBlocks: number;
+}
+
+function addFileId(ids: Set<string>, value: unknown): void {
+  if (typeof value !== "string") return;
+  const trimmed = value.trim();
+  if (trimmed && FILE_ID_PATTERN.test(trimmed)) {
+    ids.add(trimmed);
+  }
+}
+
+/** Anthropic puts created files in bash_code_execution_result.content[].file_id */
+function extractFromBashExecutionResult(result: Record<string, unknown>, ids: Set<string>): void {
+  const outputs = result.content;
+  if (!Array.isArray(outputs)) return;
+  for (const item of outputs) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    addFileId(ids, row.file_id);
+    addFileId(ids, row.fileId);
+  }
 }
 
 export function extractFileIdsFromPayload(payload: unknown): string[] {
@@ -34,34 +53,33 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
 
     const record = value as Record<string, unknown>;
 
-    for (const key of FILE_ID_KEYS) {
-      const candidate = record[key];
-      if (typeof candidate === "string" && candidate.trim()) {
-        const value = candidate.trim();
-        if (key === "id" && !FILE_ID_PATTERN.test(value)) continue;
-        ids.add(value);
-      }
-    }
-
-    if (record.type === "bash_code_execution_tool_result") {
-      const content = record.content as Record<string, unknown> | undefined;
-      if (content?.type === "bash_code_execution_result") {
-        walk(content, depth + 1);
-        const stdout = content.stdout;
-        if (typeof stdout === "string") {
-          for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
-            ids.add(match[0]);
-          }
+    if (record.type === "bash_code_execution_result") {
+      extractFromBashExecutionResult(record, ids);
+      const stdout = record.stdout;
+      if (typeof stdout === "string") {
+        for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
+          ids.add(match[0]);
         }
       }
     }
 
-    if (record.type === "code_execution_tool_result") {
-      walk(record.content, depth + 1);
+    if (record.type === "bash_code_execution_tool_result") {
+      const content = record.content;
+      if (content && typeof content === "object") {
+        const inner = content as Record<string, unknown>;
+        if (inner.type === "bash_code_execution_result") {
+          extractFromBashExecutionResult(inner, ids);
+        }
+        walk(inner, depth + 1);
+      }
     }
 
-    if (record.type === "container_upload") {
-      walk(record, depth + 1);
+    for (const key of FILE_ID_KEYS) {
+      addFileId(ids, record[key]);
+    }
+
+    if (record.type === "code_execution_tool_result") {
+      walk(record.content, depth + 1);
     }
 
     for (const nested of Object.values(record)) {
@@ -71,6 +89,16 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
 
   walk(payload);
   return { fileIds: Array.from(ids), scannedBlocks };
+}
+
+/** User-facing text claims a file exists but we have no attachments. */
+export function messageClaimsDownloadableFiles(text: string): boolean {
+  return (
+    /dispon[ií]ve(?:is|l)\s+para\s+download/i.test(text) ||
+    /ficheiros?\s+dispon[ií]ve/i.test(text) ||
+    /pronto[s]?\s+para\s+download/i.test(text) ||
+    /(?:^|\n)\s*[-*]\s*[`']?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/im.test(text)
+  );
 }
 
 export function logMissingFileIds(context: string, payload: unknown, content: string): void {
