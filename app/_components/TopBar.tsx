@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Bell, ChevronDown, Settings } from "lucide-react";
+import { LogOut, Bell, ChevronDown, Settings, Menu } from "lucide-react";
 import { createClient } from "@lib/supabase/client";
 import { Avatar } from "@/_design_system/Avatar";
 
 interface TopBarProps {
   user?: { full_name?: string | null; email?: string; avatar_url?: string | null; role?: string };
+  onOpenNavigation?: () => void;
 }
 
 const TITLES: { match: (p: string) => boolean; title: string; subtitle: string }[] = [
@@ -29,7 +30,7 @@ const ROLE_LABELS: Record<string, string> = {
   user: "Utilizador",
 };
 
-export function TopBar({ user }: TopBarProps) {
+export function TopBar({ user, onOpenNavigation }: TopBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -47,7 +48,14 @@ export function TopBar({ user }: TopBarProps) {
       }
     }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
 
   async function handleLogout() {
@@ -63,9 +71,19 @@ export function TopBar({ user }: TopBarProps) {
 
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-line bg-white px-5 sm:px-7">
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={onOpenNavigation}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line text-slate-500 md:hidden"
+          aria-label="Abrir navegação"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="min-w-0">
         <h1 className="truncate text-lg font-semibold text-slate-900">{meta.title}</h1>
         <p className="hidden truncate text-sm text-slate-500 sm:block">{meta.subtitle}</p>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
@@ -86,6 +104,8 @@ export function TopBar({ user }: TopBarProps) {
             onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center gap-2.5 rounded-xl p-1 pr-2 transition-colors hover:bg-slate-100"
             type="button"
+            aria-label="Menu da conta"
+            aria-expanded={menuOpen}
           >
             <Avatar name={displayName} src={user?.avatar_url} />
             <div className="hidden text-left sm:block">

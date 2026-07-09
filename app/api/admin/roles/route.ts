@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@lib/enterprise/auth";
 import { logAudit } from "@lib/audit";
 import { USER_ROLES, type RolePolicy, type UserRole } from "@lib/enterprise/role-policies";
+import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -62,6 +63,35 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "role inválido" }, { status: 400 });
   }
 
+  const requestedModelIds = Array.isArray(allowed_model_ids)
+    ? Array.from(new Set(allowed_model_ids.filter((id): id is string => typeof id === "string")))
+    : [];
+
+  if (
+    !["admin", "super_admin"].includes(role) &&
+    requestedModelIds.length > 0 &&
+    !requestedModelIds.includes(DEFAULT_AGENT_MODEL)
+  ) {
+    return NextResponse.json(
+      { error: "Claude Haiku 4.5 é obrigatório porque é o modelo base de todos os agentes novos." },
+      { status: 400 }
+    );
+  }
+
+  if (requestedModelIds.length > 0) {
+    const { data: validModels, error: validModelsError } = await supabase
+      .from("models")
+      .select("id")
+      .in("id", requestedModelIds)
+      .eq("enabled", true);
+    if (validModelsError) {
+      return NextResponse.json({ error: validModelsError.message }, { status: 500 });
+    }
+    if ((validModels ?? []).length !== requestedModelIds.length) {
+      return NextResponse.json({ error: "A lista contém modelos inválidos ou inativos." }, { status: 400 });
+    }
+  }
+
   const { error: quotaError } = await supabase.from("role_quotas").upsert(
     {
       role,
@@ -78,9 +108,9 @@ export async function PATCH(request: Request) {
 
   await supabase.from("role_allowed_models").delete().eq("role", role);
 
-  if (Array.isArray(allowed_model_ids) && allowed_model_ids.length > 0) {
+  if (requestedModelIds.length > 0) {
     const { error: modelsError } = await supabase.from("role_allowed_models").insert(
-      allowed_model_ids.map((model_id) => ({ role, model_id }))
+      requestedModelIds.map((model_id) => ({ role, model_id }))
     );
     if (modelsError) {
       return NextResponse.json({ error: modelsError.message }, { status: 500 });
@@ -92,7 +122,7 @@ export async function PATCH(request: Request) {
     action: "enterprise.role_policy.update",
     entityType: "role",
     entityId: role,
-    metadata: { monthly_token_limit, monthly_cost_limit_eur, allowed_model_ids },
+    metadata: { monthly_token_limit, monthly_cost_limit_eur, allowed_model_ids: requestedModelIds },
   });
 
   return NextResponse.json({ ok: true, role });

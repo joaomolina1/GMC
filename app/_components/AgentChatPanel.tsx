@@ -381,7 +381,7 @@ export function AgentChatPanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-white to-slate-50/80 shadow-sm">
-        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+        <div aria-live="polite" className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
           {loadingConversation ? (
             <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-center">
               <span className="inline-flex items-center gap-1.5 text-slate-400">
@@ -498,6 +498,7 @@ export function AgentChatPanel({
                 <button
                   type="button"
                   onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                  aria-label={`Remover ${a.filename}`}
                   className="text-slate-400 hover:text-slate-600"
                 >
                   <X size={12} />
@@ -511,7 +512,7 @@ export function AgentChatPanel({
           onSubmit={sendMessage}
           className="flex items-end gap-2 border-t border-line bg-white p-3 sm:p-4"
         >
-          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100">
+          <label aria-label="Anexar ficheiro" className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100">
             <Paperclip size={18} />
             <input
               type="file"
@@ -536,6 +537,7 @@ export function AgentChatPanel({
           />
           <Button
             type="submit"
+            aria-label="Enviar mensagem"
             disabled={streaming || loadingConversation || !input.trim()}
             className="h-10 w-10 shrink-0 p-0"
           >

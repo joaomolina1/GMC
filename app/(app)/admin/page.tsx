@@ -58,6 +58,7 @@ interface UserRow {
   full_name: string | null;
   role: string;
   auth_provider?: string;
+  allowed_model_ids?: string[];
 }
 
 interface ModelOption {
@@ -98,6 +99,10 @@ export default function AdminPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [roleUpdateError, setRoleUpdateError] = useState<string | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [editingModelsUserId, setEditingModelsUserId] = useState<string | null>(null);
+  const [userModelSelection, setUserModelSelection] = useState<Set<string>>(new Set());
+  const [savingUserModels, setSavingUserModels] = useState(false);
+  const [policyError, setPolicyError] = useState<string | null>(null);
 
   async function loadRoles() {
     const res = await fetch("/api/admin/roles");
@@ -197,13 +202,53 @@ export default function AdminPage() {
 
   async function saveRolePolicy(policy: RolePolicy) {
     setSavingRole(true);
-    await fetch("/api/admin/roles", {
+    setPolicyError(null);
+    const res = await fetch("/api/admin/roles", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(policy),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setPolicyError(
+        typeof body.error === "string" ? body.error : "Não foi possível guardar a política"
+      );
+      setSavingRole(false);
+      return;
+    }
     await loadRoles();
     setSavingRole(false);
+  }
+
+  function beginEditUserModels(user: UserRow) {
+    setRoleUpdateError(null);
+    setEditingModelsUserId(user.id);
+    setUserModelSelection(new Set(user.allowed_model_ids ?? []));
+  }
+
+  async function saveUserModels(userId: string) {
+    setSavingUserModels(true);
+    setRoleUpdateError(null);
+    const allowedModelIds = Array.from(userModelSelection);
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, allowed_model_ids: allowedModelIds }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSavingUserModels(false);
+    if (!res.ok) {
+      setRoleUpdateError(
+        typeof body.error === "string" ? body.error : "Não foi possível guardar os modelos"
+      );
+      return;
+    }
+    setUsers((prev) =>
+      prev.map((user) =>
+        user.id === userId ? { ...user, allowed_model_ids: allowedModelIds } : user
+      )
+    );
+    setEditingModelsUserId(null);
   }
 
   const totalCost = costs.reduce((s, row) => s + Number(row.cost_eur ?? 0), 0);
@@ -360,10 +405,10 @@ export default function AdminPage() {
         </Card>
         <Card>
           <div className="flex items-center gap-2 text-slate-400">
-            <Users size={16} />
-            <p className="text-xs font-medium uppercase">Utilizadores</p>
+            <Key size={16} />
+            <p className="text-xs font-medium uppercase">API Keys</p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{platformStats?.users ?? "—"}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{apiKeys.length || "—"}</p>
         </Card>
         <Card>
           <div className="flex items-center gap-2 text-slate-400">
@@ -411,6 +456,7 @@ export default function AdminPage() {
                   <th className="px-6 py-3 font-medium">Nome</th>
                   <th className="px-6 py-3 font-medium">Auth</th>
                   <th className="px-6 py-3 font-medium">Role</th>
+                  <th className="px-6 py-3 font-medium">Modelos</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -435,12 +481,95 @@ export default function AdminPage() {
                         <option value="guest">guest</option>
                       </Select>
                     </td>
+                    <td className="px-6 py-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => beginEditUserModels(u)}
+                      >
+                        {u.allowed_model_ids?.length
+                          ? `${u.allowed_model_ids.length} específicos`
+                          : "Herdar do role"}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Card>
+      )}
+
+      {editingModelsUserId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="user-models-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEditingModelsUserId(null);
+          }}
+        >
+          <Card className="max-h-[80vh] w-full max-w-2xl overflow-y-auto">
+            <CardHeader>
+              <div id="user-models-title">
+                <CardTitle>Modelos do utilizador</CardTitle>
+              </div>
+            </CardHeader>
+            <p className="mb-4 text-sm text-slate-500">
+              Sem seleção, o utilizador herda os modelos do role. Um override explícito tem de
+              incluir Claude Haiku 4.5, o modelo base dos agentes novos.
+            </p>
+            <label className="mb-3 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={userModelSelection.size === 0}
+                onChange={(event) => {
+                  if (event.target.checked) setUserModelSelection(new Set());
+                }}
+              />
+              Herdar política do role
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {allModels.map((modelOption) => (
+                <label
+                  key={modelOption.id}
+                  className="flex items-start gap-2 rounded-lg border border-line p-3 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={userModelSelection.has(modelOption.id)}
+                    onChange={() =>
+                      setUserModelSelection((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(modelOption.id)) next.delete(modelOption.id);
+                        else next.add(modelOption.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="block font-medium text-slate-800">
+                      {modelOption.display_name}
+                    </span>
+                    <span className="text-xs text-slate-400">{modelOption.id}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingModelsUserId(null)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={savingUserModels}
+                onClick={() => void saveUserModels(editingModelsUserId)}
+              >
+                {savingUserModels ? "A guardar..." : "Guardar modelos"}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
       {tab === "roles" && (
@@ -472,13 +601,20 @@ export default function AdminPage() {
           </Card>
 
           {activePolicy && (
-            <RolePolicyEditor
-              key={activePolicy.role}
-              policy={activePolicy}
-              models={allModels}
-              saving={savingRole}
-              onSave={saveRolePolicy}
-            />
+            <div>
+              {policyError && (
+                <p role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {policyError}
+                </p>
+              )}
+              <RolePolicyEditor
+                key={activePolicy.role}
+                policy={activePolicy}
+                models={allModels}
+                saving={savingRole}
+                onSave={saveRolePolicy}
+              />
+            </div>
           )}
         </div>
       )}
@@ -973,6 +1109,12 @@ function RolePolicyEditor({
           </label>
 
           {!allModelsAllowed && !unrestricted && (
+            <>
+            {!selectedModels.has("claude-haiku-4-5") && (
+              <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Se restringir modelos, Claude Haiku 4.5 tem de estar selecionado.
+              </p>
+            )}
             <div className="mt-3 max-h-64 space-y-1 overflow-y-auto rounded-xl border border-line p-3">
               {models.map((m) => (
                 <label
@@ -989,6 +1131,7 @@ function RolePolicyEditor({
                 </label>
               ))}
             </div>
+            </>
           )}
         </div>
 

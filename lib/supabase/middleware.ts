@@ -34,8 +34,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/auth") ||
     request.nextUrl.pathname === "/login";
   const isV1Api = request.nextUrl.pathname.startsWith("/api/v1/");
+  // Cron handlers authenticate with CRON_SECRET inside the route, not a user cookie.
+  const isCronApi = request.nextUrl.pathname.startsWith("/api/cron/");
 
-  if (!user && !isPublicRoute && !isV1Api) {
+  if (!user && !isPublicRoute && !isV1Api && !isCronApi) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

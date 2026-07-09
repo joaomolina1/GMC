@@ -46,13 +46,26 @@ export async function getAllowedModelIdsForUser(
   const role = (profile?.role ?? "user") as UserRole;
   if (isUnrestrictedRole(role)) return null;
 
+  const { data: userModels, error: userModelsError } = await supabase
+    .from("user_allowed_models")
+    .select("model_id")
+    .eq("user_id", userId);
+
+  if (userModelsError) {
+    console.warn("[role-policies] user_allowed_models failed", userModelsError.message);
+    return [];
+  }
+  if (userModels && userModels.length > 0) {
+    return userModels.map((row) => row.model_id);
+  }
+
   const { data, error } = await supabase.rpc("get_role_allowed_model_ids", {
     p_user_id: userId,
   });
 
   if (error) {
     console.warn("[role-policies] get_role_allowed_model_ids failed", error.message);
-    return null;
+    return [];
   }
 
   const ids = (data as string[] | null) ?? [];

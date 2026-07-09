@@ -10,6 +10,7 @@ import {
   Search,
   Store,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -56,10 +57,12 @@ export function DashboardHub({ firstName }: { firstName: string }) {
   const [sort, setSort] = useState<MarketplaceSort>("recent");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadMine = useCallback(async () => {
     const res = await fetch("/api/agents");
     const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? "Não foi possível carregar os seus agentes.");
     setMyAgents(Array.isArray(data) ? data : []);
   }, []);
 
@@ -71,19 +74,30 @@ export function DashboardHub({ firstName }: { firstName: string }) {
     params.set("tab", "all");
     const res = await fetch(`/api/marketplace?${params}`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? "Não foi possível carregar o marketplace.");
     setPublicAgents(Array.isArray(data) ? data : []);
   }, [q, category, sort]);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadMine(), loadPublic()]).finally(() => setLoading(false));
+    setLoadError(null);
+    Promise.all([loadMine(), loadPublic()])
+      .catch((error) =>
+        setLoadError(error instanceof Error ? error.message : "Falha ao carregar a plataforma.")
+      )
+      .finally(() => setLoading(false));
   }, [loadMine, loadPublic]);
 
   useEffect(() => {
     if (view === "public") {
       const timer = setTimeout(() => {
         setLoading(true);
-        loadPublic().finally(() => setLoading(false));
+        setLoadError(null);
+        loadPublic()
+          .catch((error) =>
+            setLoadError(error instanceof Error ? error.message : "Falha ao carregar o marketplace.")
+          )
+          .finally(() => setLoading(false));
       }, q ? 300 : 0);
       return () => clearTimeout(timer);
     }
@@ -157,10 +171,35 @@ export function DashboardHub({ firstName }: { firstName: string }) {
 
       <QuotaWidget />
 
+      {loadError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <span className="flex items-center gap-2">
+            <AlertCircle size={16} />
+            {loadError}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setLoading(true);
+              setLoadError(null);
+              Promise.all([loadMine(), loadPublic()])
+                .catch((error) =>
+                  setLoadError(error instanceof Error ? error.message : "Falha ao carregar.")
+                )
+                .finally(() => setLoading(false));
+            }}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => switchView("mine")}
+          aria-pressed={view === "mine"}
           className={cn(
             "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
             view === "mine"
@@ -175,6 +214,7 @@ export function DashboardHub({ firstName }: { firstName: string }) {
         <button
           type="button"
           onClick={() => switchView("public")}
+          aria-pressed={view === "public"}
           className={cn(
             "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
             view === "public"

@@ -124,9 +124,7 @@ export function ConversationHistorySidebar({
               const active = conv.id === activeConversationId;
               return (
                 <li key={conv.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(conv.id)}
+                  <div
                     className={cn(
                       "group flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
                       active
@@ -134,7 +132,12 @@ export function ConversationHistorySidebar({
                         : "hover:bg-white/80"
                     )}
                   >
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onSelect(conv.id)}
+                      className="min-w-0 flex-1 text-left"
+                      aria-current={active ? "page" : undefined}
+                    >
                       <p
                         className={cn(
                           "line-clamp-2 text-xs font-medium",
@@ -146,16 +149,17 @@ export function ConversationHistorySidebar({
                       <p className="mt-0.5 text-[10px] text-slate-400">
                         {formatRelativeTime(conv.updated_at)} · {conv.message_count} msg
                       </p>
-                    </div>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => void deleteConversation(e, conv.id)}
                       className="mt-0.5 shrink-0 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"
                       title="Eliminar conversa"
+                      aria-label={`Eliminar ${conv.title?.trim() || "conversa sem título"}`}
                     >
                       <Trash2 size={12} />
                     </button>
-                  </button>
+                  </div>
                 </li>
               );
             })}

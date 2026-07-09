@@ -54,6 +54,7 @@ function AgentBuilderWorkspace() {
   const conversationId = searchParams.get("c") ?? undefined;
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("instructions");
   const [configureOpen, setConfigureOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -128,9 +129,13 @@ function AgentBuilderWorkspace() {
   }, [id]);
 
   const loadAgent = useCallback(async () => {
+    setLoadError(null);
     const res = await fetch(`/api/agents/${id}`);
     const data = await res.json();
-    if (!res.ok || !data?.id) return;
+    if (!res.ok || !data?.id) {
+      setLoadError(data?.error ?? "Não foi possível carregar o agente.");
+      return;
+    }
     setAgent(data);
     setCanChangeModel(Boolean(data.permissions?.canChangeModel));
     setName(data.name ?? "");
@@ -398,6 +403,21 @@ function AgentBuilderWorkspace() {
     [id, router, searchParams]
   );
 
+  if (loadError) {
+    return (
+      <div className="flex h-full items-center justify-center p-5">
+        <Card className="max-w-md text-center">
+          <h2 className="text-lg font-semibold text-slate-900">Agente indisponível</h2>
+          <p role="alert" className="mt-2 text-sm text-slate-500">{loadError}</p>
+          <Button className="mt-5" variant="outline" onClick={() => router.push("/")}>
+            <ArrowLeft size={16} />
+            Voltar aos agentes
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   if (!agent) {
     return (
       <div className="space-y-4">
@@ -413,7 +433,7 @@ function AgentBuilderWorkspace() {
   const intro = TAB_INTRO[tab];
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3 sm:p-4">
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
@@ -440,7 +460,7 @@ function AgentBuilderWorkspace() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {saveError && <p className="max-w-[16rem] truncate text-xs text-rose-600">{saveError}</p>}
+          {saveError && <p role="alert" className="max-w-[22rem] text-xs text-rose-600">{saveError}</p>}
           {savedAt && !saveError && (
             <p className="hidden text-xs text-slate-400 sm:block">Guardado às {savedAt}</p>
           )}

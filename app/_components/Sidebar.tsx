@@ -39,17 +39,22 @@ export function Sidebar({
   showAdmin = false,
   collapsed = false,
   onToggle,
+  mobileOpen = false,
+  onNavigate,
 }: {
   showAdmin?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
+  mobileOpen?: boolean;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200",
+        "fixed inset-y-0 left-0 z-50 flex h-screen shrink-0 flex-col border-r border-line bg-surface shadow-xl transition-[transform,width] duration-200 md:static md:z-auto md:translate-x-0 md:shadow-none",
+        mobileOpen ? "translate-x-0" : "-translate-x-full",
         collapsed ? "w-[72px]" : "w-64"
       )}
     >
@@ -59,7 +64,7 @@ export function Sidebar({
           collapsed ? "justify-center" : "justify-between px-4"
         )}
       >
-        <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
+        <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 overflow-hidden">
           {collapsed ? (
             <Logo variant="mark" size="md" />
           ) : (
@@ -106,6 +111,7 @@ export function Sidebar({
                 <Link
                   key={href}
                   href={href}
+                  onClick={onNavigate}
                   title={label}
                   className={cn(
                     "group relative flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
