@@ -7,35 +7,34 @@ interface LogoProps {
   variant?: "full" | "mark";
 }
 
-const sizes = { sm: 28, md: 34, lg: 48 };
+const heights = { sm: 28, md: 36, lg: 52 };
+
+/** Expanded sidebar / login — logo_expandido.png (236×149) */
+const EXPANDED_ASPECT = 236 / 149;
 
 export function Logo({ className, size = "md", variant = "full" }: LogoProps) {
-  const h = sizes[size];
+  const h = heights[size];
 
   if (variant === "mark") {
     return (
-      <div
-        className={cn(
-          "relative flex items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 font-bold text-white shadow-sm",
-          className
-        )}
-        style={{ width: h, height: h, fontSize: h * 0.5 }}
-        aria-label="Media Capital"
-      >
-        m
-        <span
-          className="absolute rounded-full bg-accent-500"
-          style={{ width: h * 0.22, height: h * 0.22, top: h * 0.16, right: h * 0.16 }}
-        />
-      </div>
+      <Image
+        src="/logo_comp.jpeg"
+        alt="Media Capital"
+        width={h}
+        height={h}
+        className={cn("object-contain", className)}
+        priority
+      />
     );
   }
 
+  const w = Math.round(h * EXPANDED_ASPECT);
+
   return (
     <Image
-      src="/logo.svg"
+      src="/logo_expandido.png"
       alt="Media Capital"
-      width={h * 4.2}
+      width={w}
       height={h}
       className={cn("object-contain", className)}
       priority
