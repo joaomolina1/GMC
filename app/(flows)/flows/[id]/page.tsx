@@ -64,14 +64,21 @@ export default function FlowBuilderPage() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [flowLoaded, setFlowLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [autosaving, setAutosaving] = useState(false);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
 
   const selectedNode = graph.nodes.find((n) => n.id === selectedNodeId) ?? null;
 
   const loadFlow = useCallback(async () => {
+    setLoadError(null);
     const res = await fetch(`/api/flows/${id}`);
     const data = await res.json();
-    if (!res.ok || !data?.id) return;
+    if (!res.ok || !data?.id) {
+      setLoadError(data?.error ?? "Flow não encontrado ou sem acesso.");
+      setFlowLoaded(true);
+      return;
+    }
 
     setName(data.name ?? "");
     setDescription(data.description ?? "");
@@ -112,18 +119,31 @@ export default function FlowBuilderPage() {
     if (!flowLoaded || running || saving) return;
     const timer = setTimeout(() => {
       setAutosaving(true);
+      setAutosaveError(null);
       void (async () => {
-        await fetch(`/api/flows/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, description }),
-        });
-        await fetch(`/api/flows/${id}/versions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ graph, updateInPlace: true }),
-        });
-        setAutosaving(false);
+        try {
+          const metaRes = await fetch(`/api/flows/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, description }),
+          });
+          const versionRes = await fetch(`/api/flows/${id}/versions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ graph, updateInPlace: true }),
+          });
+          if (!metaRes.ok || !versionRes.ok) {
+            const metaData = await metaRes.json().catch(() => ({}));
+            const versionData = await versionRes.json().catch(() => ({}));
+            setAutosaveError(
+              metaData.error ?? versionData.error ?? "Falha ao guardar automaticamente."
+            );
+          }
+        } catch {
+          setAutosaveError("Falha ao guardar automaticamente.");
+        } finally {
+          setAutosaving(false);
+        }
       })();
     }, 2000);
     return () => clearTimeout(timer);
@@ -266,6 +286,30 @@ export default function FlowBuilderPage() {
     await loadFlow();
   }
 
+  if (loadError) {
+    return (
+      <div className="flex h-full items-center justify-center p-5">
+        <Card className="max-w-md text-center">
+          <h2 className="text-lg font-semibold text-slate-900">Flow indisponível</h2>
+          <p role="alert" className="mt-2 text-sm text-slate-500">{loadError}</p>
+          <Button className="mt-5" variant="outline" onClick={() => router.push("/flows")}>
+            <ArrowLeft size={16} />
+            Voltar aos flows
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!flowLoaded) {
+    return (
+      <div className="space-y-4 p-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-slate-100" />
+        <Card className="h-64 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Toolbar */}
@@ -284,7 +328,12 @@ export default function FlowBuilderPage() {
           <Badge tone={status === "published" ? "success" : "warning"}>{status}</Badge>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {autosaving && !saving && (
+          {autosaveError && (
+            <span role="alert" className="max-w-[200px] truncate text-[11px] text-red-600" title={autosaveError}>
+              {autosaveError}
+            </span>
+          )}
+          {autosaving && !saving && !autosaveError && (
             <span className="text-[11px] text-slate-400">Autosave…</span>
           )}
           <Button variant="outline" size="sm" onClick={saveVersion} disabled={saving}>

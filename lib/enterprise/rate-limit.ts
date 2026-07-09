@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isProductionDeploy } from "@lib/env";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -18,6 +19,10 @@ export async function checkRateLimit(
   });
 
   if (error || !data) {
+    if (isProductionDeploy()) {
+      console.error("[rate-limit] RPC unavailable in production, blocking:", error?.message);
+      return { allowed: false, limit: 0, current: 0, endpoint };
+    }
     console.warn("[rate-limit] RPC unavailable, allowing request:", error?.message);
     return { allowed: true, limit: 60, current: 0, endpoint };
   }

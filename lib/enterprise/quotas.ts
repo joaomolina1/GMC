@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isProductionDeploy } from "@lib/env";
 
 export interface QuotaStatus {
   role?: string;
@@ -28,6 +29,10 @@ export async function assertQuotaAvailable(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const status = await getQuotaStatus(supabase, userId);
   if (!status) {
+    if (isProductionDeploy()) {
+      console.error("[quota] RPC unavailable in production, blocking request for user", userId);
+      return { ok: false, message: "Quota indisponível. Tente novamente mais tarde." };
+    }
     console.warn("[quota] RPC unavailable, allowing request for user", userId);
     return { ok: true };
   }
