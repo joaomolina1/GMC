@@ -25,6 +25,11 @@ function isPrivateIpv4(parts: number[]): boolean {
   return false;
 }
 
+function isNumericIpv4(host: string): boolean {
+  // WHATWG URL accepts decimal/hex/octal IPv4 forms (e.g. 2130706433 -> 127.0.0.1).
+  return /^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host);
+}
+
 function isPrivateIpv6(host: string): boolean {
   const h = host.toLowerCase();
   if (h === "::1" || h === "[::1]") return true;
@@ -46,6 +51,7 @@ export function isAllowedOutboundUrl(url: string): boolean {
 
     const ipv4 = parseIpv4(host);
     if (ipv4 && isPrivateIpv4(ipv4)) return false;
+    if (isNumericIpv4(host)) return false;
 
     if (host.includes(":") && isPrivateIpv6(host)) return false;
 

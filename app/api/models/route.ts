@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
-import { LATEST_TIER_MODEL_IDS } from "@lib/ai/anthropic-catalog";
 import { getAllowedModelIdsForUser } from "@lib/enterprise/role-policies";
 
 export async function GET(request: Request) {
@@ -12,7 +11,6 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const includeRetired = searchParams.get("includeRetired") === "true";
-  const includeAll = searchParams.get("all") === "true";
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -36,7 +34,10 @@ export async function GET(request: Request) {
 
   if (!isAdmin) {
     const allowedIds = await getAllowedModelIdsForUser(supabase, user.id);
-    if (allowedIds && allowedIds.length > 0) {
+    if (allowedIds !== null && allowedIds.length === 0) {
+      return NextResponse.json([]);
+    }
+    if (allowedIds !== null) {
       query = query.in("id", allowedIds);
     }
   }
@@ -44,12 +45,5 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  let models = data ?? [];
-
-  if (!includeAll && !includeRetired) {
-    const latest = new Set<string>(LATEST_TIER_MODEL_IDS);
-    models = models.filter((m) => latest.has(m.id));
-  }
-
-  return NextResponse.json(models);
+  return NextResponse.json(data ?? []);
 }

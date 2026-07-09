@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isProductionDeploy } from "@lib/env";
 import type { QuotaStatus } from "./quotas";
 import type { RateLimitResult } from "./rate-limit";
 
@@ -13,6 +14,10 @@ export async function checkRateLimitForUser(
   });
 
   if (error || !data) {
+    if (isProductionDeploy()) {
+      console.error("[rate-limit-svc] RPC unavailable in production:", error?.message);
+      return { allowed: false, limit: 0, current: 0, endpoint };
+    }
     console.warn("[rate-limit-svc] RPC unavailable:", error?.message);
     return { allowed: true, limit: 60, current: 0, endpoint };
   }
@@ -51,7 +56,13 @@ export async function assertQuotaForUser(
   userId: string
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const status = await getQuotaStatusForUser(supabase, userId);
-  if (!status) return { ok: true };
+  if (!status) {
+    if (isProductionDeploy()) {
+      console.error("[quota-svc] RPC unavailable in production for user", userId);
+      return { ok: false, message: "Quota indisponível. Tente novamente mais tarde." };
+    }
+    return { ok: true };
+  }
   if (status.quota_exceeded) {
     return {
       ok: false,

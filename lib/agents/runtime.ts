@@ -17,6 +17,7 @@ import {
 import { buildAnthropicMcpServers, loadAgentMcpConnections } from "@lib/agents/mcp-connections";
 import { persistAnthropicGeneratedFiles } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS } from "@lib/ai/model-limits";
+import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
 import type { ChatMessage } from "@lib/ai/types";
 
 export interface AgentRuntimeConfig {
@@ -89,7 +90,7 @@ export async function buildAgentRuntimeConfig(options: {
     version.max_steps != null ? Number(version.max_steps) : DEFAULT_MAX_AGENT_STEPS;
 
   return {
-    model: String(version.model ?? "claude-sonnet-4-6"),
+    model: String(version.model ?? DEFAULT_AGENT_MODEL),
     systemPrompt: parts.filter(Boolean).join(""),
     temperature: version.temperature != null ? Number(version.temperature) : undefined,
     effort: (version.effort as AgentRuntimeConfig["effort"]) ?? "low",

@@ -6,7 +6,7 @@ import type { FlowGraph, FlowStepResult } from "@lib/flows/types";
 import { assertQuotaAvailable } from "@lib/enterprise/quotas";
 import { assertRateLimit } from "@lib/enterprise/rate-limit";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -17,8 +17,9 @@ async function persistSteps(
   runId: string,
   steps: FlowStepResult[]
 ) {
-  for (const step of steps) {
-    await supabase.from("flow_run_steps").insert({
+  if (steps.length === 0) return;
+  const { error } = await supabase.from("flow_run_steps").insert(
+    steps.map((step) => ({
       run_id: runId,
       node_id: step.nodeId,
       status: step.status === "skipped" ? "completed" : step.status,
@@ -27,8 +28,23 @@ async function persistSteps(
       error: step.error,
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
-    });
-  }
+    }))
+  );
+  if (error) throw new Error(`Falha ao persistir passos: ${error.message}`);
+}
+
+async function markRunFailed(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  runId: string,
+  error: unknown
+) {
+  const message = error instanceof Error ? error.message : "Erro na execução";
+  await supabase
+    .from("flow_runs")
+    .update({ status: "failed", completed_at: new Date().toISOString() })
+    .eq("id", runId)
+    .eq("status", "running");
+  return message;
 }
 
 export async function POST(
@@ -142,9 +158,8 @@ export async function POST(
             error: result.error,
           });
         } catch (err) {
-          send("error", {
-            error: err instanceof Error ? err.message : "Erro na execução",
-          });
+          const error = await markRunFailed(supabase, run.id, err);
+          send("error", { error });
         } finally {
           controller.close();
         }
@@ -160,33 +175,38 @@ export async function POST(
     });
   }
 
-  const result = await runFlow(graph, ctx);
+  try {
+    const result = await runFlow(graph, ctx);
 
-  await persistSteps(supabase, run.id, result.steps);
+    await persistSteps(supabase, run.id, result.steps);
 
-  await supabase
-    .from("flow_runs")
-    .update({
-      status: result.status === "completed" ? "completed" : "failed",
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", run.id);
+    await supabase
+      .from("flow_runs")
+      .update({
+        status: result.status === "completed" ? "completed" : "failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", run.id);
 
-  await logAudit(supabase, {
-    actorId: user.id,
-    action: "flow.run",
-    entityType: "flow_run",
-    entityId: run.id,
-    metadata: { flowId, status: result.status },
-  });
+    await logAudit(supabase, {
+      actorId: user.id,
+      action: "flow.run",
+      entityType: "flow_run",
+      entityId: run.id,
+      metadata: { flowId, status: result.status },
+    });
 
-  return NextResponse.json({
-    runId: run.id,
-    status: result.status,
-    output: result.output,
-    steps: result.steps,
-    error: result.error,
-  });
+    return NextResponse.json({
+      runId: run.id,
+      status: result.status,
+      output: result.output,
+      steps: result.steps,
+      error: result.error,
+    });
+  } catch (err) {
+    const error = await markRunFailed(supabase, run.id, err);
+    return NextResponse.json({ runId: run.id, status: "failed", error }, { status: 500 });
+  }
 }
 
 export async function GET(

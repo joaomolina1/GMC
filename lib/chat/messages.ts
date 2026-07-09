@@ -45,9 +45,7 @@ export async function buildChatMessages(
   history: StoredMessage[],
   supabase: StorageClient
 ): Promise<ChatMessage[]> {
-  const messages: ChatMessage[] = [];
-
-  for (const m of history) {
+  return Promise.all(history.map(async (m): Promise<ChatMessage> => {
     const role = m.role === "tool" ? "user" : (m.role as "user" | "assistant" | "system");
     const content = m.content;
 
@@ -60,8 +58,7 @@ export async function buildChatMessages(
 
       if (role === "assistant") {
         const text = `${stored.text}${formatGeneratedFilesContext(stored.generated_files)}`;
-        messages.push({ role, content: text });
-        continue;
+        return { role, content: text };
       }
 
       const attachments = stored.attachments ?? [];
@@ -69,53 +66,46 @@ export async function buildChatMessages(
       if (role === "user" && attachments.length > 0) {
         const blocks = await buildAttachmentBlocks(supabase, attachments);
         blocks.push({ type: "text", text: stored.text });
-        messages.push({ role, content: blocks });
-        continue;
+        return { role, content: blocks };
       }
 
-      messages.push({ role, content: stored.text });
-      continue;
+      return { role, content: stored.text };
     }
 
-    messages.push({
+    return {
       role,
       content: typeof content === "string" ? content : String(content),
-    });
-  }
-
-  return messages;
+    };
+  }));
 }
 
 async function buildAttachmentBlocks(
   supabase: StorageClient,
   attachments: StoredAttachment[]
 ): Promise<MessageContent[]> {
-  const blocks: MessageContent[] = [];
-
-  for (const att of attachments) {
+  const results = await Promise.all(attachments.map(async (att): Promise<MessageContent | null> => {
     const { data, error } = await supabase.storage
       .from("attachments")
       .download(att.storage_path);
 
-    if (error || !data) continue;
+    if (error || !data) return null;
 
     const buffer = Buffer.from(await data.arrayBuffer());
 
     if (att.kind === "image" || att.mime.startsWith("image/")) {
       const mediaType = att.mime || data.type || "image/png";
-      blocks.push({
+      return {
         type: "image",
         source: {
           type: "base64",
           media_type: mediaType,
           data: buffer.toString("base64"),
         },
-      });
-      continue;
+      };
     }
 
     if (att.kind === "pdf" || att.mime === "application/pdf") {
-      blocks.push({
+      return {
         type: "document",
         title: att.filename,
         source: {
@@ -123,25 +113,25 @@ async function buildAttachmentBlocks(
           media_type: "application/pdf",
           data: buffer.toString("base64"),
         },
-      });
-      continue;
+      };
     }
 
     try {
       const extracted = await extractDocument(buffer, att.filename, att.mime);
       if (extracted.text.trim()) {
-        blocks.push({
+        return {
           type: "text",
           text: `[Conteúdo do ficheiro "${att.filename}"]\n\n${extracted.text}`,
-        });
+        };
       }
     } catch {
-      blocks.push({
+      return {
         type: "text",
         text: `[Não foi possível ler o ficheiro "${att.filename}"]`,
-      });
+      };
     }
-  }
+    return null;
+  }));
 
-  return blocks;
+  return results.filter((block): block is MessageContent => block !== null);
 }

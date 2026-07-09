@@ -57,6 +57,41 @@ export async function cloneMarketplaceAgent(
     throw new Error(agentError?.message ?? "Falha ao clonar agente");
   }
 
+  const { data: sourcePackages } = await supabase
+    .from("agent_skill_packages")
+    .select("id, name, description, skill_md, extra_files, storage_path")
+    .eq("agent_id", sourceAgentId);
+
+  const packageIdMap = new Map<string, string>();
+  if (sourcePackages?.length) {
+    for (const pkg of sourcePackages) {
+      const { data: clonedPkg, error: pkgError } = await supabase
+        .from("agent_skill_packages")
+        .insert({
+          agent_id: newAgent.id,
+          name: pkg.name,
+          description: pkg.description,
+          skill_md: pkg.skill_md,
+          extra_files: pkg.extra_files ?? [],
+          storage_path: pkg.storage_path,
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+
+      if (pkgError || !clonedPkg) {
+        await supabase.from("agents").delete().eq("id", newAgent.id);
+        throw new Error(pkgError?.message ?? "Falha ao clonar skill packages");
+      }
+      packageIdMap.set(pkg.id, clonedPkg.id);
+    }
+  }
+
+  const sourcePackageIds = (version.skill_package_ids as string[]) ?? [];
+  const clonedPackageIds = sourcePackageIds
+    .map((pkgId) => packageIdMap.get(pkgId))
+    .filter((pkgId): pkgId is string => Boolean(pkgId));
+
   const { data: newVersion, error: versionError } = await supabase
     .from("agent_versions")
     .insert({
@@ -67,7 +102,8 @@ export async function cloneMarketplaceAgent(
       temperature: version.temperature,
       effort: version.effort ?? "medium",
       thinking_enabled: version.thinking_enabled ?? false,
-      skills: [],
+      skills: version.skills ?? [],
+      skill_package_ids: clonedPackageIds,
       tools: version.tools ?? [],
       status: "draft",
       created_by: userId,
