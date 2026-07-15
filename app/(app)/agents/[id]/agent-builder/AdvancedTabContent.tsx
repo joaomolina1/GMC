@@ -7,7 +7,7 @@ import {
   Sparkles,
   Link2,
   Plug,
-  type LucideIcon,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Input, Textarea, Select } from "@/_design_system/Input";
@@ -21,9 +21,17 @@ import {
   PLUGIN_TOOL_META,
   PLUGIN_TOOLS,
   TOOL_META,
+  VERSION_STATUS_LABEL,
+  VERSION_STATUS_TONE,
   type BuilderTab,
 } from "./constants";
 import type { Agent, AgentVersion, McpConnectionRow, SkillPackageRow } from "./types";
+
+export type KnowledgeUploadItem = {
+  name: string;
+  status: "pending" | "uploading" | "ok" | "error";
+  error?: string;
+};
 
 export function AdvancedTabContent({
   tab,
@@ -45,6 +53,7 @@ export function AdvancedTabContent({
   docAction,
   docs,
   uploadKnowledge,
+  uploadProgress,
   deleteDoc,
   reindexDoc,
   tools,
@@ -70,6 +79,7 @@ export function AdvancedTabContent({
   setMcpSaving,
   loadMcpConnections,
   versions,
+  currentVersionId,
   publishVersion,
   rollbackVersion,
 }: {
@@ -97,6 +107,7 @@ export function AdvancedTabContent({
     metadata?: Record<string, unknown>;
   }>;
   uploadKnowledge: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  uploadProgress: KnowledgeUploadItem[];
   deleteDoc: (id: string) => void;
   reindexDoc: (id: string) => void;
   tools: string[];
@@ -122,6 +133,7 @@ export function AdvancedTabContent({
   setMcpSaving: React.Dispatch<React.SetStateAction<boolean>>;
   loadMcpConnections: () => Promise<void>;
   versions: AgentVersion[];
+  currentVersionId: string | null;
   publishVersion: (id: string) => void;
   rollbackVersion: (id: string) => void;
 }) {
@@ -150,7 +162,7 @@ export function AdvancedTabContent({
         />
         {visibility === "public" && agent.status !== "published" && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            Guarde o agente para publicar no marketplace.
+            Guarde o agente para o tornar disponível no marketplace.
           </p>
         )}
       </div>
@@ -158,6 +170,7 @@ export function AdvancedTabContent({
   }
 
   if (tab === "knowledge") {
+    const uploading = docAction === "upload";
     return (
       <div className="space-y-4">
         {knowledgeReady === false && (
@@ -171,31 +184,93 @@ export function AdvancedTabContent({
         {docSuccess && (
           <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{docSuccess}</p>
         )}
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-center hover:border-brand-300">
+        <label
+          className={cn(
+            "flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-center hover:border-brand-300",
+            uploading && "pointer-events-none opacity-60"
+          )}
+        >
           <Upload size={20} className="text-brand-500" />
-          <span className="text-xs font-medium text-slate-600">Carregar documento</span>
+          <span className="text-xs font-medium text-slate-600">
+            {uploading ? "A carregar documentos…" : "Carregar documentos"}
+          </span>
+          <span className="text-[10px] text-slate-400">
+            Pode selecionar vários ficheiros de uma vez
+          </span>
           <input
             type="file"
             className="hidden"
             onChange={uploadKnowledge}
             accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp"
-            disabled={docAction === "upload"}
+            multiple
+            disabled={uploading}
           />
         </label>
-        {docs.map((doc) => (
-          <div
-            key={doc.id}
-            className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-xs"
-          >
-            <span className="truncate">{doc.filename}</span>
-            <div className="flex gap-1">
-              <Badge tone={DOC_TONE[doc.status] ?? "warning"}>{doc.status}</Badge>
-              <button type="button" onClick={() => deleteDoc(doc.id)} className="text-slate-400 hover:text-rose-500">
-                <Trash2 size={14} />
-              </button>
+        {uploadProgress.length > 0 && (
+          <ul className="space-y-1.5 rounded-lg border border-line bg-slate-50 p-2.5">
+            {uploadProgress.map((item, index) => (
+              <li
+                key={`${index}-${item.name}`}
+                className="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span className="truncate text-slate-700">{item.name}</span>
+                <span
+                  className={cn(
+                    "shrink-0 font-medium",
+                    item.status === "ok" && "text-emerald-600",
+                    item.status === "error" && "text-rose-600",
+                    item.status === "uploading" && "text-brand-600",
+                    item.status === "pending" && "text-slate-400"
+                  )}
+                  title={item.error}
+                >
+                  {item.status === "ok"
+                    ? "Indexado"
+                    : item.status === "error"
+                      ? "Erro"
+                      : item.status === "uploading"
+                        ? "A indexar…"
+                        : "Em fila"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {docs.length === 0 && uploadProgress.length === 0 ? (
+          <p className="text-center text-xs text-slate-400">
+            Ainda não há documentos. Só este agente usa estes ficheiros no chat.
+          </p>
+        ) : (
+          docs.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-xs"
+            >
+              <span className="truncate">{doc.filename}</span>
+              <div className="flex gap-1">
+                <Badge tone={DOC_TONE[doc.status] ?? "warning"}>{doc.status}</Badge>
+                {doc.status === "error" && (
+                  <button
+                    type="button"
+                    onClick={() => reindexDoc(doc.id)}
+                    disabled={docAction === `reindex-${doc.id}`}
+                    className="rounded p-1 text-slate-400 hover:text-brand-600"
+                    title="Reindexar"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => deleteDoc(doc.id)}
+                  className="text-slate-400 hover:text-rose-500"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     );
   }
@@ -451,29 +526,70 @@ export function AdvancedTabContent({
   }
 
   if (tab === "versions") {
-  return (
-    <div className="space-y-2">
-      {versions.map((v) => (
-        <div key={v.id} className="flex items-center justify-between rounded-lg border border-line p-2 text-xs">
-          <span>
-            v{v.version} · {v.status}
-          </span>
-          <div className="flex gap-1">
-            {v.status !== "published" && (
-              <Button size="sm" onClick={() => publishVersion(v.id)}>
-                Publicar
-              </Button>
-            )}
-            {v.status === "archived" && (
-              <Button size="sm" variant="outline" onClick={() => rollbackVersion(v.id)}>
-                Rollback
-              </Button>
-            )}
-          </div>
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+          <p>
+            <strong className="text-slate-800">Guardar</strong> — atualiza a versão ativa com as
+            alterações atuais (prompt, tools, skills…).
+          </p>
+          <p>
+            <strong className="text-slate-800">Nova versão</strong> — cria um snapshot{" "}
+            <code>v+1</code>, torna-o a versão ativa e arquiva a anterior. Use isto quando quiser
+            um ponto de restauro.
+          </p>
+          <p>
+            <strong className="text-slate-800">Restaurar</strong> — volta a ativar uma versão
+            arquivada.
+          </p>
         </div>
-      ))}
-    </div>
-  );
+        {versions.length === 0 ? (
+          <p className="text-center text-xs text-slate-400">Ainda não há versões.</p>
+        ) : (
+          <div className="space-y-2">
+            {versions.map((v) => {
+              const isCurrent = v.id === currentVersionId;
+              return (
+                <div
+                  key={v.id}
+                  className={cn(
+                    "flex items-center justify-between gap-2 rounded-lg border p-2.5 text-xs",
+                    isCurrent ? "border-brand-300 bg-brand-50/40" : "border-line"
+                  )}
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800">
+                      v{v.version}
+                      {isCurrent ? " · atual" : ""}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">
+                      {v.published_at
+                        ? new Date(v.published_at).toLocaleString("pt-PT")
+                        : "Sem data de publicação"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge tone={VERSION_STATUS_TONE[v.status] ?? "neutral"}>
+                      {VERSION_STATUS_LABEL[v.status] ?? v.status}
+                    </Badge>
+                    {v.status === "draft" && !isCurrent && (
+                      <Button size="sm" onClick={() => publishVersion(v.id)}>
+                        Ativar
+                      </Button>
+                    )}
+                    {v.status === "archived" && (
+                      <Button size="sm" variant="outline" onClick={() => rollbackVersion(v.id)}>
+                        Restaurar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return null;
