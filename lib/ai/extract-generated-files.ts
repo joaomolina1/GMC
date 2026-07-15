@@ -7,6 +7,19 @@ const FILE_ID_KEYS = new Set([
 
 const FILE_ID_PATTERN = /^file_[a-zA-Z0-9_-]+$/;
 
+/** Result types that carry created files in `.content[].file_id`. */
+const CODE_EXECUTION_RESULT_TYPES = new Set([
+  "bash_code_execution_result",
+  "code_execution_result",
+  // Present when web search (or other server tools) encrypt stdout — still has file_id outputs.
+  "encrypted_code_execution_result",
+]);
+
+const CODE_EXECUTION_TOOL_RESULT_TYPES = new Set([
+  "bash_code_execution_tool_result",
+  "code_execution_tool_result",
+]);
+
 export interface FileExtractionResult {
   fileIds: string[];
   scannedBlocks: number;
@@ -23,15 +36,17 @@ function addFileId(ids: Set<string>, value: unknown): void {
 /** Anthropic puts created files in *_code_execution_result.content[].file_id */
 function extractFromCodeExecutionResult(result: Record<string, unknown>, ids: Set<string>): void {
   const outputs = result.content;
-  if (!Array.isArray(outputs)) return;
-  for (const item of outputs) {
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    addFileId(ids, row.file_id);
-    addFileId(ids, row.fileId);
+  if (Array.isArray(outputs)) {
+    for (const item of outputs) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as Record<string, unknown>;
+      addFileId(ids, row.file_id);
+      addFileId(ids, row.fileId);
+    }
   }
-  const stdout = result.stdout;
-  if (typeof stdout === "string") {
+  for (const key of ["stdout", "encrypted_stdout"] as const) {
+    const stdout = result[key];
+    if (typeof stdout !== "string") continue;
     for (const match of stdout.matchAll(/file_[a-zA-Z0-9_-]+/g)) {
       ids.add(match[0]);
     }
@@ -58,28 +73,19 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
     scannedBlocks += 1;
 
     const record = value as Record<string, unknown>;
+    const type = typeof record.type === "string" ? record.type : "";
 
-    if (
-      record.type === "bash_code_execution_result" ||
-      record.type === "code_execution_result"
-    ) {
+    if (CODE_EXECUTION_RESULT_TYPES.has(type)) {
       extractFromCodeExecutionResult(record, ids);
     }
 
-    if (
-      record.type === "bash_code_execution_tool_result" ||
-      record.type === "code_execution_tool_result"
-    ) {
+    if (CODE_EXECUTION_TOOL_RESULT_TYPES.has(type)) {
       const content = record.content;
-      if (content && typeof content === "object") {
+      if (content && typeof content === "object" && !Array.isArray(content)) {
         const inner = content as Record<string, unknown>;
-        if (
-          inner.type === "bash_code_execution_result" ||
-          inner.type === "code_execution_result"
-        ) {
+        if (typeof inner.type === "string" && CODE_EXECUTION_RESULT_TYPES.has(inner.type)) {
           extractFromCodeExecutionResult(inner, ids);
         }
-        walk(inner, depth + 1);
       }
     }
 
@@ -87,8 +93,10 @@ export function extractFileIdsDetailed(payload: unknown): FileExtractionResult {
       addFileId(ids, record[key]);
     }
 
+    // Walk every nested value, including `content` — required for encrypted results
+    // and nested tool outputs that the special-case handlers may not fully cover.
     for (const nested of Object.values(record)) {
-      if (nested !== record.content) walk(nested, depth + 1);
+      walk(nested, depth + 1);
     }
   }
 
@@ -105,7 +113,14 @@ export function messageClaimsDownloadableFiles(text: string): boolean {
     /bot[oõ]es?\s+verdes?/i.test(text) ||
     /descarregar\s+os\s+ficheiros/i.test(text) ||
     /(?:^|\n)\s*[-*✅]\s*[*`']?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/im.test(text) ||
-    /✅\s*\*?\*?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/i.test(text)
+    /✅\s*\*?\*?[\w.-]+\.(?:pptx|xlsx|docx|pdf|html|md)/i.test(text) ||
+    /criei\s+(?:o\s+|um\s+|a\s+)?(?:ficheiro|documento|apresenta[çc][ãa]o|pptx|powerpoint)/i.test(
+      text
+    ) ||
+    /(?:ficheiro|documento|apresenta[çc][ãa]o)\s+(?:foi\s+)?(?:criad[oa]|gerad[oa]|produzid[oa])/i.test(
+      text
+    ) ||
+    /\b[\w.-]+\.(?:pptx|xlsx|docx|pdf)\b/i.test(text)
   );
 }
 

@@ -85,9 +85,15 @@ export function resolveAgentRoute(config: AgentConfig, messages: ChatMessage[]):
     ? resolveDocumentSkillsFromContext(messages)
     : undefined;
 
-  // Custom skill packages use code execution + container files — not native pptx/xlsx skills.
+  // Custom skill packages still need native pptx/xlsx/… skills when the user
+  // asks for a document — otherwise the model often "creates" files via
+  // text_editor/cp without producing a downloadable file_id.
   if (createDocumentsThisTurn && hasCustomSkillContainer) {
-    return { route: "beta-session", createDocumentsThisTurn: true };
+    return {
+      route: "beta-session",
+      createDocumentsThisTurn: true,
+      documentSkillIds,
+    };
   }
 
   if (createDocumentsThisTurn) {
