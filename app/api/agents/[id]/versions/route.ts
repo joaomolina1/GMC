@@ -113,6 +113,13 @@ export async function POST(
 
     const nextVersion = (latest?.version ?? 0) + 1;
 
+    // Archive any currently published version before promoting the new snapshot.
+    await supabase
+      .from("agent_versions")
+      .update({ status: "archived" })
+      .eq("agent_id", agentId)
+      .eq("status", "published");
+
     const { data, error } = await supabase
       .from("agent_versions")
       .insert({

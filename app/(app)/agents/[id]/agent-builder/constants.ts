@@ -46,7 +46,7 @@ export const TAB_INTRO: Record<BuilderTab, { title: string; desc: string }> = {
   },
   knowledge: {
     title: "Knowledge",
-    desc: "Documentos indexados para pesquisa semântica (RAG).",
+    desc: "Documentos indexados para pesquisa semântica (RAG). Pode carregar vários de uma vez.",
   },
   tools: {
     title: "Tools",
@@ -62,8 +62,20 @@ export const TAB_INTRO: Record<BuilderTab, { title: string; desc: string }> = {
   },
   versions: {
     title: "Versões",
-    desc: "Histórico de versões guardadas e publicação.",
+    desc: "Histórico de snapshots. «Guardar» atualiza a versão ativa; «Nova versão» cria v+1.",
   },
+};
+
+export const VERSION_STATUS_TONE: Record<string, "success" | "warning" | "neutral"> = {
+  published: "success",
+  draft: "warning",
+  archived: "neutral",
+};
+
+export const VERSION_STATUS_LABEL: Record<string, string> = {
+  published: "Ativa",
+  draft: "Rascunho",
+  archived: "Arquivada",
 };
 
 export const TOOL_META: Record<string, { label: string; desc: string; icon: LucideIcon; tone: string }> = {

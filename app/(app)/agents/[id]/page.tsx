@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Save,
@@ -9,6 +9,7 @@ import {
   MessagesSquare,
   PanelLeftClose,
   ChevronRight,
+  History,
 } from "lucide-react";
 import { Button } from "@/_design_system/Button";
 import { Card } from "@/_design_system/Card";
@@ -20,7 +21,10 @@ import { cn } from "@lib/utils";
 import type { EffortLevel } from "@lib/ai/types";
 import { modelSupportsThinking } from "@lib/ai/anthropic-params";
 import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
-import { AdvancedTabContent } from "./agent-builder/AdvancedTabContent";
+import {
+  AdvancedTabContent,
+  type KnowledgeUploadItem,
+} from "./agent-builder/AdvancedTabContent";
 import {
   BUILDER_TABS,
   CORE_TOOLS,
@@ -31,6 +35,43 @@ import {
 import type { Agent, AgentVersion, McpConnectionRow, SkillPackageRow } from "./agent-builder/types";
 
 type Tab = BuilderTab;
+
+type SaveSnapshotFields = {
+  name: string;
+  description: string;
+  visibility: string;
+  category: string;
+  tagsInput: string;
+  systemPrompt: string;
+  model: string;
+  effort: EffortLevel;
+  thinkingEnabled: boolean;
+  tools: string[];
+  skillPackageIds: string[];
+  toolConfigs: Record<string, Record<string, unknown>>;
+};
+
+function buildSaveSnapshot(fields: SaveSnapshotFields): string {
+  return JSON.stringify({
+    name: fields.name,
+    description: fields.description,
+    visibility: fields.visibility,
+    category: fields.category,
+    tagsInput: fields.tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .sort()
+      .join(","),
+    systemPrompt: fields.systemPrompt,
+    model: fields.model,
+    effort: fields.effort,
+    thinkingEnabled: fields.thinkingEnabled,
+    tools: [...fields.tools].sort(),
+    skillPackageIds: [...fields.skillPackageIds].sort(),
+    toolConfigs: fields.toolConfigs,
+  });
+}
 
 export default function AgentBuilderPage() {
   return (
@@ -102,9 +143,11 @@ function AgentBuilderWorkspace() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeVersion, setActiveVersion] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [docAction, setDocAction] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<KnowledgeUploadItem[]>([]);
   const [knowledgeReady, setKnowledgeReady] = useState<boolean | null>(null);
   const [skillStatuses, setSkillStatuses] = useState<
     Record<string, { readiness: string; note: string; requirement?: string }>
@@ -138,28 +181,56 @@ function AgentBuilderWorkspace() {
     }
     setAgent(data);
     setCanChangeModel(Boolean(data.permissions?.canChangeModel));
-    setName(data.name ?? "");
-    setDescription(data.description ?? "");
-    setVisibility(data.visibility ?? "private");
-    setCategory(data.category ?? "geral");
-    setTagsInput((data.tags ?? []).join(", "));
+    const nextName = data.name ?? "";
+    const nextDescription = data.description ?? "";
+    const nextVisibility = data.visibility ?? "private";
+    const nextCategory = data.category ?? "geral";
+    const nextTagsInput = (data.tags ?? []).join(", ");
+    setName(nextName);
+    setDescription(nextDescription);
+    setVisibility(nextVisibility);
+    setCategory(nextCategory);
+    setTagsInput(nextTagsInput);
     const current =
       data.agent_versions?.find((v: AgentVersion) => v.id === data.current_version_id) ??
       data.agent_versions?.[0];
+    const nextSystemPrompt = current?.system_prompt ?? "";
+    const nextModel = current?.model ?? DEFAULT_AGENT_MODEL;
+    const nextEffort = ((current?.effort as EffortLevel) ?? "low") as EffortLevel;
+    const nextThinking = Boolean(current?.thinking_enabled);
+    const nextTools = current?.skills ?? CORE_TOOLS;
+    const nextSkillPackageIds = (current?.skill_package_ids as string[]) ?? [];
+    const nextToolConfigs = {
+      ...DEFAULT_TOOL_CONFIGS,
+      ...(current?.tools as Record<string, Record<string, unknown>> | undefined),
+    };
     if (current) {
-      setSystemPrompt(current.system_prompt);
-      setModel(current.model);
-      setEffort((current.effort as EffortLevel) ?? "low");
-      setThinkingEnabled(Boolean(current.thinking_enabled));
-      setTools(current.skills ?? CORE_TOOLS);
-      setSkillPackageIds((current.skill_package_ids as string[]) ?? []);
-      setToolConfigs({
-        ...DEFAULT_TOOL_CONFIGS,
-        ...(current.tools as Record<string, Record<string, unknown>> | undefined),
-      });
+      setSystemPrompt(nextSystemPrompt);
+      setModel(nextModel);
+      setEffort(nextEffort);
+      setThinkingEnabled(nextThinking);
+      setTools(nextTools);
+      setSkillPackageIds(nextSkillPackageIds);
+      setToolConfigs(nextToolConfigs);
       setActiveVersion(current.version);
     }
     setVersions(data.agent_versions ?? []);
+    setSavedSnapshot(
+      buildSaveSnapshot({
+        name: nextName,
+        description: nextDescription,
+        visibility: nextVisibility,
+        category: nextCategory,
+        tagsInput: nextTagsInput,
+        systemPrompt: nextSystemPrompt,
+        model: nextModel,
+        effort: nextEffort,
+        thinkingEnabled: nextThinking,
+        tools: nextTools,
+        skillPackageIds: nextSkillPackageIds,
+        toolConfigs: nextToolConfigs,
+      })
+    );
   }, [id]);
 
   useEffect(() => {
@@ -206,7 +277,42 @@ function AgentBuilderWorkspace() {
       });
   }, [canChangeModel]);
 
-  async function saveNewVersion() {
+  const currentSnapshot = useMemo(
+    () =>
+      buildSaveSnapshot({
+        name,
+        description,
+        visibility,
+        category,
+        tagsInput,
+        systemPrompt,
+        model,
+        effort,
+        thinkingEnabled,
+        tools,
+        skillPackageIds,
+        toolConfigs,
+      }),
+    [
+      name,
+      description,
+      visibility,
+      category,
+      tagsInput,
+      systemPrompt,
+      model,
+      effort,
+      thinkingEnabled,
+      tools,
+      skillPackageIds,
+      toolConfigs,
+    ]
+  );
+  const isDirty = savedSnapshot != null && currentSnapshot !== savedSnapshot;
+  const canSave = isDirty || agent?.status !== "published";
+
+  async function saveAgent(options: { createSnapshot?: boolean } = {}) {
+    const { createSnapshot = false } = options;
     setSaving(true);
     setSaved(false);
     setSaveError(null);
@@ -222,6 +328,7 @@ function AgentBuilderWorkspace() {
         skills: tools,
         tools: toolConfigs,
         skill_package_ids: skillPackageIds,
+        createSnapshot,
       }),
     });
     if (!versionRes.ok) {
@@ -266,17 +373,30 @@ function AgentBuilderWorkspace() {
           }
         : prev
     );
-    setVersions((prev) => {
-      const idx = prev.findIndex((v) => v.id === savedVersion.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = savedVersion;
-        return next;
-      }
-      return [savedVersion, ...prev];
-    });
+    if (createSnapshot) {
+      setVersions((prev) => {
+        const archived = prev.map((v) =>
+          v.status === "published" && v.id !== savedVersion.id
+            ? { ...v, status: "archived" }
+            : v
+        );
+        const withoutDup = archived.filter((v) => v.id !== savedVersion.id);
+        return [savedVersion, ...withoutDup];
+      });
+    } else {
+      setVersions((prev) => {
+        const idx = prev.findIndex((v) => v.id === savedVersion.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedVersion;
+          return next;
+        }
+        return [savedVersion, ...prev];
+      });
+    }
     setActiveVersion(savedVersion.version);
     setSavedAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }));
+    setSavedSnapshot(currentSnapshot);
 
     setSaving(false);
     setSaved(true);
@@ -302,29 +422,75 @@ function AgentBuilderWorkspace() {
   }
 
   async function uploadKnowledge(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
     setDocAction("upload");
     setDocError(null);
     setDocSuccess(null);
-    const form = new FormData();
-    form.append("file", file);
-    form.append("agentId", id);
-    try {
-      const res = await fetch("/api/knowledge/upload", { method: "POST", body: form });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setDocError(data.error ?? `Upload falhou (${res.status})`);
-      } else {
-        setDocSuccess(`${file.name} indexado (${data.metadata?.chunk_count ?? data.chunk_count ?? "?"} chunks)`);
+    setUploadProgress(files.map((file) => ({ name: file.name, status: "pending" })));
+
+    let okCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setUploadProgress((prev) =>
+        prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item))
+      );
+
+      const form = new FormData();
+      form.append("file", file);
+      form.append("agentId", id);
+
+      try {
+        const res = await fetch("/api/knowledge/upload", { method: "POST", body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          failCount += 1;
+          const message = (data as { error?: string }).error ?? `Upload falhou (${res.status})`;
+          errors.push(`${file.name}: ${message}`);
+          setUploadProgress((prev) =>
+            prev.map((item, idx) =>
+              idx === i ? { ...item, status: "error", error: message } : item
+            )
+          );
+        } else {
+          okCount += 1;
+          setUploadProgress((prev) =>
+            prev.map((item, idx) => (idx === i ? { ...item, status: "ok" } : item))
+          );
+        }
+      } catch (err) {
+        failCount += 1;
+        const message = err instanceof Error ? err.message : "Erro de rede no upload";
+        errors.push(`${file.name}: ${message}`);
+        setUploadProgress((prev) =>
+          prev.map((item, idx) =>
+            idx === i ? { ...item, status: "error", error: message } : item
+          )
+        );
       }
-      await loadDocs();
-    } catch (err) {
-      setDocError(err instanceof Error ? err.message : "Erro de rede no upload");
-    } finally {
-      setDocAction(null);
-      e.target.value = "";
     }
+
+    await loadDocs();
+
+    if (okCount > 0 && failCount === 0) {
+      setDocSuccess(
+        okCount === 1
+          ? `${files[0].name} indexado com sucesso`
+          : `${okCount} documentos indexados com sucesso`
+      );
+    } else if (okCount > 0 && failCount > 0) {
+      setDocSuccess(`${okCount} documento(s) indexado(s)`);
+      setDocError(`${failCount} falhou/falharam. ${errors[0] ?? ""}`);
+    } else {
+      setDocError(errors[0] ?? "Nenhum documento foi indexado");
+    }
+
+    setDocAction(null);
+    e.target.value = "";
   }
 
   async function deleteDoc(docId: string) {
@@ -459,12 +625,32 @@ function AgentBuilderWorkspace() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {saveError && <p role="alert" className="max-w-[22rem] text-xs text-rose-600">{saveError}</p>}
-          {savedAt && !saveError && (
+        <div className="flex items-center gap-2 sm:gap-3">
+          {saveError && <p role="alert" className="max-w-[18rem] text-xs text-rose-600">{saveError}</p>}
+          {isDirty && !saveError && (
+            <p className="hidden text-xs text-amber-600 sm:block">Alterações por guardar</p>
+          )}
+          {savedAt && !saveError && !isDirty && (
             <p className="hidden text-xs text-slate-400 sm:block">Guardado às {savedAt}</p>
           )}
-          <Button onClick={saveNewVersion} disabled={saving}>
+          <Button
+            variant="outline"
+            onClick={() => void saveAgent({ createSnapshot: true })}
+            disabled={saving}
+            title="Cria um snapshot v+1 e torna-o a versão ativa"
+          >
+            <History size={16} />
+            <span className="hidden sm:inline">Nova versão</span>
+          </Button>
+          <Button
+            onClick={() => void saveAgent()}
+            disabled={saving || !canSave}
+            title={
+              canSave
+                ? "Guardar alterações na versão ativa"
+                : "Sem alterações para guardar"
+            }
+          >
             {saved ? <Check size={16} /> : <Save size={16} />}
             {saving ? "A guardar..." : saved ? "Guardado" : "Guardar"}
           </Button>
@@ -641,6 +827,7 @@ function AgentBuilderWorkspace() {
                   docAction={docAction}
                   docs={docs}
                   uploadKnowledge={uploadKnowledge}
+                  uploadProgress={uploadProgress}
                   deleteDoc={deleteDoc}
                   reindexDoc={reindexDoc}
                   tools={tools}
@@ -666,6 +853,7 @@ function AgentBuilderWorkspace() {
                   setMcpSaving={setMcpSaving}
                   loadMcpConnections={loadMcpConnections}
                   versions={versions}
+                  currentVersionId={agent.current_version_id ?? null}
                   publishVersion={publishVersion}
                   rollbackVersion={rollbackVersion}
                 />
