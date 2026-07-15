@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ANTHROPIC_DOCUMENT_BETAS } from "./anthropic-document-skills";
+import { sanitizeStorageFilename } from "@lib/storage/filename";
 
 export interface PersistedGeneratedFile {
   file_id: string;
@@ -39,10 +40,6 @@ export async function listDownloadableFilesForContainer(
   return fileIds;
 }
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^\w.\-() ]+/g, "_").slice(0, 180) || "documento";
-}
-
 export async function persistAnthropicGeneratedFiles(options: {
   fileIds: string[];
   userId: string;
@@ -60,7 +57,7 @@ export async function persistAnthropicGeneratedFiles(options: {
       const meta = await client.beta.files.retrieveMetadata(fileId, { betas });
       const response = await client.beta.files.download(fileId, { betas });
       const buffer = Buffer.from(await response.arrayBuffer());
-      const filename = sanitizeFilename(meta.filename || `ficheiro-${fileId.slice(0, 8)}`);
+      const filename = sanitizeStorageFilename(meta.filename || `ficheiro-${fileId.slice(0, 8)}`, 180);
       const storagePath = `${userId}/generated/${Date.now()}-${filename}`;
 
       const { error: uploadError } = await supabase.storage

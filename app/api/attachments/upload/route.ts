@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
+import { sanitizeStorageFilename } from "@lib/storage/filename";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -18,14 +19,14 @@ export async function POST(request: Request) {
   else if (ext === "pdf") kind = "pdf";
   else if (["doc", "docx", "xls", "xlsx"].includes(ext)) kind = "doc";
 
-  const storagePath = `${user.id}/${Date.now()}-${file.name}`;
+  const storagePath = `${user.id}/${Date.now()}-${sanitizeStorageFilename(file.name)}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error } = await supabase.storage
     .from("attachments")
     .upload(storagePath, buffer, { contentType: file.type });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: `Storage: ${error.message}` }, { status: 500 });
 
   return NextResponse.json({
     storage_path: storagePath,

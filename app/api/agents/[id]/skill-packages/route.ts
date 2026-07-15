@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { parseSkillUpload } from "@lib/agent-skills/parser";
+import { sanitizeStorageFilename } from "@lib/storage/filename";
 
 export async function GET(
   _request: Request,
@@ -68,7 +69,7 @@ export async function POST(
     );
   }
 
-  const storagePath = `${user.id}/skills/${agentId}/${Date.now()}-${parsed.name}.zip`;
+  const storagePath = `${user.id}/skills/${agentId}/${Date.now()}-${sanitizeStorageFilename(parsed.name)}.zip`;
   const { error: uploadError } = await supabase.storage
     .from("attachments")
     .upload(storagePath, buffer, {
@@ -77,7 +78,7 @@ export async function POST(
     });
 
   if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    return NextResponse.json({ error: `Storage: ${uploadError.message}` }, { status: 500 });
   }
 
   const { data: row, error } = await supabase

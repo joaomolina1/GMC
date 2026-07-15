@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { processKnowledgeDocument } from "@lib/ai/embeddings";
 import { extractDocument } from "@lib/documents/extract";
+import { sanitizeStorageFilename } from "@lib/storage/filename";
 
 export interface IngestKnowledgeInput {
   supabase: SupabaseClient;
@@ -16,7 +17,7 @@ export interface IngestKnowledgeInput {
 export async function ingestKnowledgeFile(input: IngestKnowledgeInput) {
   const { supabase, serviceClient, userId, agentId, buffer, filename, mime, source } = input;
 
-  const storagePath = `${userId}/${agentId}/${Date.now()}-${filename}`;
+  const storagePath = `${userId}/${agentId}/${Date.now()}-${sanitizeStorageFilename(filename)}`;
 
   const { error: uploadError } = await supabase.storage
     .from("knowledge")
