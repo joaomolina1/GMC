@@ -290,11 +290,30 @@ export default function AdminPage() {
     navigator.clipboard.writeText(text);
   }
 
+  function mcpConfigJson() {
+    return JSON.stringify(
+      {
+        mcpServers: {
+          gmc: {
+            command: "npx",
+            args: ["tsx", "/caminho/absoluto/para/GMC/mcp/src/index.ts"],
+            env: {
+              GMC_API_URL: apiBaseUrl || "https://gmcprototypes.vercel.app",
+              GMC_API_KEY: createdSecret || "gmc_live_...",
+            },
+          },
+        },
+      },
+      null,
+      2
+    );
+  }
+
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: "users", label: "Utilizadores", icon: Users },
     { id: "roles", label: "Roles & limites", icon: Gauge },
     { id: "conversations", label: "Conversas", icon: MessageSquare },
-    { id: "api-keys", label: "API Keys", icon: Key },
+    { id: "api-keys", label: "API", icon: Key },
     { id: "rate-limits", label: "Rate Limits", icon: Shield },
     { id: "audit", label: "Auditoria", icon: ScrollText },
     { id: "costs", label: "Custos", icon: Euro },
@@ -626,11 +645,28 @@ export default function AdminPage() {
               <CardTitle>API externa — agentes e flows</CardTitle>
             </CardHeader>
             <p className="mb-4 text-sm text-slate-500">
-              Aplicações externas podem executar agentes ou flows com uma API key. Autenticação via{" "}
+              Aplicações externas e LLMs (via MCP) podem criar, orquestrar e executar agentes ou
+              flows com uma API key. Autenticação via{" "}
               <code className="rounded bg-slate-100 px-1">Authorization: Bearer gmc_live_...</code>{" "}
               ou header <code className="rounded bg-slate-100 px-1">X-API-Key</code>.
             </p>
             <div className="space-y-3 rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
+              <div>
+                <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
+                  Descoberta
+                </p>
+                <p>GET {apiBaseUrl}/api/v1/capabilities</p>
+              </div>
+              <div>
+                <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
+                  Gestão
+                </p>
+                <p>GET/POST {apiBaseUrl}/api/v1/agents</p>
+                <p>GET/PATCH/DELETE {apiBaseUrl}/api/v1/agents/{"{id}"}</p>
+                <p>POST {apiBaseUrl}/api/v1/agents/{"{id}"}/versions</p>
+                <p>GET/POST {apiBaseUrl}/api/v1/flows</p>
+                <p>GET/PATCH/DELETE {apiBaseUrl}/api/v1/flows/{"{id}"}</p>
+              </div>
               <div>
                 <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
                   Executar agente
@@ -645,13 +681,103 @@ export default function AdminPage() {
               </div>
               <div>
                 <p className="mb-1 font-sans text-xs font-medium uppercase text-slate-400">
-                  Corpo (JSON)
+                  Corpo (JSON) — run
                 </p>
                 <pre className="whitespace-pre-wrap">{`{ "input": "mensagem" }
 // ou
 { "input": { "message": "...", "context": { ... } } }`}</pre>
               </div>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Scopes por defeito nas chaves novas:{" "}
+              <code className="rounded bg-slate-100 px-1">
+                agents|flows:(read|write|run), knowledge:read, marketplace:read
+              </code>
+              . <code className="rounded bg-slate-100 px-1">*:write</code> implica{" "}
+              <code className="rounded bg-slate-100 px-1">*:read</code>.
+            </p>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>MCP — Cursor / Claude Desktop</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyText(mcpConfigJson())}
+              >
+                <Copy size={14} className="mr-1.5" />
+                Copiar config
+              </Button>
+            </CardHeader>
+            <p className="mb-3 text-sm text-slate-500">
+              O servidor MCP da plataforma (pasta <code className="rounded bg-slate-100 px-1">mcp/</code>{" "}
+              no repositório) permite a um LLM criar, modificar, orquestrar e executar agentes e flows
+              através das tools MCP — sem cookies de sessão, só com a API key.
+            </p>
+            <ol className="mb-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
+              <li>
+                Crie uma API key abaixo (scopes de orquestração já vêm por defeito) e guarde o secret{" "}
+                <code className="rounded bg-slate-100 px-1">gmc_live_...</code>.
+              </li>
+              <li>
+                No clone do repositório:{" "}
+                <code className="rounded bg-slate-100 px-1">cd mcp && npm install</code>
+              </li>
+              <li>
+                No Cursor, adicione em{" "}
+                <code className="rounded bg-slate-100 px-1">~/.cursor/mcp.json</code> (ou{" "}
+                <code className="rounded bg-slate-100 px-1">.cursor/mcp.json</code> do projecto). No
+                Claude Desktop, use{" "}
+                <code className="rounded bg-slate-100 px-1">claude_desktop_config.json</code>.
+              </li>
+            </ol>
+            <div className="rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
+              <pre className="overflow-x-auto whitespace-pre-wrap">{mcpConfigJson()}</pre>
+            </div>
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Tools MCP disponíveis
+              </p>
+              <ul className="grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
+                <li>
+                  <code className="text-xs text-slate-800">get_platform_capabilities</code> — descoberta
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">list/get/create/update/delete_agent</code>
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">update_agent_config</code> — prompt, skills,
+                  publish
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">run_agent</code> — executar agente publicado
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">list/get/create/update/delete_flow</code>
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">orchestrate_agent_flow</code> — trigger →
+                  agent → output
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">run_flow</code> /{" "}
+                  <code className="text-xs text-slate-800">get_flow_run</code>
+                </li>
+                <li>
+                  <code className="text-xs text-slate-800">list_knowledge_documents</code>
+                </li>
+              </ul>
+            </div>
+            <p className="mt-4 text-xs text-slate-500">
+              Fluxo típico:{" "}
+              <code className="rounded bg-slate-100 px-1">create_agent</code> →{" "}
+              <code className="rounded bg-slate-100 px-1">update_agent_config</code> (publish) →{" "}
+              <code className="rounded bg-slate-100 px-1">create_flow</code> →{" "}
+              <code className="rounded bg-slate-100 px-1">orchestrate_agent_flow</code> →{" "}
+              <code className="rounded bg-slate-100 px-1">run_flow</code>. Documentação completa em{" "}
+              <code className="rounded bg-slate-100 px-1">mcp/README.md</code>.
+            </p>
           </Card>
 
           <Card>
@@ -701,6 +827,10 @@ export default function AdminPage() {
                     <Copy size={14} />
                   </Button>
                 </div>
+                <p className="mt-2 text-xs text-emerald-700">
+                  Use esta chave em <code className="rounded bg-white/80 px-1">GMC_API_KEY</code> na
+                  config MCP acima (o bloco JSON actualiza-se automaticamente).
+                </p>
               </div>
             )}
           </Card>
