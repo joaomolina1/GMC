@@ -32,6 +32,14 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ["pdf-parse"],
+  webpack: (config) => {
+    // mcp/ uses NodeNext .js import specifiers that resolve to .ts sources.
+    config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias ?? {}),
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

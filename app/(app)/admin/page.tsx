@@ -310,12 +310,13 @@ export default function AdminPage() {
   }
 
   function mcpRemoteConfigJson() {
+    const base = apiBaseUrl || "https://gmcprototypes.vercel.app";
     return JSON.stringify(
       {
         type: "mcp",
         server_label: "gmc",
         server_description: "Ferramentas para consultar e gerir recursos GMC.",
-        server_url: "https://<serviço-mcp>/mcp",
+        server_url: `${base}/mcp`,
         authorization: "<MCP_AUTH_TOKEN>",
       },
       null,
@@ -726,14 +727,17 @@ export default function AdminPage() {
             </CardHeader>
             <p className="mb-3 text-sm text-slate-500">
               O servidor MCP (pasta <code className="rounded bg-slate-100 px-1">mcp/</code>) expõe tools
-              para criar, orquestrar e executar agentes/flows. Em produção prefira o modo{" "}
-              <strong>Streamable HTTP</strong> (<code className="rounded bg-slate-100 px-1">/mcp</code>
-              ): a <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor; os
+              para criar, orquestrar e executar agentes/flows. Em produção o endpoint Remote MCP está
+              na Vercel:{" "}
+              <code className="rounded bg-slate-100 px-1">
+                {(apiBaseUrl || "https://gmcprototypes.vercel.app") + "/mcp"}
+              </code>
+              . A <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor; os
               clientes usam <code className="rounded bg-slate-100 px-1">MCP_AUTH_TOKEN</code>.
             </p>
 
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-              Remote MCP (OpenAI / Inspector)
+              Remote MCP (Vercel / OpenAI / Inspector)
             </p>
             <div className="mb-4 rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
               <pre className="overflow-x-auto whitespace-pre-wrap">{mcpRemoteConfigJson()}</pre>
