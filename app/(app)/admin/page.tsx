@@ -1102,6 +1102,8 @@ export default function AdminPage() {
                       <td className="px-6 py-3">
                         {k.revoked_at ? (
                           <Badge tone="neutral">Revogada</Badge>
+                        ) : k.has_linked_api_key === false ? (
+                          <Badge tone="neutral">Sem API ligada</Badge>
                         ) : (
                           <Badge tone="brand">Ativa</Badge>
                         )}
