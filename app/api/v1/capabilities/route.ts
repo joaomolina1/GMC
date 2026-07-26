@@ -47,11 +47,13 @@ export async function GET(request: Request) {
       agents: "/api/v1/agents",
       agent: "/api/v1/agents/{id}",
       agent_versions: "/api/v1/agents/{id}/versions",
+      agent_knowledge: "/api/v1/agents/{id}/knowledge",
       agent_run: "/api/v1/agents/{id}/run",
       flows: "/api/v1/flows",
       flow: "/api/v1/flows/{id}",
       flow_run: "/api/v1/flows/{id}/run",
       flow_run_status: "/api/v1/flows/{id}/runs/{runId}",
+      capabilities: "/api/v1/capabilities",
     },
   });
 }
