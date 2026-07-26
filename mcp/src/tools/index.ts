@@ -21,8 +21,24 @@ function errorResult(err: unknown) {
   };
 }
 
+/** Shallow registerTool typing — MCP SDK generics explode under Next.js typecheck on Vercel. */
+type RegisterTool = (
+  name: string,
+  config: {
+    description?: string;
+    inputSchema?: Record<string, z.ZodTypeAny>;
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: (args: any) => Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    isError?: boolean;
+  }>
+) => void;
+
 export function registerGmcTools(server: McpServer, client: GmcApiClient) {
-  server.registerTool(
+  const register = server.registerTool.bind(server) as RegisterTool;
+
+  register(
     "get_platform_capabilities",
     {
       description:
@@ -37,7 +53,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "list_agents",
     { description: "List agents owned by the API key user." },
     async () => {
@@ -49,7 +65,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "get_agent",
     {
       description: "Get an agent with all versions (system prompt, skills, tools).",
@@ -64,7 +80,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "create_agent",
     {
       description:
@@ -96,7 +112,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "update_agent",
     {
       description: "Update agent metadata (name, description, visibility, status).",
@@ -119,7 +135,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "update_agent_config",
     {
       description:
@@ -158,7 +174,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "delete_agent",
     {
       description: "Permanently delete an agent and its versions.",
@@ -173,7 +189,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "run_agent",
     {
       description:
@@ -200,7 +216,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "list_flows",
     { description: "List flows owned by the API key user." },
     async () => {
@@ -212,7 +228,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "get_flow",
     {
       description: "Get a flow with all versions and the current graph (nodes + edges).",
@@ -227,7 +243,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "create_flow",
     {
       description: "Create a new flow with a default graph (trigger → output).",
@@ -245,7 +261,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "update_flow",
     {
       description:
@@ -306,7 +322,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "orchestrate_agent_flow",
     {
       description:
@@ -368,7 +384,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "delete_flow",
     {
       description: "Permanently delete a flow.",
@@ -383,7 +399,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "run_flow",
     {
       description:
@@ -410,7 +426,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "get_flow_run",
     {
       description: "Get status and steps of a previous flow run.",
@@ -428,7 +444,7 @@ export function registerGmcTools(server: McpServer, client: GmcApiClient) {
     }
   );
 
-  server.registerTool(
+  register(
     "list_knowledge_documents",
     {
       description: "List knowledge documents indexed for an owned agent (RAG corpus).",

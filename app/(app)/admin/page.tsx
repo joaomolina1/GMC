@@ -52,6 +52,19 @@ interface ApiKeyRow {
   created_at: string;
 }
 
+interface McpKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
 interface UserRow {
   id: string;
   email: string;
@@ -96,6 +109,11 @@ export default function AdminPage() {
   const [newKeyUserId, setNewKeyUserId] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [mcpKeys, setMcpKeys] = useState<McpKeyRow[]>([]);
+  const [newMcpKeyName, setNewMcpKeyName] = useState("");
+  const [newMcpKeyUserId, setNewMcpKeyUserId] = useState("");
+  const [creatingMcpKey, setCreatingMcpKey] = useState(false);
+  const [createdMcpSecret, setCreatedMcpSecret] = useState<string | null>(null);
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [roleUpdateError, setRoleUpdateError] = useState<string | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
@@ -158,13 +176,23 @@ export default function AdminPage() {
     if (Array.isArray(data)) setApiKeys(data);
   }
 
+  async function loadMcpKeys() {
+    const res = await fetch("/api/admin/platform-mcp-keys");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data)) setMcpKeys(data);
+  }
+
   useEffect(() => {
     loadAll();
     setApiBaseUrl(window.location.origin);
   }, []);
 
   useEffect(() => {
-    if (tab === "api-keys") loadApiKeys();
+    if (tab === "api-keys") {
+      loadApiKeys();
+      loadMcpKeys();
+    }
   }, [tab]);
 
   async function updateRole(userId: string, role: string) {
@@ -286,6 +314,39 @@ export default function AdminPage() {
     await loadApiKeys();
   }
 
+  async function createMcpKey() {
+    if (!newMcpKeyName.trim()) return;
+    setCreatingMcpKey(true);
+    setCreatedMcpSecret(null);
+    const res = await fetch("/api/admin/platform-mcp-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newMcpKeyName.trim(),
+        user_id: newMcpKeyUserId || undefined,
+      }),
+    });
+    const data = await res.json();
+    setCreatingMcpKey(false);
+    if (res.ok && data.secret) {
+      setCreatedMcpSecret(data.secret);
+      setNewMcpKeyName("");
+      setNewMcpKeyUserId("");
+      await loadMcpKeys();
+    }
+  }
+
+  async function revokeMcpKey(id: string) {
+    if (!confirm("Revogar esta chave MCP? Clientes Remote MCP que a usam deixarão de autenticar."))
+      return;
+    await fetch("/api/admin/platform-mcp-keys", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action: "revoke" }),
+    });
+    await loadMcpKeys();
+  }
+
   function copyText(text: string) {
     navigator.clipboard.writeText(text);
   }
@@ -317,7 +378,7 @@ export default function AdminPage() {
         server_label: "gmc",
         server_description: "Ferramentas para consultar e gerir recursos GMC.",
         server_url: `${base}/mcp`,
-        authorization: "<MCP_AUTH_TOKEN>",
+        authorization: createdMcpSecret || "mcp_...",
       },
       null,
       2
@@ -732,8 +793,9 @@ export default function AdminPage() {
               <code className="rounded bg-slate-100 px-1">
                 {(apiBaseUrl || "https://gmcprototypes.vercel.app") + "/mcp"}
               </code>
-              . A <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor; os
-              clientes usam <code className="rounded bg-slate-100 px-1">MCP_AUTH_TOKEN</code>.
+              . Crie uma chave MCP abaixo para autenticar clientes; a{" "}
+              <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor
+              (env Vercel) para chamar <code className="rounded bg-slate-100 px-1">/api/v1</code>.
             </p>
 
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -744,8 +806,8 @@ export default function AdminPage() {
             </div>
             <p className="mb-4 text-xs text-slate-500">
               Headers:{" "}
-              <code className="rounded bg-slate-100 px-1">Authorization: Bearer &lt;MCP_AUTH_TOKEN&gt;</code>
-              . Health: <code className="rounded bg-slate-100 px-1">GET /health</code>. Ver{" "}
+              <code className="rounded bg-slate-100 px-1">Authorization: Bearer mcp_...</code>
+              . Crie e revogue chaves na secção &quot;Chaves MCP&quot; abaixo. Ver{" "}
               <code className="rounded bg-slate-100 px-1">mcp/README.md</code>.
             </p>
 
@@ -926,6 +988,138 @@ export default function AdminPage() {
                     <tr>
                       <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
                         Nenhuma API key criada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Criar chave MCP</CardTitle>
+            </CardHeader>
+            <p className="mb-4 text-sm text-slate-500">
+              Autentica clientes Remote MCP em{" "}
+              <code className="rounded bg-slate-100 px-1">/mcp</code> (
+              <code className="rounded bg-slate-100 px-1">Authorization: Bearer mcp_...</code>
+              ). Independente das API keys <code className="rounded bg-slate-100 px-1">gmc_live_...</code>.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Input
+                label="Nome"
+                value={newMcpKeyName}
+                onChange={(e) => setNewMcpKeyName(e.target.value)}
+                placeholder="OpenAI / Cursor remoto"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Titular (opcional)
+                </label>
+                <Select
+                  value={newMcpKeyUserId}
+                  onChange={(e) => setNewMcpKeyUserId(e.target.value)}
+                  className="h-10 w-full"
+                >
+                  <option value="">Eu (admin atual)</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={createMcpKey}
+                  disabled={creatingMcpKey || !newMcpKeyName.trim()}
+                >
+                  {creatingMcpKey ? "A criar..." : "Gerar chave MCP"}
+                </Button>
+              </div>
+            </div>
+            {createdMcpSecret && (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-medium text-emerald-800">
+                  Chave MCP criada — copie agora, não será mostrada novamente:
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="flex-1 break-all rounded bg-white px-3 py-2 text-xs text-slate-800">
+                    {createdMcpSecret}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText(createdMcpSecret)}
+                  >
+                    <Copy size={14} />
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-emerald-700">
+                  Use em <code className="rounded bg-white/80 px-1">authorization</code> na config
+                  Remote MCP acima (o JSON actualiza-se automaticamente).
+                </p>
+              </div>
+            )}
+          </Card>
+
+          <Card padding="none">
+            <div className="px-6 pt-5">
+              <CardHeader>
+                <CardTitle>Chaves MCP existentes</CardTitle>
+              </CardHeader>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-line bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <th className="px-6 py-3 font-medium">Nome</th>
+                    <th className="px-6 py-3 font-medium">Prefixo</th>
+                    <th className="px-6 py-3 font-medium">Titular</th>
+                    <th className="px-6 py-3 font-medium">Último uso</th>
+                    <th className="px-6 py-3 font-medium">Estado</th>
+                    <th className="px-6 py-3 font-medium" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {mcpKeys.map((k) => (
+                    <tr key={k.id} className="hover:bg-slate-50/60">
+                      <td className="px-6 py-3 font-medium text-slate-800">{k.name}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-slate-600">
+                        {k.key_prefix}…
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">{k.user_email ?? "—"}</td>
+                      <td className="px-6 py-3 text-slate-500">
+                        {k.last_used_at
+                          ? new Date(k.last_used_at).toLocaleString("pt-PT")
+                          : "—"}
+                      </td>
+                      <td className="px-6 py-3">
+                        {k.revoked_at ? (
+                          <Badge tone="neutral">Revogada</Badge>
+                        ) : (
+                          <Badge tone="brand">Ativa</Badge>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        {!k.revoked_at && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => revokeMcpKey(k.id)}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {mcpKeys.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                        Nenhuma chave MCP criada.
                       </td>
                     </tr>
                   )}

@@ -16,9 +16,17 @@ Implementação: `app/mcp/route.ts` (Streamable HTTP, modo **stateless**, adequa
 
 | Variável | Descrição |
 |----------|-----------|
-| `GMC_API_KEY` | Chave `gmc_live_...` (Backoffice → API) |
-| `MCP_AUTH_TOKEN` | Token Bearer para clientes MCP (gera um secret forte) |
+| `GMC_API_KEY` | Chave `gmc_live_...` (Backoffice → API) usada pelo servidor para `/api/v1` |
 | `GMC_API_URL` | Opcional; por omissão usa o próprio origin / `VERCEL_URL` |
+| `MCP_AUTH_TOKEN` | Opcional / legado — fallback se não usar chaves MCP da BD |
+
+### Chaves MCP (Backoffice → API)
+
+Crie e revogue chaves `mcp_...` no separador **API** (secção **Chaves MCP**). Clientes usam:
+
+```http
+Authorization: Bearer mcp_...
+```
 
 ### Cliente remoto (OpenAI / Inspector)
 
@@ -28,14 +36,14 @@ Implementação: `app/mcp/route.ts` (Streamable HTTP, modo **stateless**, adequa
   "server_label": "gmc",
   "server_description": "Ferramentas para consultar e gerir recursos GMC.",
   "server_url": "https://gmcprototypes.vercel.app/mcp",
-  "authorization": "<MCP_AUTH_TOKEN>"
+  "authorization": "mcp_..."
 }
 ```
 
 Headers:
 
 ```http
-Authorization: Bearer <MCP_AUTH_TOKEN>
+Authorization: Bearer mcp_...
 Content-Type: application/json
 Accept: application/json, text/event-stream
 ```

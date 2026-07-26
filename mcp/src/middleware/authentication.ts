@@ -1,5 +1,4 @@
 import { timingSafeEqual } from "node:crypto";
-import type { RequestHandler } from "express";
 import { AppError } from "../errors.js";
 
 function safeEqual(a: string, b: string): boolean {
@@ -35,23 +34,4 @@ export function assertMcpAuth(
   if (!safeEqual(token, expectedToken)) {
     throw new AppError("AUTH_FAILED", "Token de autenticação inválido.", { status: 401 });
   }
-}
-
-export function createBearerAuthMiddleware(expectedToken: string | null): RequestHandler {
-  return (req, res, next) => {
-    try {
-      assertMcpAuth(req.header("authorization") ?? undefined, expectedToken);
-      next();
-    } catch (err) {
-      if (err instanceof AppError && err.code === "AUTH_FAILED") {
-        res.status(401).json({
-          jsonrpc: "2.0",
-          error: { code: -32001, message: "Unauthorized" },
-          id: null,
-        });
-        return;
-      }
-      next(err);
-    }
-  };
 }

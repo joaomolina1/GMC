@@ -1,8 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { GmcApiClient } from "../../mcp/src/clients/gmc-api-client";
 import { createMcpServer, MCP_SERVER_VERSION } from "../../mcp/src/server/create-mcp-server";
-import { assertMcpAuth } from "../../mcp/src/middleware/authentication";
-import { AppError } from "../../mcp/src/errors";
+import { authenticateMcpBearerToken } from "@lib/enterprise/mcp-key-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -48,18 +47,12 @@ async function handleMcp(req: Request): Promise<Response> {
     return misconfigured("GMC_API_KEY is not configured on the server");
   }
 
-  const authToken = process.env.MCP_AUTH_TOKEN?.trim() || null;
-  if (process.env.NODE_ENV === "production" && !authToken) {
-    return misconfigured("MCP_AUTH_TOKEN is not configured on the server");
-  }
-
-  try {
-    assertMcpAuth(req.headers.get("authorization") ?? undefined, authToken);
-  } catch (err) {
-    if (err instanceof AppError && err.code === "AUTH_FAILED") {
-      return unauthorized();
-    }
-    throw err;
+  const auth = await authenticateMcpBearerToken(
+    req.headers.get("authorization"),
+    process.env.MCP_AUTH_TOKEN
+  );
+  if (!auth) {
+    return unauthorized();
   }
 
   const client = new GmcApiClient({
