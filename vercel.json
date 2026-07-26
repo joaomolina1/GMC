@@ -3,6 +3,12 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "regions": ["cdg1"],
+  "functions": {
+    "app/mcp/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/purge-conversations",

@@ -3,21 +3,35 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP server for creating, modifying, orchestrating and running GMC agents and flows",
+  "description": "Remote + stdio MCP server for creating, modifying, orchestrating and running GMC agents and flows",
   "bin": {
-    "gmc-mcp": "./src/index.ts"
+    "gmc-mcp": "./dist/index.js"
   },
   "scripts": {
-    "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "npm run dev:http",
+    "dev:http": "tsx watch src/server/http.ts",
+    "dev:stdio": "tsx src/server/stdio.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server/http.js",
+    "start:stdio": "node dist/server/stdio.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.0.1",
     "zod": "^3.25.42"
   },
   "devDependencies": {
+    "@types/express": "^5.0.3",
     "@types/node": "^20",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
     "tsx": "^4.19.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

@@ -1,121 +1,103 @@
 # GMC Platform MCP Server
 
-Servidor [MCP](https://modelcontextprotocol.io) que permite a um LLM **criar, modificar, orquestrar e executar** agentes e flows da plataforma GMC.
+Servidor [MCP](https://modelcontextprotocol.io) para **criar, modificar, orquestrar e executar** agentes e flows da plataforma GMC.
 
-## Tools
+## Produção (Vercel)
 
-| Tool | O que faz |
-|------|-----------|
-| `get_platform_capabilities` | Descobre scopes, tools de agente, tipos de nós de flow |
-| `list_agents` / `get_agent` | Listar / detalhe (com versões) |
-| `create_agent` | Criar agente + versão draft |
-| `update_agent` | Metadados (nome, visibilidade, status) |
-| `update_agent_config` | Prompt, skills/tools, esforço; publica para ficar runnable |
-| `delete_agent` | Apagar |
-| `run_agent` | Executar agente publicado |
-| `list_flows` / `get_flow` | Listar / graph |
-| `create_flow` | Criar flow (trigger → output) |
-| `update_flow` | Metadados + graph completo |
-| `orchestrate_agent_flow` | Atalho: trigger → agent → output |
-| `delete_flow` | Apagar |
-| `run_flow` / `get_flow_run` | Executar flow / ver run |
-| `list_knowledge_documents` | Docs RAG de um agente |
+O endpoint Remote MCP corre **no mesmo projecto Next.js** em Vercel:
 
-## Setup rápido
-
-### 1. Criar API key na plataforma
-
-Backoffice → **API Keys** → criar chave com scopes de orquestração:
-
-```
-agents:read, agents:write, agents:run,
-flows:read, flows:write, flows:run,
-knowledge:read, marketplace:read
+```text
+https://gmcprototypes.vercel.app/mcp
 ```
 
-Guarde o secret `gmc_live_...` (só aparece uma vez).
+Implementação: `app/mcp/route.ts` (Streamable HTTP, modo **stateless**, adequado a serverless).
 
-### 2. Instalar o servidor MCP
+### Variáveis no projecto Vercel
 
-```bash
-cd mcp
-npm install
-```
+| Variável | Descrição |
+|----------|-----------|
+| `GMC_API_KEY` | Chave `gmc_live_...` (Backoffice → API) |
+| `MCP_AUTH_TOKEN` | Token Bearer para clientes MCP (gera um secret forte) |
+| `GMC_API_URL` | Opcional; por omissão usa o próprio origin / `VERCEL_URL` |
 
-### 3. Ligar no Cursor / Claude Desktop
-
-**Cursor** — `~/.cursor/mcp.json` (ou project `.cursor/mcp.json`):
+### Cliente remoto (OpenAI / Inspector)
 
 ```json
 {
-  "mcpServers": {
-    "gmc": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/GMC/mcp/src/index.ts"],
-      "env": {
-        "GMC_API_URL": "https://gmcprototypes.vercel.app",
-        "GMC_API_KEY": "gmc_live_..."
-      }
-    }
-  }
+  "type": "mcp",
+  "server_label": "gmc",
+  "server_description": "Ferramentas para consultar e gerir recursos GMC.",
+  "server_url": "https://gmcprototypes.vercel.app/mcp",
+  "authorization": "<MCP_AUTH_TOKEN>"
 }
 ```
 
-**Claude Desktop** — `claude_desktop_config.json`:
+Headers:
 
-```json
-{
-  "mcpServers": {
-    "gmc": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/GMC/mcp/src/index.ts"],
-      "env": {
-        "GMC_API_URL": "https://gmcprototypes.vercel.app",
-        "GMC_API_KEY": "gmc_live_..."
-      }
-    }
-  }
-}
+```http
+Authorization: Bearer <MCP_AUTH_TOKEN>
+Content-Type: application/json
+Accept: application/json, text/event-stream
 ```
 
-Para desenvolvimento local: `GMC_API_URL=http://localhost:3000`.
+## Modos locais (pasta `mcp/`)
 
-### 4. Exemplo de orquestração (o LLM faz isto via tools)
+| Modo | Comando | Uso |
+|------|---------|-----|
+| HTTP local | `npm run dev:http` | `http://localhost:3000/mcp` (Express, sessões) |
+| stdio | `npm run dev:stdio` | Cursor / Claude Desktop |
 
-1. `create_agent` — nome + system_prompt + skills `["web_search","create_documents"]`
-2. `update_agent_config` — refinar prompt e `publish`
-3. `create_flow` — nome do pipeline
-4. `orchestrate_agent_flow` — ligar o agente ao flow
-5. `run_flow` — `{ input: "Gera um resumo executivo..." }`
-6. ou `run_agent` — execução directa sem flow
+As tools são partilhadas (`mcp/src/tools`).
 
 ## Arquitectura
 
 ```
-LLM (Cursor/Claude)
-    │  MCP stdio
-    ▼
-mcp/src/index.ts  (este servidor)
-    │  HTTPS + Bearer gmc_live_…
-    ▼
-GMC /api/v1/*  (Next.js + Supabase service role)
-    │
-    ▼
-agents / flows / runs
+Cliente MCP ──Bearer MCP_AUTH_TOKEN──►  Vercel /mcp  (Next.js route)
+                                            │
+                                    createMcpServer + tools
+                                            │
+                                 GmcApiClient ──GMC_API_KEY──► /api/v1
 ```
 
-O MCP **não** usa cookies de sessão — só platform API keys. Os agentes da plataforma continuam a poder ligar MCPs externos próprios (Gmail, etc.) via Anthropic; este servidor é o MCP **da** GMC.
+`MCP_AUTH_TOKEN` ≠ `GMC_API_KEY`. Nunca reutilizar.
 
-## Scopes
+## Instalação local do package `mcp/`
 
-| Scope | Permite |
-|-------|---------|
-| `agents:read` | list/get |
-| `agents:write` | create/update/delete/config |
-| `agents:run` | executar |
-| `flows:read` | list/get/run status |
-| `flows:write` | create/update/delete/graph |
-| `flows:run` | executar |
-| `knowledge:read` | listar documentos |
+```bash
+cd mcp
+npm install
+cp .env.example .env
+npm run dev:http    # ou npm run dev:stdio
+npm test && npm run typecheck
+```
 
-`*:write` implica `*:read` no mesmo recurso.
+## Tools (classificação)
+
+| Tool | Tipo | Aprovação |
+|------|------|-----------|
+| `get_platform_capabilities`, `list_*`, `get_*` | read-only | auto |
+| `create_*`, `update_*`, `orchestrate_*`, `run_*` | write | confirmar |
+| `delete_agent`, `delete_flow` | destructive | sempre confirmar |
+
+## Migração stdio → Remote MCP
+
+| | Antes | Agora |
+|--|-------|-------|
+| Host | processo local | Vercel `https://gmcprototypes.vercel.app/mcp` |
+| Auth cliente | n/a | `MCP_AUTH_TOKEN` |
+| `GMC_API_KEY` | no Cursor | só no servidor Vercel |
+
+stdio continua disponível via `mcp/src/server/stdio.ts`.
+
+## Docker (opcional / self-host)
+
+Ver `mcp/Dockerfile` se quiseres correr o Express HTTP fora da Vercel. Em produção GMC usa-se o endpoint Next.js em Vercel.
+
+## Troubleshooting
+
+| Sintoma | Causa |
+|---------|-------|
+| 401 | `MCP_AUTH_TOKEN` em falta/errado |
+| 503 | `GMC_API_KEY` ou `MCP_AUTH_TOKEN` não definidos na Vercel |
+| timeout em `run_*` | execução longa; `maxDuration` do `/mcp` é 300s |
+| Not Acceptable | falta `Accept: application/json, text/event-stream` |

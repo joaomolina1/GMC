@@ -296,13 +296,28 @@ export default function AdminPage() {
         mcpServers: {
           gmc: {
             command: "npx",
-            args: ["tsx", "/caminho/absoluto/para/GMC/mcp/src/index.ts"],
+            args: ["tsx", "/caminho/absoluto/para/GMC/mcp/src/server/stdio.ts"],
             env: {
               GMC_API_URL: apiBaseUrl || "https://gmcprototypes.vercel.app",
               GMC_API_KEY: createdSecret || "gmc_live_...",
             },
           },
         },
+      },
+      null,
+      2
+    );
+  }
+
+  function mcpRemoteConfigJson() {
+    const base = apiBaseUrl || "https://gmcprototypes.vercel.app";
+    return JSON.stringify(
+      {
+        type: "mcp",
+        server_label: "gmc",
+        server_description: "Ferramentas para consultar e gerir recursos GMC.",
+        server_url: `${base}/mcp`,
+        authorization: "<MCP_AUTH_TOKEN>",
       },
       null,
       2
@@ -700,36 +715,55 @@ export default function AdminPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>MCP — Cursor / Claude Desktop</CardTitle>
+              <CardTitle>MCP — remoto (HTTP) e local (stdio)</CardTitle>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => copyText(mcpConfigJson())}
               >
                 <Copy size={14} className="mr-1.5" />
-                Copiar config
+                Copiar stdio
               </Button>
             </CardHeader>
             <p className="mb-3 text-sm text-slate-500">
-              O servidor MCP da plataforma (pasta <code className="rounded bg-slate-100 px-1">mcp/</code>{" "}
-              no repositório) permite a um LLM criar, modificar, orquestrar e executar agentes e flows
-              através das tools MCP — sem cookies de sessão, só com a API key.
+              O servidor MCP (pasta <code className="rounded bg-slate-100 px-1">mcp/</code>) expõe tools
+              para criar, orquestrar e executar agentes/flows. Em produção o endpoint Remote MCP está
+              na Vercel:{" "}
+              <code className="rounded bg-slate-100 px-1">
+                {(apiBaseUrl || "https://gmcprototypes.vercel.app") + "/mcp"}
+              </code>
+              . A <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor; os
+              clientes usam <code className="rounded bg-slate-100 px-1">MCP_AUTH_TOKEN</code>.
+            </p>
+
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              Remote MCP (Vercel / OpenAI / Inspector)
+            </p>
+            <div className="mb-4 rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
+              <pre className="overflow-x-auto whitespace-pre-wrap">{mcpRemoteConfigJson()}</pre>
+            </div>
+            <p className="mb-4 text-xs text-slate-500">
+              Headers:{" "}
+              <code className="rounded bg-slate-100 px-1">Authorization: Bearer &lt;MCP_AUTH_TOKEN&gt;</code>
+              . Health: <code className="rounded bg-slate-100 px-1">GET /health</code>. Ver{" "}
+              <code className="rounded bg-slate-100 px-1">mcp/README.md</code>.
+            </p>
+
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              stdio local (Cursor / Claude Desktop)
             </p>
             <ol className="mb-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
               <li>
-                Crie uma API key abaixo (scopes de orquestração já vêm por defeito) e guarde o secret{" "}
-                <code className="rounded bg-slate-100 px-1">gmc_live_...</code>.
+                Crie uma API key abaixo e guarde o secret{" "}
+                <code className="rounded bg-slate-100 px-1">gmc_live_...</code> (
+                <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code>).
               </li>
               <li>
-                No clone do repositório:{" "}
                 <code className="rounded bg-slate-100 px-1">cd mcp && npm install</code>
               </li>
               <li>
-                No Cursor, adicione em{" "}
-                <code className="rounded bg-slate-100 px-1">~/.cursor/mcp.json</code> (ou{" "}
-                <code className="rounded bg-slate-100 px-1">.cursor/mcp.json</code> do projecto). No
-                Claude Desktop, use{" "}
-                <code className="rounded bg-slate-100 px-1">claude_desktop_config.json</code>.
+                Config em <code className="rounded bg-slate-100 px-1">~/.cursor/mcp.json</code> ou{" "}
+                <code className="rounded bg-slate-100 px-1">claude_desktop_config.json</code>:
               </li>
             </ol>
             <div className="rounded-xl border border-line bg-slate-50/60 p-4 font-mono text-xs text-slate-700">
@@ -775,8 +809,7 @@ export default function AdminPage() {
               <code className="rounded bg-slate-100 px-1">update_agent_config</code> (publish) →{" "}
               <code className="rounded bg-slate-100 px-1">create_flow</code> →{" "}
               <code className="rounded bg-slate-100 px-1">orchestrate_agent_flow</code> →{" "}
-              <code className="rounded bg-slate-100 px-1">run_flow</code>. Documentação completa em{" "}
-              <code className="rounded bg-slate-100 px-1">mcp/README.md</code>.
+              <code className="rounded bg-slate-100 px-1">run_flow</code>.
             </p>
           </Card>
 
