@@ -1,12 +1,22 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { tryCreateServiceClient } from "@lib/supabase/server";
+import { decryptLinkedApiKeySecret } from "@lib/enterprise/mcp-key-crypto";
 
 export const MCP_KEY_PREFIX = "mcp_";
 
-export interface PlatformMcpKeyContext {
+export type PlatformMcpKeyContext = {
+  kind: "db";
   keyId: string;
   userId: string;
-}
+  /** Decrypted companion gmc_live_ secret for calling /api/v1 */
+  apiKeySecret: string | null;
+};
+
+export type LegacyMcpAuthContext = {
+  kind: "legacy";
+};
+
+export type McpAuthContext = PlatformMcpKeyContext | LegacyMcpAuthContext;
 
 export function hashMcpKey(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
@@ -40,7 +50,7 @@ export function extractMcpBearerToken(authorizationHeader: string | null | undef
 export async function authenticateMcpBearerToken(
   authorizationHeader: string | null | undefined,
   envFallbackToken?: string | null
-): Promise<PlatformMcpKeyContext | { legacy: true } | null> {
+): Promise<McpAuthContext | null> {
   const token = extractMcpBearerToken(authorizationHeader);
   if (!token) return null;
 
@@ -52,18 +62,34 @@ export async function authenticateMcpBearerToken(
         p_key_hash: keyHash,
       });
       if (!error && data) {
-        const payload = data as { id: string; user_id: string };
-        return { keyId: payload.id, userId: payload.user_id };
+        const payload = data as {
+          id: string;
+          user_id: string;
+          linked_api_key_ciphertext?: string | null;
+        };
+        let apiKeySecret: string | null = null;
+        if (payload.linked_api_key_ciphertext) {
+          try {
+            apiKeySecret = decryptLinkedApiKeySecret(payload.linked_api_key_ciphertext);
+          } catch {
+            apiKeySecret = null;
+          }
+        }
+        return {
+          kind: "db",
+          keyId: payload.id,
+          userId: payload.user_id,
+          apiKeySecret,
+        };
       }
-      // Invalid mcp_ key — do not fall through to env (wrong prefix match risk is low,
-      // but reject explicitly so revoked keys stay revoked).
+      // Invalid mcp_ key — do not fall through to env.
       return null;
     }
   }
 
   const fallback = envFallbackToken?.trim() || null;
   if (fallback && safeEqual(token, fallback)) {
-    return { legacy: true };
+    return { kind: "legacy" };
   }
 
   return null;

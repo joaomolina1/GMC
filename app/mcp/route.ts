@@ -42,17 +42,25 @@ function misconfigured(message: string): Response {
 }
 
 async function handleMcp(req: Request): Promise<Response> {
-  const apiKey = process.env.GMC_API_KEY?.trim();
-  if (!apiKey) {
-    return misconfigured("GMC_API_KEY is not configured on the server");
-  }
-
   const auth = await authenticateMcpBearerToken(
     req.headers.get("authorization"),
     process.env.MCP_AUTH_TOKEN
   );
   if (!auth) {
     return unauthorized();
+  }
+
+  const apiKey =
+    (auth.kind === "db" ? auth.apiKeySecret : null) ||
+    process.env.GMC_API_KEY?.trim() ||
+    null;
+
+  if (!apiKey) {
+    return misconfigured(
+      auth.kind === "db"
+        ? "Esta chave MCP não tem API key ligada. Crie uma nova chave MCP no Admin → API."
+        : "GMC_API_KEY is not configured on the server"
+    );
   }
 
   const client = new GmcApiClient({

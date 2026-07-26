@@ -63,6 +63,7 @@ interface McpKeyRow {
   last_used_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  has_linked_api_key?: boolean;
 }
 
 interface UserRow {
@@ -793,9 +794,9 @@ export default function AdminPage() {
               <code className="rounded bg-slate-100 px-1">
                 {(apiBaseUrl || "https://gmcprototypes.vercel.app") + "/mcp"}
               </code>
-              . Crie uma chave MCP abaixo para autenticar clientes; a{" "}
-              <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> fica só no servidor
-              (env Vercel) para chamar <code className="rounded bg-slate-100 px-1">/api/v1</code>.
+              . Crie uma chave MCP abaixo para autenticar clientes — cada chave gera
+              automaticamente uma API key ligada (não precisa de{" "}
+              <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> no Vercel).
             </p>
 
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -1004,7 +1005,10 @@ export default function AdminPage() {
               Autentica clientes Remote MCP em{" "}
               <code className="rounded bg-slate-100 px-1">/mcp</code> (
               <code className="rounded bg-slate-100 px-1">Authorization: Bearer mcp_...</code>
-              ). Independente das API keys <code className="rounded bg-slate-100 px-1">gmc_live_...</code>.
+              ). Cada chave MCP cria automaticamente uma API key ligada para o servidor
+              chamar <code className="rounded bg-slate-100 px-1">/api/v1</code> — não precisa
+              de <code className="rounded bg-slate-100 px-1">GMC_API_KEY</code> no Vercel.
+              Chaves antigas sem ligação: revogue e crie uma nova.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Input
