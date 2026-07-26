@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:types": "supabase gen types typescript --project-id wnhojvxnamxmpmdislcl > lib/db/database.types.ts"
+    "db:types": "supabase gen types typescript --project-id wnhojvxnamxmpmdislcl > lib/db/database.types.ts",
+    "mcp": "tsx mcp/src/index.ts",
+    "mcp:install": "npm install --prefix mcp"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
