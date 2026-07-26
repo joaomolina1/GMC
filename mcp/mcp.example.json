@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gmc": {
+      "command": "npx",
+      "args": ["tsx", "mcp/src/index.ts"],
+      "env": {
+        "GMC_API_URL": "https://gmcprototypes.vercel.app",
+        "GMC_API_KEY": "gmc_live_REPLACE_ME"
+      }
+    }
+  }
+}

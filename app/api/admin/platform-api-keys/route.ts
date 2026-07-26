@@ -6,6 +6,7 @@ import {
   hashApiKey,
   API_KEY_PREFIX,
 } from "@lib/enterprise/api-key-auth";
+import { DEFAULT_ORCHESTRATION_SCOPES } from "@lib/enterprise/platform-scopes";
 import { tryCreateServiceClient } from "@lib/supabase/server";
 
 export async function GET() {
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
       key_prefix: keyPrefix,
       key_hash: keyHash,
       user_id: ownerId,
-      scopes: scopes ?? ["agents:run", "flows:run"],
+      scopes: scopes ?? [...DEFAULT_ORCHESTRATION_SCOPES],
       allowed_agent_ids: allowed_agent_ids?.length ? allowed_agent_ids : null,
       allowed_flow_ids: allowed_flow_ids?.length ? allowed_flow_ids : null,
       expires_at: expires_at ?? null,
