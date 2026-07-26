@@ -106,14 +106,29 @@ export async function PATCH(
     const createSnapshot = Boolean(body.createSnapshot) || !flow.current_version_id;
 
     if (!createSnapshot && flow.current_version_id) {
+      const versionPatch: Record<string, unknown> = { graph: body.graph };
+      if (body.publish) {
+        versionPatch.status = "published";
+        versionPatch.published_at = new Date().toISOString();
+      }
       const { data, error } = await auth.supabase
         .from("flow_versions")
-        .update({ graph: body.graph })
+        .update(versionPatch)
         .eq("id", flow.current_version_id)
         .select()
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       version = data;
+
+      if (body.publish) {
+        await auth.supabase
+          .from("flows")
+          .update({
+            status: "published",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", flowId);
+      }
     } else {
       const { data: latest } = await auth.supabase
         .from("flow_versions")
