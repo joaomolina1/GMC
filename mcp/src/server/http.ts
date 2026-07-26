@@ -8,7 +8,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadEnv, type EnvConfig } from "../config/env.js";
 import { GmcApiClient } from "../clients/gmc-api-client.js";
-import { createBearerAuthMiddleware } from "../middleware/authentication.js";
+import { createBearerAuthMiddleware } from "../middleware/express-auth.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { createMcpServer, MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./create-mcp-server.js";
 import { AppError } from "../errors.js";
