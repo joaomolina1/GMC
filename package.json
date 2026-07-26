@@ -8,8 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "db:types": "supabase gen types typescript --project-id wnhojvxnamxmpmdislcl > lib/db/database.types.ts",
-    "mcp": "tsx mcp/src/index.ts",
-    "mcp:install": "npm install --prefix mcp"
+    "mcp": "npm run start:stdio --prefix mcp",
+    "mcp:http": "npm run start --prefix mcp",
+    "mcp:dev": "npm run dev:http --prefix mcp",
+    "mcp:install": "npm install --prefix mcp",
+    "mcp:test": "npm test --prefix mcp"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

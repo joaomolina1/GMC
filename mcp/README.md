@@ -1,121 +1,228 @@
 # GMC Platform MCP Server
 
-Servidor [MCP](https://modelcontextprotocol.io) que permite a um LLM **criar, modificar, orquestrar e executar** agentes e flows da plataforma GMC.
+Servidor [MCP](https://modelcontextprotocol.io) para **criar, modificar, orquestrar e executar** agentes e flows da plataforma GMC.
 
-## Tools
+Suporta dois modos:
 
-| Tool | O que faz |
-|------|-----------|
-| `get_platform_capabilities` | Descobre scopes, tools de agente, tipos de nós de flow |
-| `list_agents` / `get_agent` | Listar / detalhe (com versões) |
-| `create_agent` | Criar agente + versão draft |
-| `update_agent` | Metadados (nome, visibilidade, status) |
-| `update_agent_config` | Prompt, skills/tools, esforço; publica para ficar runnable |
-| `delete_agent` | Apagar |
-| `run_agent` | Executar agente publicado |
-| `list_flows` / `get_flow` | Listar / graph |
-| `create_flow` | Criar flow (trigger → output) |
-| `update_flow` | Metadados + graph completo |
-| `orchestrate_agent_flow` | Atalho: trigger → agent → output |
-| `delete_flow` | Apagar |
-| `run_flow` / `get_flow_run` | Executar flow / ver run |
-| `list_knowledge_documents` | Docs RAG de um agente |
+| Modo | Comando | Uso |
+|------|---------|-----|
+| **Remote HTTP** (Streamable HTTP) | `npm run dev:http` / `npm start` | OpenAI Agent Builder, Responses API, MCP Inspector, clientes remotos |
+| **stdio** (local) | `npm run dev:stdio` | Cursor / Claude Desktop local |
 
-## Setup rápido
-
-### 1. Criar API key na plataforma
-
-Backoffice → **API Keys** → criar chave com scopes de orquestração:
-
-```
-agents:read, agents:write, agents:run,
-flows:read, flows:write, flows:run,
-knowledge:read, marketplace:read
-```
-
-Guarde o secret `gmc_live_...` (só aparece uma vez).
-
-### 2. Instalar o servidor MCP
-
-```bash
-cd mcp
-npm install
-```
-
-### 3. Ligar no Cursor / Claude Desktop
-
-**Cursor** — `~/.cursor/mcp.json` (ou project `.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "gmc": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/GMC/mcp/src/index.ts"],
-      "env": {
-        "GMC_API_URL": "https://gmcprototypes.vercel.app",
-        "GMC_API_KEY": "gmc_live_..."
-      }
-    }
-  }
-}
-```
-
-**Claude Desktop** — `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "gmc": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/GMC/mcp/src/index.ts"],
-      "env": {
-        "GMC_API_URL": "https://gmcprototypes.vercel.app",
-        "GMC_API_KEY": "gmc_live_..."
-      }
-    }
-  }
-}
-```
-
-Para desenvolvimento local: `GMC_API_URL=http://localhost:3000`.
-
-### 4. Exemplo de orquestração (o LLM faz isto via tools)
-
-1. `create_agent` — nome + system_prompt + skills `["web_search","create_documents"]`
-2. `update_agent_config` — refinar prompt e `publish`
-3. `create_flow` — nome do pipeline
-4. `orchestrate_agent_flow` — ligar o agente ao flow
-5. `run_flow` — `{ input: "Gera um resumo executivo..." }`
-6. ou `run_agent` — execução directa sem flow
+As tools são partilhadas — sem duplicação entre transportes.
 
 ## Arquitectura
 
 ```
-LLM (Cursor/Claude)
-    │  MCP stdio
+Cliente MCP (OpenAI / Cursor / Inspector)
+    │  HTTPS + Bearer MCP_AUTH_TOKEN
+    │  POST/GET/DELETE /mcp  (Streamable HTTP)
     ▼
-mcp/src/index.ts  (este servidor)
-    │  HTTPS + Bearer gmc_live_…
+mcp/src/server/http.ts
+    │  tools (createMcpServer)
     ▼
-GMC /api/v1/*  (Next.js + Supabase service role)
-    │
-    ▼
-agents / flows / runs
+GmcApiClient  ──Bearer GMC_API_KEY──►  GMC /api/v1/*
 ```
 
-O MCP **não** usa cookies de sessão — só platform API keys. Os agentes da plataforma continuam a poder ligar MCPs externos próprios (Gmail, etc.) via Anthropic; este servidor é o MCP **da** GMC.
+Segredos distintos:
 
-## Scopes
+- `MCP_AUTH_TOKEN` — clientes → MCP
+- `GMC_API_KEY` — MCP → API GMC
 
-| Scope | Permite |
-|-------|---------|
-| `agents:read` | list/get |
-| `agents:write` | create/update/delete/config |
-| `agents:run` | executar |
-| `flows:read` | list/get/run status |
-| `flows:write` | create/update/delete/graph |
-| `flows:run` | executar |
-| `knowledge:read` | listar documentos |
+## Requisitos
 
-`*:write` implica `*:read` no mesmo recurso.
+- Node.js 18+
+- API key GMC com scopes de orquestração
+- Token de autenticação MCP (obrigatório em HTTP / produção)
+
+## Instalação
+
+```bash
+cd mcp
+npm install
+cp .env.example .env
+# editar .env com valores reais
+```
+
+## Variáveis de ambiente
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `GMC_API_URL` | sim | Base URL da plataforma (ex. `https://gmcprototypes.vercel.app`) |
+| `GMC_API_KEY` | sim | Chave `gmc_live_...` da API GMC |
+| `MCP_AUTH_TOKEN` | HTTP sim | Bearer token dos clientes MCP |
+| `PORT` | não (3000) | Porta HTTP |
+| `HOST` | não (`0.0.0.0`) | Bind address |
+| `NODE_ENV` | não | `development` / `production` / `test` |
+
+Opcionais: `GMC_REQUEST_TIMEOUT_MS`, `MCP_SESSION_TTL_MS`, `MCP_MAX_SESSIONS`, `MCP_RATE_LIMIT_WINDOW_MS`, `MCP_RATE_LIMIT_MAX`, `MCP_BODY_LIMIT_BYTES`.
+
+**Nunca** reutilize `GMC_API_KEY` como `MCP_AUTH_TOKEN`.
+
+## Execução HTTP
+
+```bash
+npm run dev:http
+# → http://localhost:3000/mcp
+# → http://localhost:3000/health
+```
+
+Produção:
+
+```bash
+npm run build
+npm start
+```
+
+Headers:
+
+```http
+Authorization: Bearer <MCP_AUTH_TOKEN>
+Content-Type: application/json
+Accept: application/json, text/event-stream
+```
+
+Sessões: stateful (`mcp-session-id`). TTL por omissão 30 min; máximo 200 sessões; rate limit 120 req/min por IP; body máx. 1 MiB.
+
+## Execução stdio
+
+```bash
+npm run dev:stdio
+```
+
+Cursor `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "gmc": {
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/GMC/mcp/src/server/stdio.ts"],
+      "env": {
+        "GMC_API_URL": "https://gmcprototypes.vercel.app",
+        "GMC_API_KEY": "gmc_live_..."
+      }
+    }
+  }
+}
+```
+
+## Migração de stdio para Remote MCP
+
+| | Antes | Agora |
+|--|-------|-------|
+| Transporte | só stdio | HTTP Streamable + stdio opcional |
+| Auth cliente | n/a (processo local) | `Authorization: Bearer MCP_AUTH_TOKEN` |
+| Segredo API GMC | no cliente MCP local | só no servidor MCP |
+| URL | caminho local `mcp/src/index.ts` | `https://<serviço>/mcp` |
+
+Rollback: continue a usar `npm run dev:stdio` / `src/index.ts` (ainda aponta para stdio).
+
+## Tools
+
+| Tool | Tipo | Efeito externo | Dados sensíveis | Aprovação |
+|------|------|----------------|-----------------|-----------|
+| `get_platform_capabilities` | read-only | nenhum | baixo | auto |
+| `list_agents` / `get_agent` | read-only | nenhum | metadados agentes | auto |
+| `list_flows` / `get_flow` / `get_flow_run` | read-only | nenhum | metadados flows | auto |
+| `list_knowledge_documents` | read-only | nenhum | nomes docs | auto |
+| `create_agent` / `update_agent` / `update_agent_config` | write | cria/altera agentes | prompts | pedir confirmação |
+| `create_flow` / `update_flow` / `orchestrate_agent_flow` | write | cria/altera flows | graphs | pedir confirmação |
+| `run_agent` / `run_flow` | write | executa LLM (custo) | inputs/outputs | pedir confirmação |
+| `delete_agent` / `delete_flow` | destructive | apaga permanentemente | — | sempre confirmar |
+
+## Testes
+
+```bash
+npm run typecheck
+npm test
+npm run test:integration
+```
+
+## MCP Inspector
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+- Transport: **Streamable HTTP**
+- URL: `http://localhost:3000/mcp`
+- Header: `Authorization: Bearer <MCP_AUTH_TOKEN>`
+
+## curl
+
+### Health
+
+```bash
+curl -i http://localhost:3000/health
+```
+
+### Sem autenticação (espera 401)
+
+```bash
+curl -i -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"manual-test","version":"1.0.0"}}}'
+```
+
+### Com autenticação
+
+```bash
+curl -i -X POST http://localhost:3000/mcp \
+  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"manual-test","version":"1.0.0"}}}'
+```
+
+Guarde o header `mcp-session-id` da resposta para pedidos seguintes.
+
+## Docker
+
+```bash
+docker build -t gmc-mcp .
+docker run --rm -p 3000:3000 \
+  -e GMC_API_URL=https://gmcprototypes.vercel.app \
+  -e GMC_API_KEY=replace_me \
+  -e MCP_AUTH_TOKEN=replace_me \
+  gmc-mcp
+```
+
+## Deployment (Render)
+
+Blueprint em `mcp/render.yaml`:
+
+```text
+Build: npm ci && npm run build
+Start: npm start
+Health: /health
+```
+
+Env secrets: `GMC_API_URL`, `GMC_API_KEY`, `MCP_AUTH_TOKEN`.
+
+Endpoint: `https://<serviço>.onrender.com/mcp`
+
+Bind: `0.0.0.0:$PORT` (Render).
+
+## OpenAI (Remote MCP)
+
+```json
+{
+  "type": "mcp",
+  "server_label": "gmc",
+  "server_description": "Ferramentas para consultar e gerir recursos GMC.",
+  "server_url": "https://<serviço>/mcp",
+  "authorization": "<MCP_AUTH_TOKEN>"
+}
+```
+
+## Troubleshooting
+
+| Sintoma | Causa provável |
+|---------|----------------|
+| 401 em `/mcp` | `MCP_AUTH_TOKEN` em falta/errado |
+| 400 sem session | falta `mcp-session-id` após `initialize` |
+| 404 session | sessão expirada / servidor reiniciado |
+| tool `GMC_UNAUTHORIZED` | `GMC_API_KEY` inválida/revogada |
+| cold start lento | plano free Render — faça warm-up em `/health` |

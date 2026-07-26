@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { GmcApiClient } from "./client.js";
+import type { GmcApiClient } from "../clients/gmc-api-client.js";
+import { toToolErrorPayload } from "../errors.js";
 
 function jsonResult(data: unknown) {
   return {
@@ -9,9 +10,13 @@ function jsonResult(data: unknown) {
 }
 
 function errorResult(err: unknown) {
-  const message = err instanceof Error ? err.message : String(err);
   return {
-    content: [{ type: "text" as const, text: JSON.stringify({ error: message }, null, 2) }],
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({ error: toToolErrorPayload(err) }, null, 2),
+      },
+    ],
     isError: true,
   };
 }
