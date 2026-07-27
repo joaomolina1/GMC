@@ -453,9 +453,11 @@ export function AdvancedTabContent({
     return (
       <div className="space-y-4">
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Liga servidores MCP (Gmail, Drive, Supabase, etc.) via API Anthropic. O token deve ser o
-          nome de uma variável de ambiente no servidor (ex. <code>MCP_GMAIL_TOKEN</code> ou{" "}
-          <code>env:MCP_GMAIL_TOKEN</code>) — nunca o valor secreto em texto.
+          Liga servidores MCP (Gmail, Drive, GMC Remote, etc.) via API Anthropic. O token deve ser o
+          nome de uma variável de ambiente no <strong>Vercel</strong> (ex.{" "}
+          <code>GMC_MCP_TOKEN</code> ou <code>env:GMC_MCP_TOKEN</code>) cujo valor é a chave{" "}
+          <code>mcp_...</code> — nunca cole o segredo aqui. Para o GMC em{" "}
+          <code>/mcp</code>, crie a chave em Admin → API e defina a mesma env no projeto Vercel.
         </p>
         <Input
           label="Nome"
@@ -470,8 +472,8 @@ export function AdvancedTabContent({
           placeholder="https://..."
         />
         <Input
-          label="Variável de ambiente (opcional)"
-          hint="Nome da env var no servidor, ex. MCP_GMAIL_TOKEN"
+          label="Variável de ambiente (obrigatória para /mcp autenticado)"
+          hint="Nome da env var no Vercel, ex. GMC_MCP_TOKEN — o valor deve ser mcp_..."
           value={mcpToken}
           onChange={(e) => setMcpToken(e.target.value)}
         />
