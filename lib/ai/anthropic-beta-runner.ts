@@ -4,11 +4,12 @@ import type {
   BetaContainerUploadBlockParam,
   BetaMessage,
   BetaMessageParam,
+  BetaMCPToolset,
   BetaRequestMCPServerURLDefinition,
   BetaTextBlock,
   BetaToolResultBlockParam,
+  BetaToolUnion,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import type { ToolUnion } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { ChatMessage, EffortLevel, TokenUsage } from "@lib/ai/types";
 import type { AgentToolRegistry, ExecutedToolCall } from "@lib/agents/tool-runtime";
 import { buildAnthropicRequestExtras } from "@lib/ai/anthropic-params";
@@ -23,7 +24,7 @@ import { extractFileIdsFromPayload, logMissingFileIds } from "@lib/ai/extract-ge
 import { listDownloadableFilesForContainer } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS, getModelMaxTokens } from "@lib/ai/model-limits";
 import { modelSupportsDocumentSkills } from "@lib/ai/document-skills-guard";
-import { MCP_BETA } from "@lib/agents/mcp-connections";
+import { MCP_BETA, mcpToolsetsForServers } from "@lib/agents/mcp-connections";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import {
   addAnthropicUsage,
@@ -148,9 +149,11 @@ function buildBetaTools(options: {
   hasContainerUploads?: boolean;
   webSearch?: boolean;
   webSearchConfig?: Record<string, unknown>;
-  clientTools?: ToolUnion[];
-}): ToolUnion[] | undefined {
-  const tools: ToolUnion[] = [...(options.clientTools ?? [])];
+  clientTools?: BetaToolUnion[];
+  mcpServers?: BetaRequestMCPServerURLDefinition[];
+  mcpToolsets?: BetaMCPToolset[];
+}): BetaToolUnion[] | undefined {
+  const tools: BetaToolUnion[] = [...(options.clientTools ?? [])];
   const needsCodeExecution = Boolean(options.createDocuments || options.hasContainerUploads);
 
   if (options.createDocuments) {
@@ -164,6 +167,16 @@ function buildBetaTools(options: {
   } else if (options.webSearch !== false) {
     tools.push(...buildAnthropicServerTools(["web_search"]));
   }
+
+  // Anthropic requires every mcp_servers entry to be referenced by an mcp_toolset.
+  const mcpToolsets =
+    options.mcpToolsets?.length
+      ? options.mcpToolsets
+      : options.mcpServers?.length
+        ? mcpToolsetsForServers(options.mcpServers)
+        : [];
+  tools.push(...mcpToolsets);
+
   return tools.length ? applyCacheToTools(tools) : undefined;
 }
 
@@ -206,8 +219,9 @@ export interface BetaAgentRunOptions {
   createDocuments?: boolean;
   documentSkillIds?: AnthropicDocumentSkillId[];
   mcpServers?: BetaRequestMCPServerURLDefinition[];
+  mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
-  clientTools?: ToolUnion[];
+  clientTools?: BetaToolUnion[];
   toolRegistry?: AgentToolRegistry;
 }
 
@@ -260,6 +274,8 @@ async function createBetaResponse(
       webSearch: options.webSearch,
       webSearchConfig: options.webSearchConfig,
       clientTools: options.clientTools,
+      mcpServers: options.mcpServers,
+      mcpToolsets: options.mcpToolsets,
     }),
     ...requestExtras,
   });
@@ -431,6 +447,8 @@ async function* streamBetaAgentCore(
           webSearch: options.webSearch,
           webSearchConfig: options.webSearchConfig,
           clientTools: options.clientTools,
+          mcpServers: options.mcpServers,
+          mcpToolsets: options.mcpToolsets,
         }),
         ...requestExtras,
       });

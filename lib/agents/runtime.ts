@@ -14,7 +14,12 @@ import {
   isCreateDocumentsEnabled,
   isWebSearchEnabled,
 } from "@lib/agents/agent-tools";
-import { buildAnthropicMcpServers, loadAgentMcpConnections } from "@lib/agents/mcp-connections";
+import {
+  buildAnthropicMcpServers,
+  buildAnthropicMcpToolsets,
+  loadAgentMcpConnections,
+} from "@lib/agents/mcp-connections";
+import type { BetaMCPToolset } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { persistAnthropicGeneratedFiles } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS } from "@lib/ai/model-limits";
 import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
@@ -35,6 +40,8 @@ export interface AgentRuntimeConfig {
   userId?: string;
   supabase?: SupabaseClient;
   mcpServers?: BetaRequestMCPServerURLDefinition[];
+  /** Required companion to mcpServers — one mcp_toolset per server name. */
+  mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
 }
 
@@ -77,6 +84,7 @@ export async function buildAgentRuntimeConfig(options: {
 
   const mcpConnections = await loadAgentMcpConnections(supabase, agentId);
   const mcpServers = buildAnthropicMcpServers(mcpConnections);
+  const mcpToolsets = buildAnthropicMcpToolsets(mcpConnections);
 
   const useDynamicKnowledgeTool = enabledTools.includes("knowledge_search");
   const knowledgeContext =
@@ -105,6 +113,7 @@ export async function buildAgentRuntimeConfig(options: {
     userId,
     supabase,
     mcpServers: mcpServers.length ? mcpServers : undefined,
+    mcpToolsets: mcpToolsets.length ? mcpToolsets : undefined,
     containerUploadBlocks: containerUploadBlocks.length ? containerUploadBlocks : undefined,
   };
 }

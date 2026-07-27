@@ -1,4 +1,7 @@
-import type { BetaRequestMCPServerURLDefinition } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type {
+  BetaMCPToolset,
+  BetaRequestMCPServerURLDefinition,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface AgentMcpConnection {
@@ -58,15 +61,47 @@ function resolveAuthToken(ref: string | null): string | null {
 export function buildAnthropicMcpServers(
   connections: AgentMcpConnection[]
 ): BetaRequestMCPServerURLDefinition[] {
+  // mcp-client-2025-11-20: connection details only — tool allowlists live on mcp_toolset.
   return connections.map((conn) => ({
     type: "url" as const,
     name: conn.name,
     url: conn.server_url,
     authorization_token: resolveAuthToken(conn.auth_secret_ref),
-    tool_configuration:
-      conn.allowed_tools?.length
-        ? { enabled: true, allowed_tools: conn.allowed_tools }
-        : { enabled: true },
+  }));
+}
+
+/**
+ * Every mcp_servers entry must be referenced by exactly one mcp_toolset in tools
+ * (Anthropic rejects otherwise: "defined but not referenced by any mcp_toolset").
+ */
+export function buildAnthropicMcpToolsets(
+  connections: AgentMcpConnection[]
+): BetaMCPToolset[] {
+  return connections.map((conn) => {
+    if (conn.allowed_tools?.length) {
+      return {
+        type: "mcp_toolset" as const,
+        mcp_server_name: conn.name,
+        default_config: { enabled: false },
+        configs: Object.fromEntries(
+          conn.allowed_tools.map((toolName) => [toolName, { enabled: true }])
+        ),
+      };
+    }
+    return {
+      type: "mcp_toolset" as const,
+      mcp_server_name: conn.name,
+    };
+  });
+}
+
+/** Build toolsets from server defs already prepared for the API (all tools enabled). */
+export function mcpToolsetsForServers(
+  servers: BetaRequestMCPServerURLDefinition[]
+): BetaMCPToolset[] {
+  return servers.map((server) => ({
+    type: "mcp_toolset" as const,
+    mcp_server_name: server.name,
   }));
 }
 

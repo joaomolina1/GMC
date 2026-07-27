@@ -1,7 +1,10 @@
 import type { EffortLevel, ChatMessage, TokenUsage } from "@lib/ai/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BetaContainerUploadBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import type { BetaRequestMCPServerURLDefinition } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type {
+  BetaMCPToolset,
+  BetaRequestMCPServerURLDefinition,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { getProvider, computeModelCost } from "@lib/ai/registry";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
@@ -44,6 +47,7 @@ export interface AgentConfig {
   userId?: string;
   supabase?: SupabaseClient;
   mcpServers?: BetaRequestMCPServerURLDefinition[];
+  mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
 }
 
@@ -155,6 +159,7 @@ function betaRunOptions(
     createDocuments: route.createDocumentsThisTurn,
     documentSkillIds: route.documentSkillIds,
     mcpServers: config.mcpServers,
+    mcpToolsets: config.mcpToolsets,
     containerUploadBlocks: config.containerUploadBlocks,
     clientTools: toolRegistry?.definitions,
     toolRegistry,
