@@ -58,19 +58,24 @@ async function resolveCollectedFileIds(options: {
   containerId?: string;
   excludeFileIds: Set<string>;
 }): Promise<string[]> {
-  if (options.collected.size > 0) {
-    return Array.from(options.collected);
+  // Always exclude skill package upload file_ids — those are inputs, not downloads.
+  for (const id of options.excludeFileIds) {
+    options.collected.delete(id);
   }
-  if (!options.containerId) return [];
 
-  const fromContainer = await listDownloadableFilesForContainer(
-    options.containerId,
-    options.excludeFileIds
-  );
-  for (const id of fromContainer) {
-    options.collected.add(id);
+  // Merge container listing even when payload extraction found some ids —
+  // encrypted results / partial walks can miss outputs that the Files API lists.
+  if (options.containerId) {
+    const fromContainer = await listDownloadableFilesForContainer(
+      options.containerId,
+      options.excludeFileIds
+    );
+    for (const id of fromContainer) {
+      if (!options.excludeFileIds.has(id)) options.collected.add(id);
+    }
   }
-  return Array.from(options.collected);
+
+  return Array.from(options.collected).filter((id) => !options.excludeFileIds.has(id));
 }
 
 function toAnthropicMessages(
@@ -133,6 +138,20 @@ function extractText(content: BetaContentBlock[]): string {
     .filter((b): b is BetaTextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
+}
+
+function buildContainerParams(
+  skillIds: AnthropicDocumentSkillId[] | undefined,
+  containerId?: string
+): { id?: string; skills?: ReturnType<typeof buildDocumentSkillParams> } | string | undefined {
+  if (skillIds?.length) {
+    return {
+      ...(containerId ? { id: containerId } : {}),
+      skills: buildDocumentSkillParams(skillIds),
+    };
+  }
+  if (containerId) return containerId;
+  return undefined;
 }
 
 function buildBetas(options: { mcpServers?: BetaRequestMCPServerURLDefinition[]; createDocuments?: boolean }) {
@@ -238,7 +257,8 @@ export interface BetaAgentRunResult {
 async function createBetaResponse(
   client: Anthropic,
   options: BetaAgentRunOptions,
-  messages: BetaMessageParam[]
+  messages: BetaMessageParam[],
+  containerId?: string
 ) {
   const createDocuments = Boolean(options.createDocuments);
   const hasContainerUploads = Boolean(options.containerUploadBlocks?.length);
@@ -258,15 +278,15 @@ async function createBetaResponse(
       ? options.documentSkillIds
       : undefined;
 
+  const container = buildContainerParams(skillIds, containerId);
+
   return client.beta.messages.create({
     model: options.model,
     max_tokens: maxTokens,
     system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
     messages,
     betas,
-    ...(skillIds
-      ? { container: { skills: buildDocumentSkillParams(skillIds) } }
-      : {}),
+    ...(container ? { container } : {}),
     ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
     tools: buildBetaTools({
       createDocuments,
@@ -308,7 +328,7 @@ async function runBetaAgentCore(options: BetaAgentRunOptions): Promise<BetaAgent
     let response: BetaMessage | null = null;
 
     for (let pause = 0; pause < MAX_PAUSE_TURN_CONTINUATIONS; pause++) {
-      response = await createBetaResponse(client, options, messages);
+      response = await createBetaResponse(client, options, messages, lastContainerId);
       usage = addAnthropicUsage(usage, response.usage);
       if (response.container?.id) lastContainerId = response.container.id;
       extractFileIdsFromPayload(response.content).forEach((id) => collectedFileIds.add(id));
@@ -431,15 +451,14 @@ async function* streamBetaAgentCore(
     }
 
     for (let pause = 0; pause < MAX_PAUSE_TURN_CONTINUATIONS; pause++) {
+      const container = buildContainerParams(skillIds, lastContainerId);
       const stream = client.beta.messages.stream({
         model: options.model,
         max_tokens: maxTokens,
         system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
         messages,
         betas,
-        ...(skillIds
-          ? { container: { skills: buildDocumentSkillParams(skillIds) } }
-          : {}),
+        ...(container ? { container } : {}),
         ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
         tools: buildBetaTools({
           createDocuments,

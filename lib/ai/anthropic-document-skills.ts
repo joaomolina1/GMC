@@ -56,4 +56,6 @@ export const DOCUMENT_CREATION_SYSTEM_HINT = `
 Quando o utilizador pedir ficheiros (PowerPoint, Excel, Word, PDF), usa code execution para os criar e grava em /mnt/user-data/outputs/.
 O download só fica disponível quando o ficheiro é exportado pelo sandbox com file_id — aparece automaticamente como botão verde abaixo da mensagem.
 Nunca inventes listas de ficheiros "disponíveis para download" em markdown se o botão de download ainda não existir.
-Não digas que não consegues criar ficheiros — tens code execution activo.`;
+Não digas que criaste um .pptx/.xlsx/.docx/.pdf se o botão verde ainda não apareceu.
+Não digas que não consegues criar ficheiros — tens code execution activo.
+Grava o ficheiro final com bash (ex. python/pptxgenjs a escrever directamente em /mnt/user-data/outputs/). Não uses text_editor nem cp para outputs — isso não gera file_id.`;
