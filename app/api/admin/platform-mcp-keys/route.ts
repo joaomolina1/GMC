@@ -6,6 +6,13 @@ import {
   hashMcpKey,
   MCP_KEY_PREFIX,
 } from "@lib/enterprise/mcp-key-auth";
+import { encryptLinkedApiKeySecret } from "@lib/enterprise/mcp-key-crypto";
+import {
+  generateApiKeySecret,
+  hashApiKey,
+  API_KEY_PREFIX,
+} from "@lib/enterprise/api-key-auth";
+import { DEFAULT_ORCHESTRATION_SCOPES } from "@lib/enterprise/platform-scopes";
 import { tryCreateServiceClient } from "@lib/supabase/server";
 
 export async function GET() {
@@ -16,7 +23,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("platform_mcp_keys")
     .select(
-      "id, name, key_prefix, user_id, expires_at, last_used_at, revoked_at, created_at, profiles!platform_mcp_keys_user_id_fkey(email, full_name)"
+      "id, name, key_prefix, user_id, expires_at, last_used_at, revoked_at, created_at, linked_api_key_id, profiles!platform_mcp_keys_user_id_fkey(email, full_name)"
     )
     .order("created_at", { ascending: false });
 
@@ -35,6 +42,7 @@ export async function GET() {
       last_used_at: row.last_used_at,
       revoked_at: row.revoked_at,
       created_at: row.created_at,
+      has_linked_api_key: Boolean(row.linked_api_key_id),
     };
   });
 
@@ -62,8 +70,50 @@ export async function POST(request: Request) {
   const keyHash = hashMcpKey(secret);
   const keyPrefix = secret.slice(0, MCP_KEY_PREFIX.length + 8);
 
+  // Companion API key used by /mcp → /api/v1 (plaintext encrypted on the MCP row).
+  const apiSecret = generateApiKeySecret();
+  const apiKeyHash = hashApiKey(apiSecret);
+  const apiKeyPrefix = apiSecret.slice(0, API_KEY_PREFIX.length + 8);
+  let linkedCiphertext: string;
+  try {
+    linkedCiphertext = encryptLinkedApiKeySecret(apiSecret);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Não foi possível cifrar a API key ligada (service role em falta)",
+      },
+      { status: 503 }
+    );
+  }
+
   const service = await tryCreateServiceClient();
   const db = service ?? supabase;
+
+  const { data: apiKeyRow, error: apiKeyError } = await db
+    .from("platform_api_keys")
+    .insert({
+      name: `MCP · ${name.trim()}`,
+      key_prefix: apiKeyPrefix,
+      key_hash: apiKeyHash,
+      user_id: ownerId,
+      scopes: [...DEFAULT_ORCHESTRATION_SCOPES],
+      allowed_agent_ids: null,
+      allowed_flow_ids: null,
+      expires_at: expires_at ?? null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (apiKeyError || !apiKeyRow) {
+    return NextResponse.json(
+      { error: apiKeyError?.message ?? "Falha ao criar API key ligada" },
+      { status: 500 }
+    );
+  }
 
   const { data, error } = await db
     .from("platform_mcp_keys")
@@ -74,11 +124,17 @@ export async function POST(request: Request) {
       user_id: ownerId,
       expires_at: expires_at ?? null,
       created_by: user.id,
+      linked_api_key_id: apiKeyRow.id,
+      linked_api_key_ciphertext: linkedCiphertext,
     })
     .select("id, name, key_prefix, user_id, created_at")
     .single();
 
   if (error) {
+    await db
+      .from("platform_api_keys")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", apiKeyRow.id);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -87,7 +143,7 @@ export async function POST(request: Request) {
     action: "mcp_key.create",
     entityType: "platform_mcp_key",
     entityId: data.id,
-    metadata: { name: data.name, user_id: ownerId },
+    metadata: { name: data.name, user_id: ownerId, linked_api_key_id: apiKeyRow.id },
   });
 
   return NextResponse.json({
@@ -115,18 +171,32 @@ export async function PATCH(request: Request) {
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
     .is("revoked_at", null)
-    .select("id, name, key_prefix, revoked_at")
+    .select("id, name, key_prefix, revoked_at, linked_api_key_id")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Chave não encontrada" }, { status: 404 });
+
+  if (data.linked_api_key_id) {
+    await supabase
+      .from("platform_api_keys")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", data.linked_api_key_id)
+      .is("revoked_at", null);
+  }
 
   await logAudit(supabase, {
     actorId: user.id,
     action: "mcp_key.revoke",
     entityType: "platform_mcp_key",
     entityId: id,
+    metadata: { linked_api_key_id: data.linked_api_key_id },
   });
 
-  return NextResponse.json(data);
+  return NextResponse.json({
+    id: data.id,
+    name: data.name,
+    key_prefix: data.key_prefix,
+    revoked_at: data.revoked_at,
+  });
 }
