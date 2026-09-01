@@ -12,7 +12,9 @@
     "mcp:http": "npm run start --prefix mcp",
     "mcp:dev": "npm run dev:http --prefix mcp",
     "mcp:install": "npm install --prefix mcp",
-    "mcp:test": "npm test --prefix mcp"
+    "mcp:test": "npm test --prefix mcp",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
@@ -43,6 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
