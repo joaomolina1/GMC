@@ -3,13 +3,30 @@ import {
   ANTHROPIC_MODEL_CATALOG,
   capabilitiesFromApi,
   getCatalogEntry,
+  inferUnknownModel,
   isModelSelectable,
+  type AnthropicModelEntry,
 } from "./anthropic-catalog";
 
-interface AnthropicApiModel {
+export interface AnthropicApiModel {
   id: string;
   display_name: string;
+  created_at?: string;
   capabilities?: Record<string, unknown>;
+}
+
+export interface ModelRow {
+  id: string;
+  provider: "anthropic";
+  display_name: string;
+  capabilities: string[];
+  input_price_per_mtok: number;
+  output_price_per_mtok: number;
+  enabled: boolean;
+  status: AnthropicModelEntry["status"];
+  tier: AnthropicModelEntry["tier"];
+  sort_order: number;
+  notes: string | null;
 }
 
 interface SyncResult {
@@ -19,7 +36,9 @@ interface SyncResult {
   disabled: number;
 }
 
-async function fetchAllAnthropicModels(): Promise<AnthropicApiModel[]> {
+export async function fetchAllAnthropicModels(
+  fetchImpl: typeof fetch = fetch
+): Promise<AnthropicApiModel[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return [];
 
@@ -31,7 +50,7 @@ async function fetchAllAnthropicModels(): Promise<AnthropicApiModel[]> {
     url.searchParams.set("limit", "100");
     if (afterId) url.searchParams.set("after_id", afterId);
 
-    const res = await fetch(url.toString(), {
+    const res = await fetchImpl(url.toString(), {
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -56,7 +75,7 @@ async function fetchAllAnthropicModels(): Promise<AnthropicApiModel[]> {
   return models;
 }
 
-function rowFromCatalog(entry: (typeof ANTHROPIC_MODEL_CATALOG)[number]) {
+export function rowFromCatalog(entry: AnthropicModelEntry): ModelRow {
   return {
     id: entry.id,
     provider: "anthropic",
@@ -72,41 +91,58 @@ function rowFromCatalog(entry: (typeof ANTHROPIC_MODEL_CATALOG)[number]) {
   };
 }
 
-export async function syncAnthropicModels(
-  supabase: SupabaseClient
-): Promise<SyncResult> {
-  const apiModels = await fetchAllAnthropicModels();
+/** API is source of truth for availability; catalog fills pricing/tier/sort. */
+export function rowFromApiModel(apiModel: AnthropicApiModel): ModelRow {
+  const catalog = getCatalogEntry(apiModel.id);
+  const inferred = inferUnknownModel(apiModel.id, {
+    display_name: apiModel.display_name,
+    capabilities: apiModel.capabilities,
+  });
+  const capabilities = catalog
+    ? catalog.capabilities
+    : apiModel.capabilities
+      ? capabilitiesFromApi(apiModel.capabilities)
+      : inferred.capabilities;
+
+  return {
+    id: apiModel.id,
+    provider: "anthropic",
+    display_name: apiModel.display_name || catalog?.displayName || apiModel.id,
+    capabilities,
+    input_price_per_mtok: catalog?.inputPricePerMtok ?? inferred.inputPricePerMtok,
+    output_price_per_mtok: catalog?.outputPricePerMtok ?? inferred.outputPricePerMtok,
+    enabled: true,
+    status: catalog?.status === "retired" ? "legacy" : (catalog?.status ?? "active"),
+    tier: catalog?.tier ?? inferred.tier,
+    sort_order: catalog?.sortOrder ?? inferred.sortOrder,
+    notes: catalog?.notes ?? null,
+  };
+}
+
+export function buildModelRows(apiModels: AnthropicApiModel[]): ModelRow[] {
+  if (apiModels.length === 0) {
+    return ANTHROPIC_MODEL_CATALOG.map(rowFromCatalog);
+  }
+
   const apiIds = new Set(apiModels.map((m) => m.id));
-  const rows: ReturnType<typeof rowFromCatalog>[] = [];
+  const rows = apiModels.map(rowFromApiModel);
 
-  if (apiModels.length > 0) {
-    for (const apiModel of apiModels) {
-      const catalog = getCatalogEntry(apiModel.id);
-      rows.push({
-        id: apiModel.id,
-        provider: "anthropic",
-        display_name: apiModel.display_name || catalog?.displayName || apiModel.id,
-        capabilities: catalog?.capabilities ?? capabilitiesFromApi(apiModel.capabilities),
-        input_price_per_mtok: catalog?.inputPricePerMtok ?? 3,
-        output_price_per_mtok: catalog?.outputPricePerMtok ?? 15,
-        enabled: catalog ? isModelSelectable(catalog.status) : true,
-        status: catalog?.status ?? "active",
-        tier: catalog?.tier ?? "other",
-        sort_order: catalog?.sortOrder ?? 100,
-        notes: catalog?.notes ?? null,
-      });
-    }
-
-    for (const entry of ANTHROPIC_MODEL_CATALOG) {
-      if (!apiIds.has(entry.id) && entry.status === "retired") {
-        rows.push(rowFromCatalog(entry));
-      }
-    }
-  } else {
-    for (const entry of ANTHROPIC_MODEL_CATALOG) {
+  for (const entry of ANTHROPIC_MODEL_CATALOG) {
+    if (!apiIds.has(entry.id) && entry.status === "retired") {
       rows.push(rowFromCatalog(entry));
     }
   }
+
+  return rows;
+}
+
+export async function syncAnthropicModels(
+  supabase: SupabaseClient,
+  fetchImpl: typeof fetch = fetch
+): Promise<SyncResult> {
+  const apiModels = await fetchAllAnthropicModels(fetchImpl);
+  const rows = buildModelRows(apiModels);
+  const apiIds = new Set(apiModels.map((m) => m.id));
 
   const { error } = await supabase.from("models").upsert(rows, { onConflict: "id" });
   if (error) throw new Error(error.message);

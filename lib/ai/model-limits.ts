@@ -1,4 +1,4 @@
-import { getCatalogEntry } from "@lib/ai/anthropic-catalog";
+import { getCatalogEntry, inferTier } from "@lib/ai/anthropic-catalog";
 
 const DEFAULT_MAX_TOKENS = 4096;
 const DOCUMENT_MAX_TOKENS = 16384;
@@ -11,11 +11,11 @@ export function getModelMaxTokens(modelId: string, forDocuments = false): number
   if (forDocuments) return DOCUMENT_MAX_TOKENS;
 
   const entry = getCatalogEntry(modelId);
-  if (!entry) return DEFAULT_MAX_TOKENS;
+  const tier = entry?.tier ?? inferTier(modelId);
 
-  if (entry.tier === "opus" || entry.tier === "fable") return OPUS_MAX_TOKENS;
-  if (entry.tier === "sonnet") return SONNET_MAX_TOKENS;
-  if (entry.tier === "haiku") return HAIKU_MAX_TOKENS;
+  if (tier === "opus" || tier === "fable") return OPUS_MAX_TOKENS;
+  if (tier === "sonnet") return SONNET_MAX_TOKENS;
+  if (tier === "haiku") return HAIKU_MAX_TOKENS;
 
   return DEFAULT_MAX_TOKENS;
 }

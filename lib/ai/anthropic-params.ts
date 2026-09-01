@@ -1,18 +1,17 @@
 import type { GenerateOptions } from "./types";
+import { getCatalogEntry, inferUnknownModel, modelHasCapability } from "./anthropic-catalog";
 
 export type EffortLevel = "low" | "medium" | "high" | "max";
 
 export function modelSupportsEffort(model: string): boolean {
-  return (
-    /claude-(opus|sonnet)-4-[68]/.test(model) ||
-    model.includes("claude-opus-4-5") ||
-    model.includes("claude-opus-4-6") ||
-    model.includes("claude-sonnet-4-6")
-  );
+  if (modelHasCapability(model, "effort")) return true;
+  const entry = getCatalogEntry(model) ?? inferUnknownModel(model);
+  if (entry.tier === "haiku" || entry.tier === "other") return false;
+  return entry.capabilities.includes("thinking");
 }
 
 export function modelSupportsThinking(model: string): boolean {
-  return modelSupportsEffort(model);
+  return modelHasCapability(model, "thinking");
 }
 
 export function buildAnthropicRequestExtras(options: GenerateOptions): Record<string, unknown> {

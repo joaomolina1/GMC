@@ -10,7 +10,7 @@ export function modelSupportsDocumentSkills(modelId: string): boolean {
 
 export const DOCUMENT_SKILLS_UNSUPPORTED_MESSAGE =
   "Este modelo não suporta geração de documentos (PowerPoint, Excel, Word, PDF). " +
-  "Escolha Claude Sonnet 4.6, Opus 4.8 ou outro modelo com code execution e active a tool «Criar documentos».";
+  "Escolha Claude Sonnet 5, Opus 5 ou outro modelo com code execution e active a tool «Criar documentos».";
 
 export const CREATE_DOCUMENTS_DISABLED_MESSAGE =
   "A tool «Criar documentos» está desactivada neste agente. Active-a no separador Tools do Builder " +
