@@ -14,6 +14,7 @@ export interface SkillPackageRow {
   name: string;
   description: string;
   created_at: string;
+  anthropic_skill_id?: string | null;
 }
 
 export interface AgentVersion {

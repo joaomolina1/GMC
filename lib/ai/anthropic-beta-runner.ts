@@ -18,8 +18,9 @@ import {
   type AnthropicDocumentSkillId,
   buildCodeExecutionTool,
   buildDocumentCreationTools,
-  buildDocumentSkillParams,
+  mergeContainerSkills,
 } from "@lib/ai/anthropic-document-skills";
+import type { CustomContainerSkill } from "@lib/agent-skills/anthropic-custom-skills";
 import { extractFileIdsFromPayload, logMissingFileIds } from "@lib/ai/extract-generated-files";
 import { listDownloadableFilesForContainer } from "@lib/ai/persist-generated-files";
 import { DEFAULT_MAX_AGENT_STEPS, getModelMaxTokens } from "@lib/ai/model-limits";
@@ -135,10 +136,18 @@ function extractText(content: BetaContentBlock[]): string {
     .join("");
 }
 
-function buildBetas(options: { mcpServers?: BetaRequestMCPServerURLDefinition[]; createDocuments?: boolean }) {
+function buildBetas(options: {
+  mcpServers?: BetaRequestMCPServerURLDefinition[];
+  createDocuments?: boolean;
+  customSkills?: CustomContainerSkill[];
+  hasAgentSkills?: boolean;
+}) {
   const betas = new Set<string>([...ANTHROPIC_DOCUMENT_BETAS, PROMPT_CACHING_BETA]);
   if (options.mcpServers?.length) betas.add(MCP_BETA);
-  if (!options.createDocuments) {
+  const usesSkillsApi = Boolean(
+    options.createDocuments || options.customSkills?.length || options.hasAgentSkills
+  );
+  if (!usesSkillsApi) {
     betas.delete("skills-2025-10-02");
   }
   return Array.from(betas);
@@ -152,14 +161,21 @@ function buildBetaTools(options: {
   clientTools?: BetaToolUnion[];
   mcpServers?: BetaRequestMCPServerURLDefinition[];
   mcpToolsets?: BetaMCPToolset[];
+  customSkills?: CustomContainerSkill[];
+  hasAgentSkills?: boolean;
 }): BetaToolUnion[] | undefined {
   const tools: BetaToolUnion[] = [...(options.clientTools ?? [])];
-  const needsCodeExecution = Boolean(options.createDocuments || options.hasContainerUploads);
+  const needsCodeExecution = Boolean(
+    options.createDocuments ||
+      options.hasContainerUploads ||
+      options.customSkills?.length ||
+      options.hasAgentSkills
+  );
 
   if (options.createDocuments) {
     tools.push(...buildDocumentCreationTools(options.webSearch !== false, options.webSearchConfig));
   } else if (needsCodeExecution) {
-    // container_upload blocks require code_execution even without native document skills
+    // custom skills and container_upload blocks require code_execution
     tools.push(buildCodeExecutionTool());
     if (options.webSearch !== false) {
       tools.push(...buildAnthropicServerTools(["web_search"]));
@@ -221,6 +237,8 @@ export interface BetaAgentRunOptions {
   mcpServers?: BetaRequestMCPServerURLDefinition[];
   mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
+  customSkills?: CustomContainerSkill[];
+  hasAgentSkills?: boolean;
   clientTools?: BetaToolUnion[];
   toolRegistry?: AgentToolRegistry;
 }
@@ -244,7 +262,12 @@ async function createBetaResponse(
   const hasContainerUploads = Boolean(options.containerUploadBlocks?.length);
   const maxTokens =
     options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
-  const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
+  const betas = buildBetas({
+    mcpServers: options.mcpServers,
+    createDocuments,
+    customSkills: options.customSkills,
+    hasAgentSkills: options.hasAgentSkills,
+  });
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -253,10 +276,11 @@ async function createBetaResponse(
     effort: options.effort,
     thinkingEnabled: options.thinkingEnabled,
   });
-  const skillIds =
-    options.documentSkillIds?.length && createDocuments
-      ? options.documentSkillIds
-      : undefined;
+  const containerSkills = mergeContainerSkills({
+    documentSkillIds: options.documentSkillIds,
+    createDocuments,
+    customSkills: options.customSkills,
+  });
 
   return client.beta.messages.create({
     model: options.model,
@@ -264,9 +288,7 @@ async function createBetaResponse(
     system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
     messages,
     betas,
-    ...(skillIds
-      ? { container: { skills: buildDocumentSkillParams(skillIds) } }
-      : {}),
+    ...(containerSkills ? { container: { skills: containerSkills } } : {}),
     ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
     tools: buildBetaTools({
       createDocuments,
@@ -276,6 +298,8 @@ async function createBetaResponse(
       clientTools: options.clientTools,
       mcpServers: options.mcpServers,
       mcpToolsets: options.mcpToolsets,
+      customSkills: options.customSkills,
+      hasAgentSkills: options.hasAgentSkills,
     }),
     ...requestExtras,
   });
@@ -395,7 +419,12 @@ async function* streamBetaAgentCore(
   const hasContainerUploads = Boolean(options.containerUploadBlocks?.length);
   const maxTokens =
     options.maxTokens ?? getModelMaxTokens(options.model, createDocuments);
-  const betas = buildBetas({ mcpServers: options.mcpServers, createDocuments });
+  const betas = buildBetas({
+    mcpServers: options.mcpServers,
+    createDocuments,
+    customSkills: options.customSkills,
+    hasAgentSkills: options.hasAgentSkills,
+  });
   const requestExtras = buildAnthropicRequestExtras({
     model: options.model,
     messages: options.messages,
@@ -404,12 +433,17 @@ async function* streamBetaAgentCore(
     effort: options.effort,
     thinkingEnabled: options.thinkingEnabled,
   });
-  const skillIds =
+  const containerSkills = mergeContainerSkills({
+    documentSkillIds: options.documentSkillIds,
+    createDocuments,
+    customSkills: options.customSkills,
+  });
+  const documentSkillsUsed =
     options.documentSkillIds?.length && createDocuments
       ? options.documentSkillIds
-      : undefined;
-  const documentSkillsUsed =
-    skillIds ?? (createDocuments ? (["docx"] as AnthropicDocumentSkillId[]) : undefined);
+      : createDocuments
+        ? (["docx"] as AnthropicDocumentSkillId[])
+        : undefined;
   const maxSteps = options.maxSteps ?? DEFAULT_MAX_AGENT_STEPS;
   const registry = options.toolRegistry;
 
@@ -437,9 +471,7 @@ async function* streamBetaAgentCore(
         system: buildCachedSystem(options.systemPrompt) ?? options.systemPrompt,
         messages,
         betas,
-        ...(skillIds
-          ? { container: { skills: buildDocumentSkillParams(skillIds) } }
-          : {}),
+        ...(containerSkills ? { container: { skills: containerSkills } } : {}),
         ...(options.mcpServers?.length ? { mcp_servers: options.mcpServers } : {}),
         tools: buildBetaTools({
           createDocuments,
@@ -449,6 +481,8 @@ async function* streamBetaAgentCore(
           clientTools: options.clientTools,
           mcpServers: options.mcpServers,
           mcpToolsets: options.mcpToolsets,
+          customSkills: options.customSkills,
+          hasAgentSkills: options.hasAgentSkills,
         }),
         ...requestExtras,
       });

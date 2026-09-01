@@ -63,10 +63,10 @@ export function AdvancedTabContent({
   skillStatuses,
   skillPackages,
   skillPackageIds,
-  setSkillPackageIds,
   skillUploading,
   skillError,
   uploadSkillPackage,
+  toggleSkillPackage,
   deleteSkillPackage,
   mcpConnections,
   mcpName,
@@ -117,10 +117,10 @@ export function AdvancedTabContent({
   skillStatuses: Record<string, { readiness: string; note: string; requirement?: string }>;
   skillPackages: SkillPackageRow[];
   skillPackageIds: string[];
-  setSkillPackageIds: React.Dispatch<React.SetStateAction<string[]>>;
   skillUploading: boolean;
   skillError: string | null;
   uploadSkillPackage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  toggleSkillPackage: (packageId: string, active: boolean) => void;
   deleteSkillPackage: (id: string) => void;
   mcpConnections: McpConnectionRow[];
   mcpName: string;
@@ -360,8 +360,8 @@ export function AdvancedTabContent({
       <div className="space-y-4">
         <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
           Skills no formato Claude: pacote ZIP ou ficheiro <code>.skill</code> com{" "}
-          <code>SKILL.md</code> (frontmatter YAML + instruções). O agente aplica a skill quando
-          a tarefa corresponde à descrição.
+          <code>SKILL.md</code> (frontmatter YAML + instruções). O upload regista a skill na API
+          Anthropic e activa-a imediatamente no chat — não é preciso Guardar.
         </p>
         {skillError && (
           <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{skillError}</p>
@@ -397,18 +397,19 @@ export function AdvancedTabContent({
                     <button
                       type="button"
                       className="min-w-0 flex-1 text-left"
-                      onClick={() =>
-                        setSkillPackageIds((prev) =>
-                          active ? prev.filter((sid) => sid !== pkg.id) : [...prev, pkg.id]
-                        )
-                      }
+                      onClick={() => toggleSkillPackage(pkg.id, !active)}
                     >
                       <p className="font-semibold text-slate-800">{pkg.name}</p>
                       <p className="mt-0.5 line-clamp-2 text-slate-500">{pkg.description}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {pkg.anthropic_skill_id
+                          ? "Registada na API Anthropic (container.skills)"
+                          : "Fallback local — o chat tenta registá-la na Anthropic na primeira mensagem"}
+                      </p>
                     </button>
                     <div className="flex shrink-0 items-center gap-1">
                       <Badge tone={active ? "brand" : "neutral"}>
-                        {active ? "Ativa" : "Inativa"}
+                        {active ? "Ativa no chat" : "Inativa"}
                       </Badge>
                       <button
                         type="button"

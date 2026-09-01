@@ -55,11 +55,11 @@ export async function GET() {
       kind: "server_tool" as const,
       readiness: hasAnthropicKey ? "ready" : "missing_config",
       note: "Geração de ficheiros via code execution + skills Anthropic.",
-      requirement: "Modelo com suporte a tools (ex. Sonnet 4.6, Opus 4.8)",
+      requirement: "Modelo com suporte a tools (ex. Sonnet 5, Opus 5)",
     },
   ];
 
-  const modelSamples = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"];
+  const modelSamples = ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"];
   const modelSupport = modelSamples.map((id) => ({
     model: id,
     document_skills: modelSupportsDocumentSkills(id),
@@ -71,7 +71,7 @@ export async function GET() {
     capabilities: {
       agentic_loop: true,
       mcp: "active",
-      custom_skill_execution: "partial",
+      custom_skill_execution: "ready",
     },
   });
 }

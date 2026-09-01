@@ -518,15 +518,56 @@ function AgentBuilderWorkspace() {
       if (!res.ok) {
         setSkillError((data as { error?: string }).error ?? "Upload falhou");
       } else {
-        const row = data as SkillPackageRow;
+        const row = data as SkillPackageRow & {
+          skill_package_ids?: string[];
+          anthropic_warning?: string | null;
+        };
         await loadSkillPackages();
-        setSkillPackageIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]));
+        setSkillPackageIds((prev) =>
+          Array.isArray(row.skill_package_ids)
+            ? row.skill_package_ids
+            : prev.includes(row.id)
+              ? prev
+              : [...prev, row.id]
+        );
+        if (row.anthropic_warning) {
+          setSkillError(
+            `Skill activa no agente, mas a API Anthropic avisou: ${row.anthropic_warning}`
+          );
+        }
       }
     } catch (err) {
       setSkillError(err instanceof Error ? err.message : "Erro no upload");
     } finally {
       setSkillUploading(false);
       e.target.value = "";
+    }
+  }
+
+  async function toggleSkillPackage(packageId: string, active: boolean) {
+    setSkillError(null);
+    const previous = skillPackageIds;
+    setSkillPackageIds((prev) =>
+      active
+        ? prev.includes(packageId)
+          ? prev
+          : [...prev, packageId]
+        : prev.filter((sid) => sid !== packageId)
+    );
+    const res = await fetch(`/api/agents/${id}/skill-packages`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: packageId, active }),
+    });
+    if (!res.ok) {
+      setSkillPackageIds(previous);
+      const data = await res.json().catch(() => ({}));
+      setSkillError((data as { error?: string }).error ?? "Falha ao actualizar skill");
+      return;
+    }
+    const data = (await res.json()) as { skill_package_ids?: string[] };
+    if (Array.isArray(data.skill_package_ids)) {
+      setSkillPackageIds(data.skill_package_ids);
     }
   }
 
@@ -837,10 +878,10 @@ function AgentBuilderWorkspace() {
                   skillStatuses={skillStatuses}
                   skillPackages={skillPackages}
                   skillPackageIds={skillPackageIds}
-                  setSkillPackageIds={setSkillPackageIds}
                   skillUploading={skillUploading}
                   skillError={skillError}
                   uploadSkillPackage={uploadSkillPackage}
+                  toggleSkillPackage={toggleSkillPackage}
                   deleteSkillPackage={deleteSkillPackage}
                   mcpConnections={mcpConnections}
                   mcpName={mcpName}

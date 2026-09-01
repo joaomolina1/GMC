@@ -8,6 +8,13 @@ import {
   persistSkillPackageFileCache,
   uploadSkillPackagesToContainer,
 } from "@lib/agent-skills/container-files";
+import {
+  buildCustomContainerSkills,
+  ensureAnthropicSkillIds,
+  packagesMissingAnthropicId,
+  type CustomContainerSkill,
+} from "@lib/agent-skills/anthropic-custom-skills";
+import { parseSkillPackageIds } from "@lib/agent-skills/ids";
 import { buildKnowledgeContext } from "@lib/chat/rag";
 import {
   agentToolsFromVersion,
@@ -43,6 +50,9 @@ export interface AgentRuntimeConfig {
   /** Required companion to mcpServers — one mcp_toolset per server name. */
   mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
+  customSkills?: CustomContainerSkill[];
+  /** True when the agent version has at least one custom skill package. */
+  hasAgentSkills?: boolean;
 }
 
 export async function buildAgentRuntimeConfig(options: {
@@ -57,22 +67,35 @@ export async function buildAgentRuntimeConfig(options: {
   const skills = version.skills;
   const enabledTools = agentToolsFromVersion(skills);
   const createDocuments = isCreateDocumentsEnabled(skills);
-  const skillPackageIds = (version.skill_package_ids as string[]) ?? [];
+  const skillPackageIds = parseSkillPackageIds(version.skill_package_ids);
   const injectStaticRag = options.injectStaticRag !== false;
 
   let skillsPrompt = "";
   let containerUploadBlocks: BetaContainerUploadBlockParam[] = [];
+  let customSkills: CustomContainerSkill[] = [];
+  let hasAgentSkills = false;
 
   if (skillPackageIds.length > 0) {
     const { data: skillPackages } = await supabase
       .from("agent_skill_packages")
-      .select("id, name, description, skill_md, extra_files")
+      .select("id, name, description, skill_md, extra_files, anthropic_skill_id")
       .in("id", skillPackageIds);
     if (skillPackages?.length) {
-      skillsPrompt = buildAgentSkillsPrompt(skillPackages);
-      const hasExtraFiles = skillPackages.some((p) => (p.extra_files?.length ?? 0) > 0);
-      if (hasExtraFiles || createDocuments) {
-        const uploaded = await uploadSkillPackagesToContainer(skillPackages);
+      hasAgentSkills = true;
+      const registered = await ensureAnthropicSkillIds(skillPackages, async (pkg) => {
+        const { error } = await supabase
+          .from("agent_skill_packages")
+          .update({ anthropic_skill_id: pkg.anthropic_skill_id })
+          .eq("id", pkg.id);
+        if (error) throw new Error(error.message);
+      });
+      customSkills = buildCustomContainerSkills(registered);
+      skillsPrompt = buildAgentSkillsPrompt(registered);
+
+      const fallbackPackages = packagesMissingAnthropicId(registered);
+      const hasExtraFiles = fallbackPackages.some((p) => (p.extra_files?.length ?? 0) > 0);
+      if (fallbackPackages.length > 0 && (hasExtraFiles || createDocuments)) {
+        const uploaded = await uploadSkillPackagesToContainer(fallbackPackages);
         containerUploadBlocks = uploaded.uploadBlocks;
         if (uploaded.fileIds.length > 0) {
           skillsPrompt += buildSkillContainerHint(uploaded.uploadedPaths, uploaded.skippedCount);
@@ -115,6 +138,8 @@ export async function buildAgentRuntimeConfig(options: {
     mcpServers: mcpServers.length ? mcpServers : undefined,
     mcpToolsets: mcpToolsets.length ? mcpToolsets : undefined,
     containerUploadBlocks: containerUploadBlocks.length ? containerUploadBlocks : undefined,
+    customSkills: customSkills.length ? customSkills : undefined,
+    hasAgentSkills: hasAgentSkills || undefined,
   };
 }
 

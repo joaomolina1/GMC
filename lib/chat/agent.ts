@@ -9,6 +9,7 @@ import { getProvider, computeModelCost } from "@lib/ai/registry";
 import { buildAnthropicServerTools } from "@lib/ai/anthropic-server-tools";
 import { DOCUMENT_CREATION_SYSTEM_HINT } from "@lib/ai/anthropic-document-skills";
 import type { AnthropicDocumentSkillId } from "@lib/ai/anthropic-document-skills";
+import type { CustomContainerSkill } from "@lib/agent-skills/anthropic-custom-skills";
 import {
   needsDocumentCreation,
   needsDocumentCreationFromContext,
@@ -49,6 +50,8 @@ export interface AgentConfig {
   mcpServers?: BetaRequestMCPServerURLDefinition[];
   mcpToolsets?: BetaMCPToolset[];
   containerUploadBlocks?: BetaContainerUploadBlockParam[];
+  customSkills?: CustomContainerSkill[];
+  hasAgentSkills?: boolean;
 }
 
 export interface GeneratedFileRef {
@@ -79,25 +82,22 @@ export interface ResolvedAgentRoute {
 }
 
 export function resolveAgentRoute(config: AgentConfig, messages: ChatMessage[]): ResolvedAgentRoute {
-  const hasCustomSkillContainer = Boolean(config.containerUploadBlocks?.length);
-  const needsMcpOrContainer = Boolean(
-    config.mcpServers?.length || hasCustomSkillContainer
+  const hasCustomSkills = Boolean(
+    config.customSkills?.length ||
+      config.containerUploadBlocks?.length ||
+      config.hasAgentSkills
   );
+  const needsMcpOrSkills = Boolean(config.mcpServers?.length || hasCustomSkills);
   const createDocumentsThisTurn =
     Boolean(config.createDocuments) && needsDocumentCreationFromContext(messages);
   const documentSkillIds = createDocumentsThisTurn
     ? resolveDocumentSkillsFromContext(messages)
     : undefined;
 
-  // Custom skill packages use code execution + container files — not native pptx/xlsx skills.
-  if (createDocumentsThisTurn && hasCustomSkillContainer) {
-    return { route: "beta-session", createDocumentsThisTurn: true };
-  }
-
   if (createDocumentsThisTurn) {
     return { route: "beta-documents", createDocumentsThisTurn: true, documentSkillIds };
   }
-  if (needsMcpOrContainer) {
+  if (needsMcpOrSkills) {
     return { route: "beta-session", createDocumentsThisTurn: false };
   }
   return { route: "light", createDocumentsThisTurn: false };
@@ -161,6 +161,8 @@ function betaRunOptions(
     mcpServers: config.mcpServers,
     mcpToolsets: config.mcpToolsets,
     containerUploadBlocks: config.containerUploadBlocks,
+    customSkills: config.customSkills,
+    hasAgentSkills: config.hasAgentSkills,
     clientTools: toolRegistry?.definitions,
     toolRegistry,
   };

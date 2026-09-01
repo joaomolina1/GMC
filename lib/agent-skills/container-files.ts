@@ -88,7 +88,7 @@ interface RankedFile {
   score: number;
 }
 
-function selectFilesForContainer(packages: AgentSkillPackageRow[]): {
+export function selectFilesForContainer(packages: AgentSkillPackageRow[]): {
   selected: RankedFile[];
   skipped: number;
 } {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAudit } from "@lib/audit";
+import { createAnthropicCustomSkill } from "@lib/agent-skills/anthropic-custom-skills";
 
 interface CloneResult {
   agentId: string;
@@ -65,6 +66,15 @@ export async function cloneMarketplaceAgent(
   const packageIdMap = new Map<string, string>();
   if (sourcePackages?.length) {
     for (const pkg of sourcePackages) {
+      const anthropic = await createAnthropicCustomSkill({
+        name: pkg.name,
+        skillMd: pkg.skill_md,
+        extraFiles: Array.isArray(pkg.extra_files)
+          ? (pkg.extra_files as Array<{ path: string; content: string }>)
+          : [],
+        displayTitle: pkg.name,
+      });
+
       const { data: clonedPkg, error: pkgError } = await supabase
         .from("agent_skill_packages")
         .insert({
@@ -75,6 +85,7 @@ export async function cloneMarketplaceAgent(
           extra_files: pkg.extra_files ?? [],
           storage_path: pkg.storage_path,
           created_by: userId,
+          anthropic_skill_id: anthropic.skillId,
         })
         .select("id")
         .single();

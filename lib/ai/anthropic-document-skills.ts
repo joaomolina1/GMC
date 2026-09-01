@@ -1,5 +1,6 @@
 import type { BetaSkillParams } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { ToolUnion, WebSearchTool20250305 } from "@anthropic-ai/sdk/resources/messages/messages";
+import type { CustomContainerSkill } from "@lib/agent-skills/anthropic-custom-skills";
 
 /** Anthropic-managed document creation skills (API). */
 export const ANTHROPIC_DOCUMENT_SKILL_IDS = ["pptx", "xlsx", "docx", "pdf"] as const;
@@ -11,14 +12,32 @@ export const ANTHROPIC_DOCUMENT_BETAS = [
   "files-api-2025-04-14",
 ] as const;
 
+export type ContainerSkillParam = BetaSkillParams | CustomContainerSkill;
+
 export function buildDocumentSkillParams(
   skillIds: AnthropicDocumentSkillId[] = [...ANTHROPIC_DOCUMENT_SKILL_IDS]
-): BetaSkillParams[] {
+): ContainerSkillParam[] {
   return skillIds.map((skill_id) => ({
     type: "anthropic" as const,
     skill_id,
     version: "latest",
   }));
+}
+
+/** Merge native document skills + custom uploaded skills for container.skills. */
+export function mergeContainerSkills(options: {
+  documentSkillIds?: AnthropicDocumentSkillId[];
+  createDocuments?: boolean;
+  customSkills?: CustomContainerSkill[];
+}): ContainerSkillParam[] | undefined {
+  const skills: ContainerSkillParam[] = [];
+  if (options.createDocuments && options.documentSkillIds?.length) {
+    skills.push(...buildDocumentSkillParams(options.documentSkillIds));
+  }
+  if (options.customSkills?.length) {
+    skills.push(...options.customSkills);
+  }
+  return skills.length ? skills : undefined;
 }
 
 export function buildCodeExecutionTool(): ToolUnion {

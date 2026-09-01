@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@lib/supabase/server";
 import { logAudit } from "@lib/audit";
 import { DEFAULT_AGENT_MODEL, canChangeAgentModel } from "@lib/agents/constants";
+import { parseSkillPackageIds } from "@lib/agent-skills/ids";
 
 const DEFAULT_SKILLS: string[] = [];
 
@@ -82,7 +83,7 @@ export async function POST(
     thinking_enabled: thinking_enabled ?? false,
     skills: skills ?? DEFAULT_SKILLS,
     tools: tools ?? {},
-    skill_package_ids: skill_package_ids ?? [],
+    skill_package_ids: parseSkillPackageIds(skill_package_ids),
     max_steps: max_steps ?? 12,
   };
 

@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { isSkillMdPath, pathRelativeToSkillRoot } from "@lib/agent-skills/paths";
 
 export interface ParsedSkillPackage {
   name: string;
@@ -73,7 +74,7 @@ async function extractFromZip(buffer: Buffer): Promise<ParsedSkillPackage> {
   const zip = await JSZip.loadAsync(buffer);
   const entries = Object.keys(zip.files).filter((p) => !zip.files[p].dir);
 
-  const skillEntry = entries.find((p) => /(^|\/)SKILL\.md$/i.test(p));
+  const skillEntry = entries.find((p) => isSkillMdPath(p));
   if (!skillEntry) {
     throw new Error("Pacote inválido: não foi encontrado SKILL.md");
   }
@@ -88,7 +89,10 @@ async function extractFromZip(buffer: Buffer): Promise<ParsedSkillPackage> {
     if (!TEXT_EXTENSIONS.has(ext)) continue;
     const content = await zip.files[path].async("string");
     if (content.length > 100_000) continue;
-    extraFiles.push({ path, content });
+    extraFiles.push({
+      path: pathRelativeToSkillRoot(path, skillEntry),
+      content,
+    });
   }
 
   return { ...parsed, extraFiles };
