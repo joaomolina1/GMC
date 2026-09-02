@@ -472,7 +472,7 @@ BEGIN
   RETURN QUERY
     UPDATE clip_jobs
     SET step = p_next_step,
-        progress = LEAST(GREATEST(p_progress, 0), 100),
+        progress = CASE WHEN p_next_step = 'ready' THEN 100 ELSE LEAST(GREATEST(p_progress, 0), 100) END,
         status = CASE WHEN p_next_step = 'ready' THEN 'done'::clip_job_status ELSE 'running'::clip_job_status END,
         lease_until = CASE WHEN p_next_step = 'ready' THEN NULL ELSE now() + make_interval(secs => p_lease_seconds) END,
         completed_at = CASE WHEN p_next_step = 'ready' THEN now() ELSE NULL END,

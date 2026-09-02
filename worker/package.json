@@ -1,0 +1,25 @@
+{
+  "name": "@gmc/clips-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Worker em container para o módulo de clips: ffmpeg, WhisperX/pyannote e fila de jobs/renders do Supabase",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.107.0",
+    "@supabase/supabase-js": "2.49.8",
+    "tsx": "^4.19.4",
+    "zod": "3.25.42"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
+  }
+}

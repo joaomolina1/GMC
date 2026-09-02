@@ -66,6 +66,32 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Auditoria** — backoffice com logs, gestão de roles e quotas
 - **Cost rollups** — função `compute_cost_rollups` para agregação mensal
 
+## Fase 7 — Clips (Fase 1: arquivo/VOD) 🚧
+
+Sugestão automática de clips a partir de vídeo de arquivo. O módulo **sugere** — nunca
+publica: um editor humano revê, ajusta e aprova antes de existir qualquer ficheiro.
+
+- **Upload direto** browser → Supabase Storage (TUS resumable, bucket privado `clips`) — o
+  ficheiro nunca passa pela API da Vercel (limite ~4,5 MB por request)
+- **Fila real** em `clip_jobs` (`FOR UPDATE SKIP LOCKED`, lease, tentativas, watchdog em
+  `/api/cron/clips-watchdog`); a Vercel só enfileira e serve a UI
+- **Worker em container com GPU** (`worker/`): ffmpeg (probe, áudio, cortes de plano, frames,
+  render), WhisperX `large-v3` + pyannote (transcrição com timestamps por palavra e oradores)
+- **Sugestão com Claude** por janela de transcrição (`lib/clips/suggest.ts`): resposta validada
+  com Zod, timestamps clampados ao transcript, snapping determinístico a fronteiras de
+  frase/palavra/corte de plano (`lib/clips/boundaries.ts`), dedup entre janelas
+- **Validação visual opcional** dos melhores candidatos com 2–3 frames JPEG (nunca o vídeo)
+- **Prompts versionados** em `lib/clips/prompts/` (primeira convenção do repo; teste de
+  snapshot obriga a bump de `version`)
+- **Guarda humana na BD**: trigger `clip_renders_require_approval` recusa renders de candidatos
+  não aprovados, também para o service role; `clip_decisions` é append-only e alimenta a
+  reordenação futura
+- **UI** em `/clips`: lista de jobs, upload, fila de candidatos com preview, ajuste fino de
+  in/out (re-snap no servidor), aprovar/rejeitar com motivo, download do MP4 com legendas
+
+Fora de âmbito (`TODO(fase-2)`): direto/live, publicação automática, reordenação de candidatos
+com base no histórico de `clip_decisions`.
+
 ## Setup
 
 ```bash
@@ -107,6 +133,15 @@ npm run db:types
 | `/flows` | Lista de workflows |
 | `/flows/[id]` | Flow Builder (editor visual) |
 | `/api/flows/[id]/run` | Executar flow (POST) / histórico (GET) |
+| `/clips` | Lista de vídeos e jobs de sugestão de clips |
+| `/clips/novo` | Upload direto (TUS) + parâmetros |
+| `/clips/[jobId]` | Fila de candidatos: preview, ajuste in/out, aprovar/rejeitar |
+| `/api/clips/uploads` | Regista `video_assets` e devolve destino TUS (POST) |
+| `/api/clips/jobs` | Enfileira job (POST) / lista (GET) |
+| `/api/clips/candidates/[id]` | Ajusta in/out com re-snap (PATCH) |
+| `/api/clips/candidates/[id]/decision` | Aprova/rejeita → `clip_decisions` (+ render) (POST) |
+| `/api/clips/renders/[id]/download` | Signed URL curta do MP4, só se `done` (GET) |
+| `/api/cron/clips-watchdog` | Requeue de leases expirados (Bearer `CRON_SECRET`) |
 
 ## Arquitetura
 
@@ -118,6 +153,9 @@ lib/chat/         → Mensagens multimodais (Fase 2)
 lib/skills/       → Skills Engine (registry, runner, core skills)
 lib/supabase/     → SSR clients
 lib/flows/        → Flow Engine (Fase 5)
+lib/clips/        → Clips: snapping, janelas, legendas, prompts, sugestão (Fase 7)
+worker/           → Worker em container (GPU): ffmpeg + WhisperX + fila de jobs/renders
+mcp/              → Servidor MCP remoto/stdio
 ```
 
 ## Roadmap
