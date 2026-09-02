@@ -56,16 +56,15 @@ export default function NovoClipPage() {
   }
 
   /** Upload direto browser → Supabase Storage (TUS resumable). Nunca passa pela API da Vercel. */
-  function uploadDirect(f: File, target: UploadTarget): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        reject(new Error("Sessão expirada. Volte a iniciar sessão."));
-        return;
-      }
-      const { anonKey } = getSupabaseEnv();
+  async function uploadDirect(f: File, target: UploadTarget): Promise<void> {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error("Sessão expirada. Volte a iniciar sessão.");
+    }
+    const { anonKey } = getSupabaseEnv();
 
+    await new Promise<void>((resolve, reject) => {
       const upload = new tus.Upload(f, {
         endpoint: target.upload.endpoint,
         retryDelays: [0, 3000, 5000, 10000, 20000],
@@ -89,9 +88,13 @@ export default function NovoClipPage() {
       });
       uploadRef.current = upload;
 
-      const previous = await upload.findPreviousUploads();
-      if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0]);
-      upload.start();
+      upload
+        .findPreviousUploads()
+        .then((previous) => {
+          if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0]);
+          upload.start();
+        })
+        .catch(() => upload.start());
     });
   }
 

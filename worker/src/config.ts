@@ -58,6 +58,12 @@ function boolOr(raw: string | undefined, fallback: boolean): boolean {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, rootDir = process.cwd()): WorkerConfig {
   const supabaseUrl = requireString("SUPABASE_URL", env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL);
+  try {
+    const parsed = new URL(supabaseUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("protocolo");
+  } catch {
+    throw new ConfigError(`SUPABASE_URL tem de ser um URL http(s) válido (recebido: ${supabaseUrl.slice(0, 16)}…)`);
+  }
   const serviceRoleKey = requireString(
     "SUPABASE_SERVICE_ROLE_KEY",
     env.SUPABASE_SERVICE_ROLE_KEY ?? env.SUPABASE_SECRET_KEY
