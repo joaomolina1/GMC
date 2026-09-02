@@ -44,3 +44,7 @@ mcp/node_modules/
 mcp/dist/
 worker/node_modules/
 worker/dist/
+
+# python
+__pycache__/
+*.pyc
