@@ -19,6 +19,11 @@ probe → extract_audio → detect_shots → transcribe → suggest → vision_c
 
 ## Correr
 
+**Numa GPU alugada (RunPod), sem Docker:** ver [`docs/runpod.md`](docs/runpod.md) — um comando
+(`scripts/gpu-bootstrap.sh`) instala ffmpeg, Node, o venv WhisperX e o ajuste de cuDNN;
+`scripts/gpu-smoke.sh` valida o ASR num ficheiro real; `scripts/gpu-run.sh start|logs|stop` gere o
+worker numa sessão tmux com paragem limpa.
+
 ```bash
 # a partir da raiz do repo
 docker build -f worker/Dockerfile -t gmc-clips-worker .

@@ -1,6 +1,5 @@
-# ASR do worker de clips — WhisperX (faster-whisper + alinhamento) e pyannote (diarização).
-# Requer CUDA 12 + cuDNN 9 na imagem (ver worker/Dockerfile). Em CPU é ~tempo real: inviável.
+# ASR do worker de clips — WhisperX (faster-whisper + alinhamento forçado) com pyannote (diarização).
+# O whisperx fixa as versões compatíveis de torch/torchaudio/pyannote/ctranslate2 — não fixar aqui
+# para evitar conflitos (ver worker/docs/runpod.md para o ajuste de LD_LIBRARY_PATH do cuDNN 9).
+# Requer GPU NVIDIA com driver ≥ R525 (CUDA 12.x por compatibilidade de versão menor).
 whisperx>=3.3.1
-# pyannote é dependência do whisperx; fixamos a major para evitar quebras de API.
-pyannote.audio>=3.1,<4
-# torch/torchaudio vêm via whisperx; a versão CUDA é escolhida pelo índice extra do pip no Dockerfile.
