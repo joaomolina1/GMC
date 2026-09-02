@@ -16,6 +16,6 @@
       "@lib/*": ["../lib/*"]
     }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "../lib/clips/**/*.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

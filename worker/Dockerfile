@@ -33,11 +33,13 @@ WORKDIR /app/worker
 COPY worker/package.json worker/package-lock.json* ./
 RUN npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund
 
-# Código partilhado + worker.
+# Código partilhado + worker. Os imports "bare" (zod, @anthropic-ai/sdk, @supabase/supabase-js)
+# feitos a partir de /app/lib resolvem para cima até /app/node_modules — daí o symlink.
 COPY lib /app/lib
 COPY worker/tsconfig.json ./
 COPY worker/src ./src
 COPY worker/asr ./asr
+RUN ln -s /app/worker/node_modules /app/node_modules
 
 RUN useradd --system --uid 10001 --create-home worker \
     && mkdir -p /work /models && chown -R worker:worker /work /models /app
