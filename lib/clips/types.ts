@@ -260,7 +260,7 @@ export interface ClipCandidateRow {
 export interface ClipRenderRow {
   id: string;
   candidate_id: string;
-  requested_by: string;
+  requested_by: string | null;
   status: ClipRenderStatus;
   in_sec: number;
   out_sec: number;

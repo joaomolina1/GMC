@@ -42,7 +42,7 @@ async function main() {
   const transcriber =
     cfg.transcriptionProvider === "whisperx"
       ? new WhisperXProvider(cfg.whisper, spawnRunner, stop.signal)
-      : new SyntheticTranscriptionProvider(ffmpeg, stop.signal);
+      : new SyntheticTranscriptionProvider(ffmpeg, stop.signal, cfg.fixtureScriptPath);
 
   log("info", "clips-worker a arrancar", {
     workerId: cfg.workerId,

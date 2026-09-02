@@ -13,6 +13,8 @@ export interface WorkerConfig {
   workDir: string;
   /** "whisperx" (GPU, produção) ou "fixture" (sem ASR — para smoke tests). */
   transcriptionProvider: "whisperx" | "fixture";
+  /** Guião opcional para o provider fixture (uma frase por linha). */
+  fixtureScriptPath: string | null;
   whisper: {
     model: string;
     device: string;
@@ -86,6 +88,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, rootDir = proce
     heartbeatMs: Math.min(intOr("CLIPS_HEARTBEAT_MS", env.CLIPS_HEARTBEAT_MS, 60_000, 1000), (leaseSeconds * 1000) / 3),
     workDir: env.CLIPS_WORK_DIR?.trim() || path.join(os.tmpdir(), "gmc-clips"),
     transcriptionProvider: providerRaw,
+    fixtureScriptPath: env.CLIPS_FIXTURE_SCRIPT?.trim() || null,
     whisper: {
       model: env.WHISPER_MODEL?.trim() || "large-v3",
       device: env.WHISPERX_DEVICE?.trim() || "cuda",

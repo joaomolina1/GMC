@@ -31,7 +31,9 @@ npm run worker:dev
 ```
 
 Sem GPU, `CLIPS_TRANSCRIPTION_PROVIDER=fixture` gera uma transcrição **sintética** para
-exercitar o pipeline ponta a ponta (probe → render). Nunca usar em produção.
+exercitar o pipeline ponta a ponta (probe → render); com `CLIPS_FIXTURE_SCRIPT=fixtures/talkshow-pt.txt`
+usa um guião realista em pt-PT para o Claude ter matéria para escolher. Nunca usar em produção —
+os candidatos não têm relação com o áudio real.
 
 ## WhisperX + pyannote em pt-PT — o que esperar
 
