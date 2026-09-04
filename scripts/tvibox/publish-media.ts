@@ -14,9 +14,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SCREENPLAYS } from "../../lib/tvibox/screenplays";
-import { beatsToVtt } from "../../lib/tvibox/subtitles";
+import { beatsToCues, beatsToVtt, cuesToVtt } from "../../lib/tvibox/subtitles";
 import { TVIBOX_BUCKET, episodePosterPath, episodeSubtitlesPath, episodeVideoPath, posterPath, publicUrl } from "../../lib/tvibox/media";
-import type { SeriesSlug } from "../../lib/tvibox/types";
+import type { Screenplay, SeriesSlug } from "../../lib/tvibox/types";
 import { loadLocalEnv, log, serviceClient, supabaseUrl } from "./env";
 
 function arg(name: string, def?: string): string | undefined {
@@ -24,9 +24,44 @@ function arg(name: string, def?: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : def;
 }
 
+function probeSeconds(file: string): number {
+  return Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim());
+}
+
 function probeDuration(file: string): number {
-  const out = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim();
-  return Math.round(Number(out));
+  return Math.round(probeSeconds(file));
+}
+
+/** Genérico TVI BOX que o produce.ts antepõe ao vídeo Veo. */
+const BUMPER_SECONDS = 1.8;
+
+/**
+ * Legendas alinhadas com o render. Em modo "shots" cada beat é um clip independente de ~8 s
+ * (não os 7 s do argumento), por isso os instantes vêm das durações reais dos clips
+ * guardadas em <videos>/state/<slug>-epN.json pelo produce.ts.
+ */
+function subtitlesFor(slug: SeriesSlug, sp: Screenplay, videosDir: string): string {
+  const stateFile = join(videosDir, "state", `${slug}-ep${sp.episode}.json`);
+  if (existsSync(stateFile)) {
+    const state = JSON.parse(readFileSync(stateFile, "utf8")) as {
+      mode?: string;
+      steps?: { index: number; file?: string; durationSeconds?: number }[];
+    };
+    if (state.mode === "shots" && state.steps?.length === sp.beats.length) {
+      const durations = [...state.steps]
+        .sort((a, b) => a.index - b.index)
+        .map((s) => (s.file && existsSync(s.file) ? probeSeconds(s.file) : (s.durationSeconds ?? 8)));
+      const starts: number[] = [];
+      let t = BUMPER_SECONDS;
+      for (const d of durations) {
+        starts.push(t);
+        t += d;
+      }
+      const beats = sp.beats.map((b, i) => ({ ...b, dur: durations[i] }));
+      return cuesToVtt(beatsToCues(beats, BUMPER_SECONDS, 0.4, 0.25, starts));
+    }
+  }
+  return beatsToVtt(sp.beats, BUMPER_SECONDS);
 }
 
 async function upload(sb: ReturnType<typeof serviceClient>, path: string, body: Buffer | string, contentType: string) {
@@ -101,7 +136,7 @@ async function main() {
           patch.published_at = new Date().toISOString();
           if (kind === "final") {
             // Legendas só nos renders com voz; o animatic já as tem gravadas na imagem.
-            patch.subtitles_url = await upload(sb, episodeSubtitlesPath(slug, sp.episode), beatsToVtt(sp.beats, 1.8), "text/vtt");
+            patch.subtitles_url = await upload(sb, episodeSubtitlesPath(slug, sp.episode), subtitlesFor(slug, sp, videosDir), "text/vtt");
           } else {
             patch.subtitles_url = null;
           }
