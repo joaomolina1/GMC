@@ -87,8 +87,13 @@ npm run tvibox:seed                                   # séries/episódios/argum
 npm run tvibox:animatic -- --frames <dir> --out <dir> # animatics 9:16 a partir de key frames (ffmpeg)
 npm run tvibox:publish -- --posters <dir> --frames <dir> --videos <dir> --kind animatic
 npm run tvibox:plan                                   # prompts Veo 3.1 + custo estimado (sem chamar a API)
-GEMINI_API_KEY=... npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-PT e lip sync
+npm run tvibox:produce -- --check                     # valida GEMINI_API_KEY e o acesso ao modelo Veo
+npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-PT e lip sync (1 série primeiro)
+npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível se falhar (repete o comando)
 ```
+
+`GEMINI_API_KEY` vem de `.env.local` ou dos Secrets do Cursor (Cloud Agents → Secrets); os secrets só são
+injetados em agentes **novos**, por isso o pipeline tem de correr num Cloud Agent iniciado depois de criar o segredo.
 
 O pipeline `produce.ts` usa o **Veo 3.1** (Gemini API): abertura de 8 s + extensões de 7 s no mesmo vídeo
 (continuidade de atores), 9:16, diálogo em português europeu gerado nativamente, genérico TVI BOX e

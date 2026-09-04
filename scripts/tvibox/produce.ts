@@ -16,6 +16,8 @@
  *   --from-step N       refaz a partir do passo N (mantém os anteriores)
  *   --inline            envia o vídeo anterior em base64 em vez de referenciar o URI gerado
  *   --publish           no fim, publica no Storage e atualiza o catálogo (render_kind=final)
+ *   --concurrency N     séries em paralelo (por omissão 2; cada série é sequencial)
+ *   --check             valida a chave e a disponibilidade do modelo Veo, sem gerar nada
  *   --dry-run           não chama a API
  *
  * Requer GEMINI_API_KEY (ou GOOGLE_API_KEY). Estado resumível em <out>/state/<slug>-epN.json
@@ -307,7 +309,9 @@ async function main() {
   const key = geminiKey();
 
   if (!dryRun && !key) {
-    console.error("GEMINI_API_KEY em falta. Adiciona a chave (Cursor Dashboard → Cloud Agents → Secrets, ou .env.local) ou corre com --dry-run.");
+    console.error(
+      "GEMINI_API_KEY em falta. Adiciona a chave (Cursor Dashboard → Cloud Agents → Secrets — só entra em agentes novos — ou .env.local) ou corre com --dry-run."
+    );
     process.exit(2);
   }
   if (mode === "extend" && modelKey === "lite") {
@@ -315,13 +319,58 @@ async function main() {
     process.exit(2);
   }
 
-  for (const slug of slugs) {
-    await produceEpisode(slug, { key, mode, model, modelKey, resolution, person, out, fromStep, inline: flag("inline"), dryRun, bumper });
+  if (flag("check")) {
+    const ok = await checkAccess(key as string, model);
+    process.exit(ok ? 0 : 3);
   }
 
-  if (!dryRun && flag("publish")) {
-    log("a publicar renders finais…");
-    execFileSync("npx", ["tsx", "scripts/tvibox/publish-media.ts", "--videos", out, "--kind", "final", "--series", slugs.join(",")], { stdio: "inherit" });
+  // Cada série é uma cadeia sequencial (extensões); séries diferentes correm em paralelo.
+  const concurrency = Math.max(1, Math.min(8, Number(arg("concurrency", dryRun ? "1" : "2"))));
+  const queue = [...slugs];
+  const done: SeriesSlug[] = [];
+  const failed: { slug: SeriesSlug; error: string }[] = [];
+  const worker = async () => {
+    for (let slug = queue.shift(); slug; slug = queue.shift()) {
+      try {
+        await produceEpisode(slug, { key, mode, model, modelKey, resolution, person, out, fromStep, inline: flag("inline"), dryRun, bumper });
+        done.push(slug);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        failed.push({ slug, error: msg });
+        log(`✗ ${slug}: ${msg}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, slugs.length) }, worker));
+
+  if (!dryRun && flag("publish") && done.length) {
+    log(`a publicar renders finais (${done.join(", ")})…`);
+    execFileSync("npx", ["tsx", "scripts/tvibox/publish-media.ts", "--videos", out, "--kind", "final", "--series", done.join(",")], { stdio: "inherit" });
+  }
+
+  if (failed.length) {
+    console.error(`\n${failed.length} episódio(s) falharam — volta a correr o mesmo comando para retomar do último passo concluído:`);
+    for (const f of failed) console.error(`  · ${f.slug}: ${f.error}`);
+    process.exit(1);
+  }
+}
+
+/** Valida a chave e confirma que o modelo Veo escolhido está acessível a esta conta. */
+async function checkAccess(key: string, model: string): Promise<boolean> {
+  try {
+    const r = await gemini<{ models?: { name: string }[] }>("models?pageSize=200", { method: "GET" }, key);
+    const names = (r.models ?? []).map((m) => m.name.replace(/^models\//, ""));
+    const veo = names.filter((n) => n.startsWith("veo"));
+    log(`chave válida · ${names.length} modelos visíveis · Veo: ${veo.join(", ") || "nenhum"}`);
+    if (!veo.includes(model)) {
+      console.error(`O modelo ${model} não está disponível para esta chave (ativa a faturação no projeto Google AI Studio).`);
+      return false;
+    }
+    log(`✓ ${model} disponível — pronto para produzir`);
+    return true;
+  } catch (e) {
+    console.error(`Chave inválida ou sem acesso: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
   }
 }
 
