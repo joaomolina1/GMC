@@ -111,7 +111,7 @@ describe("buildBanners", () => {
     st.progress.set("c-1", { position: 75, completed: true });
     const banners = buildBanners(S, EPS, st);
     expect(banners[0].series.id).toBe("c");
-    expect(banners[0]).toMatchObject({ next: { id: "c-2" }, started: true, progressLabel: "EP 2/40" });
+    expect(banners[0]).toMatchObject({ first: { id: "c-1" }, next: { id: "c-2" }, started: true, progressLabel: "EP 2/40" });
     expect(banners.slice(1).map((b) => b.series.id)).toEqual(["a", "b"]);
   });
 

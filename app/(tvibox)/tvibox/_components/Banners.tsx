@@ -9,8 +9,9 @@ import type { FeedItem } from "@lib/tvibox/types";
 import { CommentsSheet } from "./CommentsSheet";
 import { useWallet } from "./WalletProvider";
 
+/** O banner abre sempre o primeiro episódio da série; o player trata de avançar por scroll. */
 function playerHref(b: Banner): string {
-  return `/tvibox/ver/${b.series.slug}?ep=${b.next.number}`;
+  return `/tvibox/ver/${b.series.slug}?ep=${b.first.number}`;
 }
 
 function shorten(text: string | null, max = 150): string {
@@ -179,7 +180,7 @@ function BannerCard({
 }) {
   const { plusActive } = useWallet();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { series, cover, next } = b;
+  const { series, cover, first } = b;
   const posterUrl = cover.poster_url || series.poster_url || undefined;
 
   // Pré-visualização muda, só no banner visível.
@@ -194,9 +195,8 @@ function BannerCard({
     }
   }, [active]);
 
-  const resuming = (b.started && next.number > 1) || b.resumeAt > 1;
-  const cta = resuming ? `Continuar · EP ${next.number}` : `Ver EP ${next.number}`;
-  const duration = next.duration_seconds ? `${Math.round(next.duration_seconds)} s` : null;
+  const cta = `Ver EP ${first.number}`;
+  const duration = first.duration_seconds ? `${Math.round(first.duration_seconds)} s` : null;
 
   return (
     <article className="tb-ep" data-feed-index={index} aria-label={series.title}>

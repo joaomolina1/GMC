@@ -72,7 +72,9 @@ export interface Banner {
   series: SeriesRow;
   /** Episódio cujo vídeo serve de pré-visualização (o primeiro com vídeo). */
   cover: EpisodeRow;
-  /** Episódio que o player abre ao tocar no banner. */
+  /** Primeiro episódio da série — o banner abre sempre aqui; o player avança por scroll. */
+  first: EpisodeRow;
+  /** Próximo episódio por ver (usado apenas para o rótulo de progresso). */
   next: EpisodeRow;
   /** Total de episódios já disponíveis (com vídeo ou anunciados). */
   available: number;
@@ -105,6 +107,7 @@ export function buildBanners(series: SeriesRow[], episodes: EpisodeRow[], user: 
     banners.push({
       series: s,
       cover,
+      first: eps[0],
       next,
       available: eps.length,
       liked: item.liked,
