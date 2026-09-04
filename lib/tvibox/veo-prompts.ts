@@ -79,7 +79,8 @@ export function buildExtensionPrompt(sp: Screenplay, index: number): string {
   if (!beat) throw new Error(`Beat ${index} não existe`);
   const chars = detectCharacters(beat, sp.cast);
   return [
-    "Continue the same scene seamlessly: same actors, same faces, same wardrobe, same lighting and camera language. Vertical 9:16.",
+    // Sem "same actors/faces": o filtro de semelhança do Veo bloqueia extensões com essa formulação.
+    "Continue the same scene seamlessly, keeping the same wardrobe, lighting and camera language. Vertical 9:16.",
     castBlock(chars),
     `Action: ${beat.shot}`,
     dialogueBlock(beat),
