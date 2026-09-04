@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EPISODES, SERIES } from "@lib/tvibox/catalog";
 import { MAX_EPISODE_SECONDS, SCREENPLAYS, screenplayDuration } from "@lib/tvibox/screenplays";
-import { VEO_PROMPT_TOKEN_LIMIT, detectCharacters, nameTokens, planEpisode } from "@lib/tvibox/veo-prompts";
+import { VEO_PROMPT_TOKEN_LIMIT, detectCharacters, nameTokens, planEpisode, promptName } from "@lib/tvibox/veo-prompts";
 
 const slugs = Object.keys(SCREENPLAYS) as (keyof typeof SCREENPLAYS)[];
 
@@ -96,6 +96,25 @@ describe("planEpisode (Veo)", () => {
       "Inspetora Sofia Rocha",
       "Inspetor Rui Baptista",
     ]);
+  });
+
+  it("os prompts nunca levam nomes completos do elenco nem 'same actors/faces' (filtros do Veo)", () => {
+    expect(promptName("Rodrigo Sequeira")).toBe("Rodrigo");
+    expect(promptName("Dr. Nuno Alves")).toBe("Dr. Nuno");
+    expect(promptName("Inspetora Sofia Rocha")).toBe("Inspetora Sofia");
+    expect(promptName("Coronel Castelo")).toBe("Coronel Castelo");
+    expect(promptName("Carla")).toBe("Carla");
+    for (const slug of slugs) {
+      const sp = SCREENPLAYS[slug];
+      for (const mode of ["extend", "shots"] as const) {
+        for (const p of planEpisode(sp, mode)) {
+          for (const c of sp.cast) {
+            if (promptName(c.name) !== c.name) expect(p.prompt, `${slug} passo ${p.index}`).not.toContain(c.name);
+          }
+          expect(p.prompt).not.toMatch(/same actors|same faces/);
+        }
+      }
+    }
   });
 
   it("todos os beats com falas incluem a descrição de pelo menos uma personagem", () => {
