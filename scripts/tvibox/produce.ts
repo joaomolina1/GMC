@@ -11,7 +11,7 @@
  *                       shots  = um clip de 8 s por beat, concatenados (permite 1080p)
  *   --model quality|fast|lite   veo-3.1-generate-preview | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
  *   --resolution 720p|1080p     (extend força 720p)
- *   --person allow_adult|allow_all   (na UE apenas allow_adult é aceite)
+ *   --person allow_all|allow_adult   (por omissão allow_all; a API recusa allow_adult em texto→vídeo)
  *   --out <dir>         diretório de trabalho/saída (por omissão /tmp/tvibox/final)
  *   --from-step N       refaz a partir do passo N (mantém os anteriores)
  *   --inline            envia o vídeo anterior em base64 em vez de referenciar o URI gerado
@@ -255,7 +255,6 @@ async function produceEpisode(slug: SeriesSlug, opts: {
           ? { inlineData: { mimeType: "video/mp4", data: readFileSync(prev.file).toString("base64") } }
           : { uri: prev.uri, mimeType: "video/mp4" };
         parameters.resolution = "720p";
-        parameters.numberOfVideos = 1;
       } else {
         parameters.durationSeconds = step.durationSeconds;
         parameters.resolution = opts.resolution;
@@ -300,7 +299,7 @@ async function main() {
   const modelKey = (arg("model", "quality") as keyof typeof VEO_MODELS) in VEO_MODELS ? (arg("model", "quality") as keyof typeof VEO_MODELS) : "quality";
   const model = VEO_MODELS[modelKey];
   const resolution = mode === "extend" ? "720p" : (arg("resolution", "1080p") as string);
-  const person = arg("person", "allow_adult") as string;
+  const person = arg("person", "allow_all") as string;
   const out = resolve(arg("out", "/tmp/tvibox/final") as string);
   const bumper = resolve(arg("bumper", "public/tvibox/bumper.png") as string);
   const fromStep = Number(arg("from-step", "-1"));
