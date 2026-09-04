@@ -57,8 +57,8 @@ function subtitlesFor(slug: SeriesSlug, sp: Screenplay, videosDir: string): stri
         starts.push(t);
         t += d;
       }
-      const beats = sp.beats.map((b, i) => ({ ...b, dur: durations[i] }));
-      return cuesToVtt(beatsToCues(beats, BUMPER_SECONDS, 0.4, 0.25, starts));
+      // Os beats do argumento têm 7 s; os clips têm ~8 s — o 1.º parâmetro só serve para o offset, os instantes vêm de `starts`.
+      return cuesToVtt(beatsToCues(sp.beats, BUMPER_SECONDS, 0.4, 0.25, starts));
     }
   }
   return beatsToVtt(sp.beats, BUMPER_SECONDS);

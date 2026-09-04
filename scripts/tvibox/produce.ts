@@ -251,9 +251,10 @@ async function produceEpisode(slug: SeriesSlug, opts: {
       const instance: Record<string, unknown> = { prompt: step.prompt };
       const parameters: Record<string, unknown> = {
         aspectRatio: "9:16",
-        negativePrompt: NEGATIVE_PROMPT,
         personGeneration: opts.person,
       };
+      // O Veo 3.1 Lite recusa negativePrompt; o prompt positivo já proíbe legendas, música e sotaque brasileiro.
+      if (opts.modelKey !== "lite") parameters.negativePrompt = NEGATIVE_PROMPT;
 
       if (step.kind === "extend") {
         const prev = state.steps.find((s) => s.index === step.index - 1);
