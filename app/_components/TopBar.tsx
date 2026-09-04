@@ -20,6 +20,9 @@ const TITLES: { match: (p: string) => boolean; title: string; subtitle: string }
   { match: (p) => p.startsWith("/agents"), title: "Agentes", subtitle: "Gerir e configurar agentes de IA" },
   { match: (p) => p.startsWith("/marketplace"), title: "Marketplace", subtitle: "Descubra agentes públicos" },
   { match: (p) => p.startsWith("/flows"), title: "Flows", subtitle: "Orquestração visual de agentes" },
+  { match: (p) => p.startsWith("/clips/novo"), title: "Novo vídeo", subtitle: "Upload direto e parâmetros da sugestão" },
+  { match: (p) => /\/clips\/[^/]+/.test(p), title: "Revisão de clips", subtitle: "Pré-visualize, ajuste e aprove candidatos" },
+  { match: (p) => p.startsWith("/clips"), title: "Clips", subtitle: "Sugestão automática de clips a partir de arquivo" },
   { match: (p) => p.startsWith("/admin"), title: "Backoffice", subtitle: "Administração e métricas" },
 ];
 

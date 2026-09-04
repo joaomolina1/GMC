@@ -6,6 +6,7 @@ import {
   Clapperboard,
   LayoutDashboard,
   Workflow,
+  Scissors,
   Shield,
   Sparkles,
   PanelLeftClose,
@@ -24,6 +25,7 @@ const navGroups: (
     items: [
       { href: "/", icon: LayoutDashboard, label: "Agentes" },
       { href: "/flows", icon: Workflow, label: "Flows" },
+      { href: "/clips", icon: Scissors, label: "Clips" },
     ],
   },
   {

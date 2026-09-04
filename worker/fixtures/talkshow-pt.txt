@@ -1,0 +1,62 @@
+# Guião sintético (pt-PT) para o provider `fixture` — CLIPS_FIXTURE_SCRIPT.
+# Uma frase por linha, prefixo ORADOR: opcional. Linhas em branco e '#' são ignoradas.
+# As frases são distribuídas uniformemente pela duração real do áudio.
+SPEAKER_00: Boa noite e bem-vindos a mais uma edição do programa, hoje com uma convidada muito especial.
+SPEAKER_00: Depois de quinze anos a fazer reportagem de guerra, decidiu trocar o colete à prova de bala pela cozinha.
+SPEAKER_01: É verdade, e ainda hoje há quem me pergunte se estou bem da cabeça.
+SPEAKER_00: E está?
+SPEAKER_01: Melhor do que nunca, mas demorei três anos a admitir que estava exausta.
+SPEAKER_00: Vamos começar pelo princípio, como é que uma jovem de Braga acaba em Sarajevo com vinte e dois anos?
+SPEAKER_01: Por teimosia, basicamente, o meu editor disse que não e eu comprei o bilhete com o meu dinheiro.
+SPEAKER_01: Cheguei lá num sábado e no domingo já estava a mandar a primeira peça.
+SPEAKER_00: Sem experiência nenhuma.
+SPEAKER_01: Sem experiência nenhuma, sem seguro e sem falar uma palavra de bósnio.
+SPEAKER_00: Isso hoje seria impensável.
+SPEAKER_01: Hoje seria despedimento imediato, e com razão.
+SPEAKER_00: Qual foi o momento em que percebeu que aquilo era mesmo perigoso?
+SPEAKER_01: Foi quando um colega francês, que tinha almoçado comigo, não voltou do terreno à tarde.
+SPEAKER_01: Nesse dia percebi que a coragem não era o que eu pensava, era só não ter noção.
+SPEAKER_00: Essa frase é forte.
+SPEAKER_01: É a frase mais honesta que consigo dizer sobre aqueles anos.
+SPEAKER_00: E a família, como é que lidava com isto?
+SPEAKER_01: A minha mãe deixou de ver o telejornal durante uma década, literalmente.
+SPEAKER_01: Só voltou a ligar a televisão quando eu passei para a rubrica de gastronomia.
+SPEAKER_00: E agora vê sempre.
+SPEAKER_01: Agora vê sempre e liga-me a dizer que pus sal a mais.
+SPEAKER_00: Vamos falar dessa transição, porque não é comum passar da guerra para os tachos.
+SPEAKER_01: Não é, mas para mim faz todo o sentido, em ambos os casos estamos a contar histórias de pessoas.
+SPEAKER_01: A diferença é que numa as pessoas estão a perder tudo e na outra estão a partilhar o que têm.
+SPEAKER_00: Houve um prato, uma refeição, que a tenha marcado nesses anos?
+SPEAKER_01: Houve, um pão feito numa lata de tinta, em Alepo, por uma avó que insistiu que eu comesse primeiro.
+SPEAKER_01: Eu tinha uma câmara de três mil euros ao pescoço e ela tinha um pão, e foi ela que me deu de comer.
+SPEAKER_00: Isso mudou-lhe a perspetiva.
+SPEAKER_01: Mudou-me a vida, sinceramente, foi aí que decidi que um dia ia escrever sobre comida.
+SPEAKER_00: E o livro sai quando?
+SPEAKER_01: Sai em outubro, chama-se Pão na Lata, e cada capítulo é uma refeição num sítio onde não devia haver refeições.
+SPEAKER_00: Já agora, um conselho para quem está a começar em jornalismo hoje.
+SPEAKER_01: Desconfiem de quem vos diz que é preciso sofrer para fazer bom trabalho.
+SPEAKER_01: Eu acreditei nisso durante quinze anos e custou-me um casamento e dois amigos.
+SPEAKER_00: Não tem papas na língua.
+SPEAKER_01: Aos quarenta e oito anos já não tenho tempo para isso.
+SPEAKER_00: Vamos fazer uma pausa curta e voltamos já com o segundo bloco.
+SPEAKER_00: Estamos de volta, e prometi que íamos falar do episódio da entrevista ao ministro.
+SPEAKER_01: Ai, esse.
+SPEAKER_00: Para quem não sabe, a nossa convidada perguntou três vezes a mesma coisa em direto.
+SPEAKER_01: Perguntei quatro, a quarta foi cortada na edição.
+SPEAKER_00: E o ministro?
+SPEAKER_01: O ministro levantou-se, tirou o microfone e disse que eu não sabia fazer perguntas.
+SPEAKER_01: E eu respondi que sabia fazer perguntas, ele é que não sabia dar respostas.
+SPEAKER_00: E isso deu-lhe problemas?
+SPEAKER_01: Deu-me uma semana de suspensão e trinta mil seguidores novos, faça as contas.
+SPEAKER_00: Voltaria a fazer o mesmo?
+SPEAKER_01: Voltaria a fazer exatamente o mesmo, com mais calma na voz e menos no coração.
+SPEAKER_00: Há quem diga que o jornalismo está a morrer.
+SPEAKER_01: O jornalismo não está a morrer, está a ser substituído por gente que fala muito e pergunta pouco.
+SPEAKER_01: E isso é culpa nossa, não é culpa das redes sociais.
+SPEAKER_00: Essa é polémica.
+SPEAKER_01: Pode ser, mas eu já não estou aqui para agradar.
+SPEAKER_00: Para terminar, o que é que faz num domingo à tarde quando não está a cozinhar nem a escrever?
+SPEAKER_01: Durmo, durante quinze anos não dormi um domingo inteiro, agora recupero-os todos.
+SPEAKER_00: Muito obrigado por ter vindo, foi um prazer enorme.
+SPEAKER_01: Obrigada eu, e experimentem o pão, mesmo sem lata.
+SPEAKER_00: Fica a dica, boa noite e até para a semana.
