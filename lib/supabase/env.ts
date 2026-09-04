@@ -1,10 +1,7 @@
-import { SUPABASE_ANON_KEY_FALLBACK, SUPABASE_PROJECT_URL } from "./constants";
+import { SUPABASE_ANON_KEY_FALLBACK, resolveSupabaseUrl } from "./constants";
 
 export function getSupabaseEnv() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ??
-    process.env.SUPABASE_URL ??
-    SUPABASE_PROJECT_URL;
+  const url = resolveSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL);
 
   const anonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??

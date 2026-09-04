@@ -23,13 +23,21 @@ export const NEGATIVE_PROMPT =
 const LANGUAGE_RULE =
   "All dialogue is spoken in European Portuguese with a natural Portugal (Lisbon) accent — never Brazilian Portuguese. Lip movements must match the Portuguese words exactly; deliver lines at a natural, unhurried pace.";
 
+const TITLES = new Set(["dr", "dra", "dona", "sr", "sra", "inspetor", "inspetora", "coronel", "herr", "frau"]);
+
+/** Tokens úteis de um nome de personagem (sem títulos honoríficos). */
+export function nameTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/[.,]/g, ""))
+    .filter((t) => t.length >= 3 && !TITLES.has(t));
+}
+
 /** Personagens que aparecem no beat (pelas falas ou por menção no plano). */
 export function detectCharacters(beat: Beat, cast: CastMember[]): CastMember[] {
   const hay = `${beat.shot} ${beat.lines.map((l) => l.who).join(" ")}`.toLowerCase();
-  return cast.filter((c) => {
-    const first = c.name.split(" ")[0].toLowerCase();
-    return hay.includes(first) || hay.includes(c.name.toLowerCase());
-  });
+  return cast.filter((c) => nameTokens(c.name).some((t) => new RegExp(`\\b${t}\\b`, "i").test(hay)));
 }
 
 function castBlock(members: CastMember[]): string {
@@ -38,11 +46,11 @@ function castBlock(members: CastMember[]): string {
 }
 
 function dialogueBlock(beat: Beat): string {
-  if (!beat.lines.length) return "No dialogue in this segment — performance is silent and physical.";
+  if (!beat.lines.length) return "No dialogue in this segment — nobody speaks; the performance is silent and physical.";
   const lines = beat.lines
     .map((l) => `${l.who}${l.tone ? ` (${l.tone})` : ""} says in Portuguese: "${l.text}"`)
     .join(" ");
-  return `Dialogue: ${lines}`;
+  return `Dialogue: ${lines} ${LANGUAGE_RULE}`;
 }
 
 function soundBlock(beat: Beat): string {
@@ -59,7 +67,6 @@ export function buildOpeningPrompt(sp: Screenplay): string {
     castBlock(chars.length ? chars : sp.cast.slice(0, 2)),
     `Action: ${beat.shot}`,
     dialogueBlock(beat),
-    LANGUAGE_RULE,
     soundBlock(beat),
     "No subtitles, no captions, no on-screen text.",
   ]
@@ -76,7 +83,6 @@ export function buildExtensionPrompt(sp: Screenplay, index: number): string {
     castBlock(chars),
     `Action: ${beat.shot}`,
     dialogueBlock(beat),
-    LANGUAGE_RULE,
     soundBlock(beat),
     "No subtitles, no captions, no on-screen text.",
   ]
@@ -96,7 +102,6 @@ export function buildShotPrompt(sp: Screenplay, index: number): string {
     castBlock(chars.length ? chars : sp.cast.slice(0, 2)),
     `Action: ${beat.shot}`,
     dialogueBlock(beat),
-    LANGUAGE_RULE,
     soundBlock(beat),
     "No subtitles, no captions, no on-screen text.",
   ]

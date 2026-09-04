@@ -1,13 +1,13 @@
 import type { NextConfig } from "next";
 import {
   SUPABASE_ANON_KEY_FALLBACK,
-  SUPABASE_PROJECT_URL,
+  resolveSupabaseUrl,
 } from "./lib/supabase/constants";
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ??
-  process.env.SUPABASE_URL ??
-  SUPABASE_PROJECT_URL;
+const supabaseUrl = resolveSupabaseUrl(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_URL
+);
 
 const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??

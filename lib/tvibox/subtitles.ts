@@ -7,29 +7,45 @@ export interface Cue {
   text: string;
 }
 
+/** Instantes de início de cada beat quando são contíguos a partir de `offset`. */
+export function beatStarts(beats: Beat[], offset = 0): number[] {
+  const starts: number[] = [];
+  let t = offset;
+  for (const b of beats) {
+    starts.push(t);
+    t += b.dur;
+  }
+  return starts;
+}
+
 /**
  * Distribui as falas de cada beat pelo respetivo intervalo de tempo,
  * proporcionalmente ao comprimento de cada fala (com uma pequena pausa entre elas).
- * `offset` permite deslocar tudo (ex.: duração do genérico/bumper inicial).
+ * `offset` desloca tudo (ex.: duração do genérico inicial); `starts` permite
+ * impor instantes de início por beat (ex.: quando há transições sobrepostas).
  */
-export function beatsToCues(beats: Beat[], offset = 0, lead = 0.4, gap = 0.25): Cue[] {
+export function beatsToCues(
+  beats: Beat[],
+  offset = 0,
+  lead = 0.4,
+  gap = 0.25,
+  starts: number[] = beatStarts(beats, offset)
+): Cue[] {
   const cues: Cue[] = [];
-  let t = offset;
-  for (const beat of beats) {
+  beats.forEach((beat, bi) => {
     const lines: DialogueLine[] = beat.lines;
-    if (lines.length) {
-      const usable = Math.max(1, beat.dur - lead - gap * (lines.length - 1));
-      const weights = lines.map((l) => Math.max(8, l.text.length));
-      const total = weights.reduce((a, b) => a + b, 0);
-      let cursor = t + lead;
-      lines.forEach((l, i) => {
-        const dur = (usable * weights[i]) / total;
-        cues.push({ start: cursor, end: cursor + dur, who: l.who, text: l.text });
-        cursor += dur + gap;
-      });
-    }
-    t += beat.dur;
-  }
+    if (!lines.length) return;
+    const t = starts[bi] ?? 0;
+    const usable = Math.max(1, beat.dur - lead - gap * (lines.length - 1));
+    const weights = lines.map((l) => Math.max(8, l.text.length));
+    const total = weights.reduce((a, b) => a + b, 0);
+    let cursor = t + lead;
+    lines.forEach((l, i) => {
+      const dur = (usable * weights[i]) / total;
+      cues.push({ start: cursor, end: cursor + dur, who: l.who, text: l.text });
+      cursor += dur + gap;
+    });
+  });
   return cues;
 }
 

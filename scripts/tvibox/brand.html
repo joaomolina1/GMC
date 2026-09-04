@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@900&family=Outfit:wght@500;700&display=swap" rel="stylesheet" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #1a1c22;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Rubik", system-ui, sans-serif;
+      }
+      .bg {
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(120% 80% at 50% 20%, #2b1a22 0%, #1a1c22 60%);
+      }
+      .wrap {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4em;
+      }
+      .logo {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        line-height: 0.92;
+        color: #fff;
+      }
+      .w {
+        position: relative;
+        display: inline-block;
+      }
+      .cut {
+        position: absolute;
+        inset: 0;
+        clip-path: polygon(0 92%, 100% 58%, 100% 100%, 0 100%);
+      }
+      .cut i {
+        font-style: normal;
+      }
+      .tvi .cut i:nth-child(1) {
+        color: #0073be;
+      }
+      .tvi .cut i:nth-child(2) {
+        color: #ff6600;
+      }
+      .tvi .cut i:nth-child(3) {
+        color: #ffe637;
+      }
+      .box .cut i {
+        color: #ca234d;
+      }
+      .tag {
+        font-family: "Outfit", system-ui, sans-serif;
+        font-weight: 500;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        color: #9a9b9d;
+        font-size: 0.16em;
+        margin-left: 0.06em;
+      }
+      /* modo ícone: sem tagline, mais compacto */
+      body.icon .tag {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg"></div>
+    <div class="wrap" id="wrap">
+      <div class="logo" id="logo">
+        <span class="w tvi"><span>tvi</span><span class="cut" aria-hidden="true"><i>t</i><i>v</i><i>i</i></span></span>
+        <span class="w box" style="margin-top: -0.1em"><span>box</span><span class="cut" aria-hidden="true"><i>b</i><i>o</i><i>x</i></span></span>
+        <span class="tag">Originais · verticais</span>
+      </div>
+    </div>
+    <script>
+      const p = new URLSearchParams(location.search);
+      const size = Number(p.get("size") || 180);
+      document.getElementById("logo").style.fontSize = size + "px";
+      if (p.get("icon")) document.body.classList.add("icon");
+    </script>
+  </body>
+</html>

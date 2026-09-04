@@ -1,0 +1,124 @@
+/**
+ * Publica media TVI BOX no Supabase Storage (bucket público `tvibox`) e atualiza o catálogo.
+ *
+ *   npx tsx scripts/tvibox/publish-media.ts --posters <dir> --frames <dir> --videos <dir> [--kind animatic|final] [--series a,b]
+ *
+ * - posters/<slug>.jpg           → posters/<slug>.jpg              (tvibox_series.poster_url)
+ * - frames/<slug>_f1.jpg         → episodes/<slug>/ep1-poster.jpg  (tvibox_episodes.poster_url)
+ * - videos/<slug>-ep1-<kind>.mp4 → episodes/<slug>/ep1-<kind>.mp4  (video_url, duration, render_kind, status=published)
+ * - legendas WebVTT geradas do argumento → episodes/<slug>/ep1.pt.vtt (subtitles_url; só para renders finais)
+ *
+ * Um render "animatic" nunca substitui um render "final" já publicado.
+ */
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { SCREENPLAYS } from "../../lib/tvibox/screenplays";
+import { beatsToVtt } from "../../lib/tvibox/subtitles";
+import { TVIBOX_BUCKET, episodePosterPath, episodeSubtitlesPath, episodeVideoPath, posterPath, publicUrl } from "../../lib/tvibox/media";
+import type { SeriesSlug } from "../../lib/tvibox/types";
+import { loadLocalEnv, log, serviceClient, supabaseUrl } from "./env";
+
+function arg(name: string, def?: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? process.argv[i + 1] : def;
+}
+
+function probeDuration(file: string): number {
+  const out = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim();
+  return Math.round(Number(out));
+}
+
+async function upload(sb: ReturnType<typeof serviceClient>, path: string, body: Buffer | string, contentType: string) {
+  const { error } = await sb.storage.from(TVIBOX_BUCKET).upload(path, body, { contentType, upsert: true, cacheControl: "3600" });
+  if (error) throw new Error(`upload ${path}: ${error.message}`);
+  return publicUrl(supabaseUrl(), path);
+}
+
+async function main() {
+  loadLocalEnv();
+  const sb = serviceClient();
+  const postersDir = arg("posters") ? resolve(arg("posters") as string) : null;
+  const framesDir = arg("frames") ? resolve(arg("frames") as string) : null;
+  const videosDir = arg("videos") ? resolve(arg("videos") as string) : null;
+  const kind = (arg("kind", "animatic") as "animatic" | "final") ?? "animatic";
+  const only = arg("series")?.split(",").map((s) => s.trim()).filter(Boolean) as SeriesSlug[] | undefined;
+  const slugs = (only?.length ? only : (Object.keys(SCREENPLAYS) as SeriesSlug[])).filter((s) => SCREENPLAYS[s]);
+
+  const { data: seriesRows, error: sErr } = await sb.from("tvibox_series").select("id, slug");
+  if (sErr) throw sErr;
+  const seriesId = new Map((seriesRows ?? []).map((r) => [r.slug as string, r.id as string]));
+
+  for (const slug of slugs) {
+    const sid = seriesId.get(slug);
+    if (!sid) {
+      log(`série ${slug} não existe na BD — corre seed.ts primeiro`);
+      continue;
+    }
+    const sp = SCREENPLAYS[slug];
+
+    if (postersDir) {
+      const f = join(postersDir, `${slug}.jpg`);
+      if (existsSync(f)) {
+        const url = await upload(sb, posterPath(slug), readFileSync(f), "image/jpeg");
+        const { error } = await sb.from("tvibox_series").update({ poster_url: url }).eq("id", sid);
+        if (error) throw error;
+        log(`${slug}: poster → ${url}`);
+      }
+    }
+
+    const { data: ep } = await sb
+      .from("tvibox_episodes")
+      .select("id, render_kind, video_url")
+      .eq("series_id", sid)
+      .eq("number", sp.episode)
+      .maybeSingle();
+    if (!ep) {
+      log(`${slug}: EP${sp.episode} não existe — corre seed.ts`);
+      continue;
+    }
+
+    const patch: Record<string, unknown> = {};
+
+    if (framesDir) {
+      const f = join(framesDir, `${slug}_f1.jpg`);
+      if (existsSync(f)) {
+        patch.poster_url = await upload(sb, episodePosterPath(slug, sp.episode), readFileSync(f), "image/jpeg");
+      }
+    }
+
+    if (videosDir) {
+      const f = join(videosDir, `${slug}-ep${sp.episode}-${kind}.mp4`);
+      if (existsSync(f)) {
+        if (ep.render_kind === "final" && kind === "animatic") {
+          log(`${slug}: já tem render final — animatic ignorado`);
+        } else {
+          const url = await upload(sb, episodeVideoPath(slug, sp.episode, kind), readFileSync(f), "video/mp4");
+          patch.video_url = url;
+          patch.duration_seconds = probeDuration(f);
+          patch.render_kind = kind;
+          patch.status = "published";
+          patch.published_at = new Date().toISOString();
+          if (kind === "final") {
+            // Legendas só nos renders com voz; o animatic já as tem gravadas na imagem.
+            patch.subtitles_url = await upload(sb, episodeSubtitlesPath(slug, sp.episode), beatsToVtt(sp.beats, 1.8), "text/vtt");
+          } else {
+            patch.subtitles_url = null;
+          }
+          log(`${slug}: vídeo ${kind} (${patch.duration_seconds}s) → ${url}`);
+        }
+      }
+    }
+
+    if (Object.keys(patch).length) {
+      const { error } = await sb.from("tvibox_episodes").update(patch).eq("id", ep.id);
+      if (error) throw error;
+    }
+  }
+  log("publicação concluída");
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

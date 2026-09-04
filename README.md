@@ -66,6 +66,34 @@ Plataforma interna de agentes de IA para o **Grupo Media Capital**.
 - **Auditoria** — backoffice com logs, gestão de roles e quotas
 - **Cost rollups** — função `compute_cost_rollups` para agregação mensal
 
+## Zona TVI BOX ✅
+
+Feed vertical à DramaBox sobre a mesma base de utilizadores (`profiles`), com a identidade do TVI Player
+(paleta escura, vermelho `#ca234d`, logótipo com corte diagonal azul/laranja/amarelo). Mobile-first: em ecrãs
+pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóvel.
+
+- **Rotas** — `/tvibox` (Para Ti), `/tvibox/series`, `/tvibox/series/[slug]`, `/tvibox/carteira`, `/tvibox/perfil`,
+  `/tvibox/lista`, `/tvibox/entrar` (login com marca própria)
+- **Economia** — moedas (bónus de boas-vindas, check-in diário com sequência, anúncios recompensados, pacotes
+  simulados, TVI Box+), desbloqueio atómico via funções SQL `tvibox_*`
+- **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, legendas e controlo parental
+- **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos em `lib/tvibox/screenplays.ts`
+- **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
+
+### Produção de conteúdos
+
+```bash
+npm run tvibox:seed                                   # séries/episódios/argumentos → Supabase
+npm run tvibox:animatic -- --frames <dir> --out <dir> # animatics 9:16 a partir de key frames (ffmpeg)
+npm run tvibox:publish -- --posters <dir> --frames <dir> --videos <dir> --kind animatic
+npm run tvibox:plan                                   # prompts Veo 3.1 + custo estimado (sem chamar a API)
+GEMINI_API_KEY=... npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-PT e lip sync
+```
+
+O pipeline `produce.ts` usa o **Veo 3.1** (Gemini API): abertura de 8 s + extensões de 7 s no mesmo vídeo
+(continuidade de atores), 9:16, diálogo em português europeu gerado nativamente, genérico TVI BOX e
+normalização de loudness. É resumível (`--from-step`) e regista o estado em `tvibox_render_jobs`.
+
 ## Setup
 
 ```bash

@@ -21,7 +21,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     title: "O segundo testamento",
     logline:
       "Na noite do velório, Beatriz encontra no cofre do avô um testamento que o irmão jurou não existir.",
-    setting: "Palácio Sequeira, Sintra. Noite de chuva. Escritório dourado com cofre na parede.",
+    setting: "Palácio Sequeira, a gilded manor in Sintra, Portugal, on a rainy night; an ornate study with crimson walls, oil portraits and a brass wall safe.",
     visualBible:
       "Premium Portuguese TV drama, cinematic vertical 9:16 framing, warm tungsten chandelier light against deep crimson walls and gilded frames, rain streaking tall windows, shallow depth of field, slow handheld push-ins, rich shadows, film grain, naturalistic acting.",
     cast: [
@@ -133,7 +133,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     title: "O novo motorista",
     logline:
       "A CEO mais temida de Lisboa contrata um motorista que veio destruí-la. Ela já sabe quem ele é.",
-    setting: "Lisboa à noite: garagem da sede do Grupo Vasconcelos, Mercedes preto, marginal do Tejo.",
+    setting: "Lisbon at night: rooftop garage of the Vasconcelos Group glass headquarters, a black luxury sedan, the riverside road along the Tagus.",
     visualBible:
       "Sleek corporate noir, cinematic vertical 9:16, cold steel and glass with warm amber city lights of Lisbon (castle on the hill, river), reflections on black car paint, rear-view-mirror compositions, shallow depth of field, controlled slow camera moves, restrained performances.",
     cast: [
@@ -232,7 +232,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "A chamada às 3 da manhã",
     logline: "Marta atende o telemóvel do marido a meio da noite. A voz do outro lado sabe o que está no carro dele.",
-    setting: "Quarto principal de uma quinta em Sintra, luar, palácio iluminado ao fundo. Pátio de gravilha.",
+    setting: "Master bedroom of a country manor in Sintra, Portugal, in moonlight, the illuminated palace on the hill visible through the window; a gravel courtyard outside.",
     visualBible:
       "Moody nocturnal thriller, cinematic vertical 9:16, cold moonlight blue against a single warm bedside lamp, phone-screen glow on skin, Sintra palace lights on the hill through the window, very shallow focus, slow creeping camera, long silences.",
     cast: [
@@ -321,7 +321,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "Quinze anos depois",
     logline: "Um homem visita a própria campa numa aldeia transmontana. A mãe enterrou-o em 2011.",
-    setting: "Aldeia de granito em Trás-os-Montes, nevoeiro ao amanhecer. Cemitério, café, cozinha de pedra.",
+    setting: "A granite village in Trás-os-Montes, northern Portugal, in dawn fog: a small cemetery, an old café, a stone kitchen with a wood stove.",
     visualBible:
       "Rural Portuguese mystery, cinematic vertical 9:16, dawn fog over granite houses and slate roofs, desaturated cold greens and greys with a single warm kitchen light, static contemplative frames, long lenses, weathered faces.",
     cast: [
@@ -421,7 +421,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "A última noite de agosto",
     logline: "Inês tem onze horas até ao comboio. Miguel quer que fique. O noivo dela é irmão dele.",
-    setting: "Algarve, falésias douradas ao pôr do sol; bar de praia com luzes penduradas ao anoitecer.",
+    setting: "Algarve coast, Portugal: golden limestone cliffs and turquoise sea at sunset; later a wooden beach bar strung with warm lights at dusk.",
     visualBible:
       "Sun-drenched Portuguese summer romance turning tense, cinematic vertical 9:16, golden hour on ochre cliffs and turquoise sea, then blue dusk with warm string lights, sea spray, skin glow, handheld intimacy, natural sound of waves.",
     cast: [
@@ -528,7 +528,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "O envelope sem remetente",
     logline: "Ao jantar chega uma fotografia e um prazo de 48 horas. Alguém à mesa é o chantagista.",
-    setting: "Casa senhorial no Porto. Sala de jantar com relógio antigo, velas, mesa comprida. Casa de banho de mármore.",
+    setting: "A grand townhouse in Porto, Portugal: a long candlelit dining table beneath an ornate antique clock; a marble bathroom with brass fixtures.",
     visualBible:
       "Elegant family suspense, cinematic vertical 9:16, candlelit dinner with gold and deep green tones, ornate antique clock looming in the background, symmetrical framings broken by nervous handheld close-ups, ticking clock as heartbeat.",
     cast: [
@@ -632,7 +632,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "O informador",
     logline: "Sofia resgata um informador. Só duas pessoas sabiam a hora e o sítio — e uma é o seu parceiro.",
-    setting: "Lisboa, Marvila, armazém abandonado à noite. Luzes azuis de polícia pelas janelas partidas.",
+    setting: "Lisbon, Marvila district, an abandoned warehouse at night, blue police lights strobing through broken windows.",
     visualBible:
       "Gritty Portuguese police thriller, cinematic vertical 9:16, dusty flashlight beams cutting through darkness, strobing blue police light through broken windows, handheld urgency, desaturated teal and rust, realistic tactical detail.",
     cast: [
@@ -733,7 +733,7 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     episode: 1,
     title: "Lisboa, 1943",
     logline: "Num café do Rossio, o preço de uma lista de refugiados é um pedido de casamento. Amélia já prometeu casar com outro.",
-    setting: "Lisboa, 1943. Café no Rossio com elétricos a passar; salão e quarto de uma casa senhorial na Lapa.",
+    setting: "Lisbon, 1943: a café at Rossio with trams passing the window; the salon and a bedroom of a stately house in Lapa.",
     visualBible:
       "1940s period drama, cinematic vertical 9:16, warm sepia-leaning palette with deep shadows, period-accurate costumes (pinned hair, tailored dresses, hats, brown suits), trams and black cars through café windows, smoke and lamplight, restrained classical framing.",
     cast: [

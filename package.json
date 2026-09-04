@@ -14,7 +14,12 @@
     "mcp:install": "npm install --prefix mcp",
     "mcp:test": "npm test --prefix mcp",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "tvibox:seed": "tsx scripts/tvibox/seed.ts",
+    "tvibox:animatic": "tsx scripts/tvibox/animatic.ts",
+    "tvibox:publish": "tsx scripts/tvibox/publish-media.ts",
+    "tvibox:produce": "tsx scripts/tvibox/produce.ts",
+    "tvibox:plan": "tsx scripts/tvibox/produce.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
