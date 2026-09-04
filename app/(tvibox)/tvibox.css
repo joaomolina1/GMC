@@ -395,9 +395,12 @@
   border: 1px solid var(--tb-line2);
   font-size: 30px;
 }
+/* Pill de som no topo esquerdo: não colide com legendas nem com a legenda do episódio. */
 .tb-mute-hint {
-  top: auto;
-  bottom: 190px;
+  top: calc(60px + env(safe-area-inset-top));
+  left: 16px;
+  transform: none;
+  z-index: 35;
   pointer-events: auto;
 }
 .tb-mute-hint button {

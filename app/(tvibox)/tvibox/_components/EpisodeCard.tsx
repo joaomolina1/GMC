@@ -156,7 +156,7 @@ export function EpisodeCard({
           playsInline
           preload={near ? "auto" : "metadata"}
           muted={muted}
-          crossOrigin="anonymous"
+          crossOrigin={episode.subtitles_url ? "anonymous" : undefined}
           onTimeUpdate={onTime}
           onEnded={onVideoEnded}
           onWaiting={() => setBuffering(true)}
@@ -190,7 +190,7 @@ export function EpisodeCard({
       {hasVideo && active && muted && (
         <div className="tb-mute-hint">
           <button type="button" onClick={onToggleMute}>
-            🔇 Toca para ativar o som
+            🔇 Ativar som
           </button>
         </div>
       )}
