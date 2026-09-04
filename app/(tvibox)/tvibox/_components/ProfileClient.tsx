@@ -97,6 +97,11 @@ export function ProfileClient({ stats }: { stats: { seen: number; following: num
             </span>
           </Link>
           {viewer.isAdmin && (
+            <Link href="/admin/tvibox" className="tb-pli">
+              <span className="e">🎬</span> Estúdio TVI Box — gerir séries e episódios <span className="ar">›</span>
+            </Link>
+          )}
+          {viewer.isAdmin && (
             <Link href="/admin" className="tb-pli">
               <span className="e">🛠️</span> Backoffice GMC <span className="ar">›</span>
             </Link>

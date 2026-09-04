@@ -68,11 +68,11 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
 
       <div className="tb-cta-row" style={{ marginTop: 4 }}>
         {resume ? (
-          <Link href={`/tvibox?ep=${resume.id}`} className="tb-btn-primary">
+          <Link href={`/tvibox/ver/${s.slug}?ep=${resume.number}`} className="tb-btn-primary">
             ▶ Continuar · EP {resume.number}
           </Link>
         ) : firstFree ? (
-          <Link href={`/tvibox?ep=${firstFree.id}`} className="tb-btn-primary">
+          <Link href={`/tvibox/ver/${s.slug}?ep=${firstFree.number}`} className="tb-btn-primary">
             ▶ Ver EP {firstFree.number} grátis
           </Link>
         ) : null}
@@ -106,7 +106,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
                   ? { cls: "done", label: e.video_url ? "Desbloqueado" : "Em breve ✓" }
                   : { cls: "", label: `🪙 ${e.coin_cost}` };
             return (
-              <Link key={e.id} href={`/tvibox?ep=${e.id}`} className="tb-epi">
+              <Link key={e.id} href={`/tvibox/ver/${s.slug}?ep=${e.number}`} className="tb-epi">
                 <div
                   className="num"
                   style={{

@@ -1,17 +1,12 @@
 import { redirect } from "next/navigation";
-import { getViewer, getFeed } from "@lib/tvibox/server";
-import { Feed } from "../_components/Feed";
+import { getBanners, getViewer } from "@lib/tvibox/server";
+import { Banners } from "../_components/Banners";
 
 export const dynamic = "force-dynamic";
 
-export default async function TviBoxFeedPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ ep?: string }>;
-}) {
+export default async function TviBoxHomePage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/tvibox/entrar");
-  const { ep } = await searchParams;
-  const { items } = await getFeed(viewer.id, ep ?? null);
-  return <Feed initialItems={items} focusId={ep ?? null} />;
+  const banners = await getBanners(viewer.id);
+  return <Banners initialBanners={banners} />;
 }

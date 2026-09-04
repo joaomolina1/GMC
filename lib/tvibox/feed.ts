@@ -20,85 +20,104 @@ export const emptyFeedUserState = (): FeedUserState => ({
   plusActive: false,
 });
 
-/** Após quantos episódios grátis aparece um cartão bloqueado (cliffhanger). */
-export const LOCK_EVERY = 3;
+function toItem(episode: EpisodeRow, series: SeriesRow, user: FeedUserState): FeedItem {
+  const unlocked = episode.is_free || user.unlocked.has(episode.id);
+  const prog = user.progress.get(episode.id);
+  return {
+    episode,
+    series,
+    locked: !unlocked,
+    pending: unlocked && !episode.video_url,
+    liked: user.liked.has(episode.id),
+    saved: user.saved.has(series.id),
+    likeCount: (episode.stats_seed?.likes ?? 0) + (user.likeCounts.get(episode.id) ?? 0),
+    commentCount: (episode.stats_seed?.comments ?? 0) + (user.commentCounts.get(episode.id) ?? 0),
+    resumeAt: prog && !prog.completed ? prog.position : 0,
+  };
+}
+
+/** Episódios visíveis de uma série, por número (rascunhos excluídos). */
+export function seriesEpisodes(seriesId: string, episodes: EpisodeRow[]): EpisodeRow[] {
+  return episodes
+    .filter((e) => e.series_id === seriesId && e.status !== "draft")
+    .sort((a, b) => a.number - b.number);
+}
 
 /**
- * Constrói o feed "Para Ti" de forma determinística:
- * - episódios grátis publicados por ordem de série;
- * - a cada `LOCK_EVERY` grátis entra o próximo episódio pago de uma série já vista;
- * - `focusId` traz um episódio para o topo (deep link vindo da página da série).
+ * Playlist do player de uma série: EP1 → EP2 → EP3…, cada um com o estado
+ * (bloqueado / desbloqueado sem vídeo / pronto) para este utilizador.
  */
-export function buildFeed(
-  episodes: EpisodeRow[],
-  seriesById: Map<string, SeriesRow>,
-  user: FeedUserState,
-  focusId?: string | null
-): FeedItem[] {
-  const order = (e: EpisodeRow) => {
-    const s = seriesById.get(e.series_id);
-    return [s?.sort_order ?? 999, e.number] as const;
-  };
-  const visible = episodes
-    .filter((e) => seriesById.has(e.series_id) && e.status !== "draft")
-    .sort((a, b) => {
-      const [sa, na] = order(a);
-      const [sb, nb] = order(b);
-      return sa - sb || na - nb;
+export function buildPlaylist(series: SeriesRow, episodes: EpisodeRow[], user: FeedUserState): FeedItem[] {
+  return seriesEpisodes(series.id, episodes).map((e) => toItem(e, series, user));
+}
+
+/**
+ * Episódio por onde abrir o player: o que ficou a meio, senão o primeiro ainda
+ * não concluído; se estão todos vistos, o último.
+ */
+export function resumeEpisode(
+  playlist: EpisodeRow[],
+  progress: Map<string, { position: number; completed: boolean }>
+): EpisodeRow | null {
+  if (!playlist.length) return null;
+  const inProgress = playlist.find((e) => {
+    const p = progress.get(e.id);
+    return p && !p.completed && p.position > 1;
+  });
+  if (inProgress) return inProgress;
+  return playlist.find((e) => !progress.get(e.id)?.completed) ?? playlist[playlist.length - 1];
+}
+
+export interface Banner {
+  series: SeriesRow;
+  /** Episódio cujo vídeo serve de pré-visualização (o primeiro com vídeo). */
+  cover: EpisodeRow;
+  /** Episódio que o player abre ao tocar no banner. */
+  next: EpisodeRow;
+  /** Total de episódios já disponíveis (com vídeo ou anunciados). */
+  available: number;
+  liked: boolean;
+  saved: boolean;
+  likeCount: number;
+  commentCount: number;
+  /** Já começou a ver esta série. */
+  started: boolean;
+  /** Posição guardada no episódio `next` (segundos). */
+  resumeAt: number;
+  progressLabel: string;
+}
+
+/**
+ * Feed "Para Ti": um banner por série. Séries em curso primeiro (continuar a ver),
+ * depois a ordem editorial. Só entram séries com pelo menos um episódio com vídeo.
+ */
+export function buildBanners(series: SeriesRow[], episodes: EpisodeRow[], user: FeedUserState): Banner[] {
+  const banners: Banner[] = [];
+  for (const s of [...series].sort((a, b) => a.sort_order - b.sort_order)) {
+    const eps = seriesEpisodes(s.id, episodes);
+    const cover = eps.find((e) => e.video_url);
+    if (!cover) continue;
+    const next = resumeEpisode(eps, user.progress) ?? cover;
+    const item = toItem(cover, s, user);
+    const seen = eps.filter((e) => user.progress.get(e.id)?.completed).length;
+    const started = eps.some((e) => user.progress.has(e.id));
+    const nextProg = user.progress.get(next.id);
+    banners.push({
+      series: s,
+      cover,
+      next,
+      available: eps.length,
+      liked: item.liked,
+      saved: item.saved,
+      likeCount: item.likeCount,
+      commentCount: item.commentCount,
+      started,
+      resumeAt: nextProg && !nextProg.completed ? nextProg.position : 0,
+      progressLabel: `EP ${Math.min(s.total_episodes, Math.max(1, seen + 1))}/${s.total_episodes}`,
     });
-
-  const free = visible.filter((e) => e.is_free && e.status === "published");
-
-  // Primeiro episódio pago de cada série (o cliffhanger).
-  const firstPaidBySeries = new Map<string, EpisodeRow>();
-  for (const e of visible) {
-    if (e.is_free) continue;
-    if (!firstPaidBySeries.has(e.series_id)) firstPaidBySeries.set(e.series_id, e);
   }
-  const paidQueue = [...firstPaidBySeries.values()];
-
-  const merged: EpisodeRow[] = [];
-  let freeCount = 0;
-  for (const e of free) {
-    merged.push(e);
-    freeCount++;
-    if (freeCount % LOCK_EVERY === 0 && paidQueue.length) {
-      merged.push(paidQueue.shift() as EpisodeRow);
-    }
-  }
-  merged.push(...paidQueue);
-
-  const toItem = (episode: EpisodeRow): FeedItem => {
-    const series = seriesById.get(episode.series_id) as SeriesRow;
-    const unlocked = episode.is_free || user.unlocked.has(episode.id);
-    const prog = user.progress.get(episode.id);
-    return {
-      episode,
-      series,
-      locked: !unlocked,
-      pending: unlocked && !episode.video_url,
-      liked: user.liked.has(episode.id),
-      saved: user.saved.has(series.id),
-      likeCount: (episode.stats_seed?.likes ?? 0) + (user.likeCounts.get(episode.id) ?? 0),
-      commentCount: (episode.stats_seed?.comments ?? 0) + (user.commentCounts.get(episode.id) ?? 0),
-      resumeAt: prog && !prog.completed ? prog.position : 0,
-    };
-  };
-
-  let items = merged.map(toItem);
-
-  if (focusId) {
-    const idx = items.findIndex((i) => i.episode.id === focusId);
-    if (idx > 0) {
-      const [focus] = items.splice(idx, 1);
-      items = [focus, ...items];
-    } else if (idx === -1) {
-      const ep = visible.find((e) => e.id === focusId);
-      if (ep) items = [toItem(ep), ...items];
-    }
-  }
-
-  return items;
+  // Estável: em curso primeiro, mantendo a ordem editorial dentro de cada grupo.
+  return banners.sort((a, b) => Number(b.started) - Number(a.started));
 }
 
 /** Percentagem de progresso numa série (episódios concluídos / total anunciado). */

@@ -1,5 +1,12 @@
 import { createClient } from "@lib/supabase/server";
-import { buildFeed, emptyFeedUserState, type FeedUserState } from "./feed";
+import {
+  buildBanners,
+  buildPlaylist,
+  emptyFeedUserState,
+  resumeEpisode,
+  type Banner,
+  type FeedUserState,
+} from "./feed";
 import { adsLeftToday, isPlusActive, toDateKey } from "./economy";
 import type { EpisodeRow, FeedItem, SeriesRow, WalletState } from "./types";
 
@@ -131,18 +138,38 @@ export async function getUserFeedState(
   return state;
 }
 
-export async function getFeed(
-  userId: string,
-  focusId?: string | null
-): Promise<{ items: FeedItem[]; series: SeriesRow[] }> {
+/** Feed "Para Ti": um banner por série. */
+export async function getBanners(userId: string): Promise<Banner[]> {
   const sb = await createClient();
-  const { series, episodes, seriesById } = await getCatalog(sb);
+  const { series, episodes } = await getCatalog(sb);
   const user = await getUserFeedState(
     userId,
     episodes.map((e) => e.id),
     sb
   );
-  return { items: buildFeed(episodes, seriesById, user, focusId), series };
+  return buildBanners(series, episodes, user);
+}
+
+/** Playlist do player de uma série (EP1 → EP2 → …) e episódio por onde começar. */
+export async function getPlaylist(
+  userId: string,
+  slug: string
+): Promise<{ series: SeriesRow; items: FeedItem[]; startNumber: number } | null> {
+  const sb = await createClient();
+  const { series, episodes } = await getCatalog(sb);
+  const s = series.find((x) => x.slug === slug);
+  if (!s) return null;
+  const user = await getUserFeedState(
+    userId,
+    episodes.map((e) => e.id),
+    sb
+  );
+  const items = buildPlaylist(s, episodes, user);
+  const resume = resumeEpisode(
+    items.map((i) => i.episode),
+    user.progress
+  );
+  return { series: s, items, startNumber: resume?.number ?? 1 };
 }
 
 export async function getTransactions(userId: string, limit = 12) {

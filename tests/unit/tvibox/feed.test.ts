@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { LOCK_EVERY, buildFeed, emptyFeedUserState, seriesProgress } from "@lib/tvibox/feed";
+import {
+  buildBanners,
+  buildPlaylist,
+  emptyFeedUserState,
+  resumeEpisode,
+  seriesEpisodes,
+  seriesProgress,
+} from "@lib/tvibox/feed";
 import type { EpisodeRow, SeriesRow } from "@lib/tvibox/types";
 
 function series(id: string, sort: number): SeriesRow {
@@ -41,50 +48,76 @@ function episode(series_id: string, number: number, over: Partial<EpisodeRow> = 
   };
 }
 
-const S = ["a", "b", "c", "d", "e"].map((id, i) => series(id, i + 1));
-const byId = new Map(S.map((s) => [s.id, s]));
-const EPS = S.flatMap((s) => [episode(s.id, 1), episode(s.id, 2)]);
+const S = ["a", "b", "c"].map((id, i) => series(id, i + 1));
+const EPS = S.flatMap((s) => [episode(s.id, 1), episode(s.id, 2), episode(s.id, 3, { status: "draft" })]);
 
-describe("buildFeed", () => {
-  it("intercala um cliffhanger bloqueado a cada LOCK_EVERY episódios grátis", () => {
-    const items = buildFeed(EPS, byId, emptyFeedUserState());
-    const ids = items.map((i) => i.episode.id);
-    expect(ids.slice(0, LOCK_EVERY + 1)).toEqual(["a-1", "b-1", "c-1", "a-2"]);
-    expect(items[LOCK_EVERY].locked).toBe(true);
-    expect(items.filter((i) => !i.locked)).toHaveLength(5);
-    expect(items).toHaveLength(10);
-  });
-
-  it("respeita desbloqueios e marca pendente quando não há vídeo", () => {
+describe("buildPlaylist", () => {
+  it("devolve os episódios da série por ordem, sem rascunhos, com estado por utilizador", () => {
     const st = emptyFeedUserState();
     st.unlocked.add("a-2");
-    const items = buildFeed(EPS, byId, st);
-    const a2 = items.find((i) => i.episode.id === "a-2")!;
-    expect(a2.locked).toBe(false);
-    expect(a2.pending).toBe(true);
+    const items = buildPlaylist(S[0], EPS, st);
+    expect(items.map((i) => i.episode.id)).toEqual(["a-1", "a-2"]);
+    expect(items[0]).toMatchObject({ locked: false, pending: false });
+    expect(items[1]).toMatchObject({ locked: false, pending: true });
+    expect(seriesEpisodes("b", EPS).map((e) => e.number)).toEqual([1, 2]);
   });
 
-  it("soma likes reais às estatísticas de arranque e reflete gostos/guardados", () => {
+  it("bloqueia episódios pagos não desbloqueados", () => {
+    const items = buildPlaylist(S[1], EPS, emptyFeedUserState());
+    expect(items[1].locked).toBe(true);
+  });
+
+  it("soma gostos reais e reflete gostos/guardados/retomar", () => {
     const st = emptyFeedUserState();
-    st.liked.add("b-1");
-    st.saved.add("b");
-    st.likeCounts.set("b-1", 3);
-    st.progress.set("b-1", { position: 30, completed: false });
-    const b1 = buildFeed(EPS, byId, st).find((i) => i.episode.id === "b-1")!;
-    expect(b1).toMatchObject({ liked: true, saved: true, likeCount: 1003, resumeAt: 30 });
+    st.liked.add("a-1");
+    st.saved.add("a");
+    st.likeCounts.set("a-1", 3);
+    st.progress.set("a-1", { position: 30, completed: false });
+    const [a1] = buildPlaylist(S[0], EPS, st);
+    expect(a1).toMatchObject({ liked: true, saved: true, likeCount: 1003, resumeAt: 30 });
+  });
+});
+
+describe("resumeEpisode", () => {
+  const eps = seriesEpisodes("a", EPS);
+  it("retoma o episódio a meio", () => {
+    const p = new Map([["a-1", { position: 20, completed: false }]]);
+    expect(resumeEpisode(eps, p)?.id).toBe("a-1");
+  });
+  it("avança para o primeiro não concluído", () => {
+    const p = new Map([["a-1", { position: 75, completed: true }]]);
+    expect(resumeEpisode(eps, p)?.id).toBe("a-2");
+  });
+  it("com tudo visto fica no último; sem episódios devolve null", () => {
+    const p = new Map([
+      ["a-1", { position: 75, completed: true }],
+      ["a-2", { position: 70, completed: true }],
+    ]);
+    expect(resumeEpisode(eps, p)?.id).toBe("a-2");
+    expect(resumeEpisode([], p)).toBeNull();
+  });
+});
+
+describe("buildBanners", () => {
+  it("um banner por série com vídeo, por ordem editorial", () => {
+    const banners = buildBanners(S, EPS, emptyFeedUserState());
+    expect(banners.map((b) => b.series.id)).toEqual(["a", "b", "c"]);
+    expect(banners[0]).toMatchObject({ cover: { id: "a-1" }, next: { id: "a-1" }, available: 2, started: false });
+    expect(banners[0].progressLabel).toBe("EP 1/40");
   });
 
-  it("focusId traz o episódio para o topo", () => {
-    const items = buildFeed(EPS, byId, emptyFeedUserState(), "d-1");
-    expect(items[0].episode.id).toBe("d-1");
-    expect(items.filter((i) => i.episode.id === "d-1")).toHaveLength(1);
+  it("séries em curso vêm primeiro e apontam para o episódio seguinte", () => {
+    const st = emptyFeedUserState();
+    st.progress.set("c-1", { position: 75, completed: true });
+    const banners = buildBanners(S, EPS, st);
+    expect(banners[0].series.id).toBe("c");
+    expect(banners[0]).toMatchObject({ next: { id: "c-2" }, started: true, progressLabel: "EP 2/40" });
+    expect(banners.slice(1).map((b) => b.series.id)).toEqual(["a", "b"]);
   });
 
-  it("ignora rascunhos e séries desconhecidas", () => {
-    const eps = [...EPS, episode("a", 3, { status: "draft" }), episode("zzz", 1)];
-    const items = buildFeed(eps, byId, emptyFeedUserState());
-    expect(items.some((i) => i.episode.id === "a-3")).toBe(false);
-    expect(items.some((i) => i.episode.id === "zzz-1")).toBe(false);
+  it("ignora séries sem nenhum episódio com vídeo", () => {
+    const eps = EPS.map((e) => (e.series_id === "b" ? { ...e, video_url: null } : e));
+    expect(buildBanners(S, eps, emptyFeedUserState()).map((b) => b.series.id)).toEqual(["a", "c"]);
   });
 });
 
