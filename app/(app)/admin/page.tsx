@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
+  Clapperboard,
   Users,
   Euro,
   ScrollText,
@@ -462,6 +464,13 @@ export default function AdminPage() {
             {label}
           </button>
         ))}
+        <Link
+          href="/admin/tvibox"
+          className="ml-auto flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50"
+        >
+          <Clapperboard size={16} />
+          Estúdio TVI Box
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">

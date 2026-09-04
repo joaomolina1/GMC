@@ -97,6 +97,9 @@ export function Shell({
   wallet: WalletState;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  // No player (/tvibox/ver/…) o vídeo ocupa o ecrã todo: sem barra de moedas nem navegação.
+  const immersive = pathname.startsWith("/tvibox/ver/");
   return (
     <div className="tb-stage">
       <StudioPanel />
@@ -104,9 +107,9 @@ export function Shell({
         <div className="tb-screen">
           <WalletProvider viewer={viewer} initialWallet={wallet}>
             <div className="tb-notch" />
-            <TopBar />
+            {!immersive && <TopBar />}
             {children}
-            <BottomNav />
+            {!immersive && <BottomNav />}
           </WalletProvider>
         </div>
       </div>
