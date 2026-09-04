@@ -253,7 +253,7 @@ async function produceEpisode(slug: SeriesSlug, opts: {
         if (!prev?.file) throw new Error(`Passo ${step.index - 1} em falta para extensão`);
         instance.video = opts.inline || !prev.uri
           ? { inlineData: { mimeType: "video/mp4", data: readFileSync(prev.file).toString("base64") } }
-          : { uri: prev.uri, mimeType: "video/mp4" };
+          : { uri: prev.uri };
         parameters.resolution = "720p";
       } else {
         parameters.durationSeconds = step.durationSeconds;
