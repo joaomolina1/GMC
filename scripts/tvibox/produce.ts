@@ -10,6 +10,7 @@
  *   --mode extend|shots extend = 8 s + extensões de 7 s no mesmo vídeo (continuidade real, 720p);
  *                       shots  = um clip de 8 s por beat, concatenados (permite 1080p)
  *   --model quality|fast|lite   veo-3.1-generate-preview | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
+ *                       (uma cadeia em curso pode ser retomada com outro modelo — a quota diária é por modelo)
  *   --resolution 720p|1080p     (extend força 720p)
  *   --person allow_all|allow_adult   (por omissão allow_all; a API recusa allow_adult em texto→vídeo)
  *   --out <dir>         diretório de trabalho/saída (por omissão /tmp/tvibox/final)
@@ -45,6 +46,8 @@ interface StepState {
   file?: string;
   durationSeconds: number;
   completedAt?: string;
+  /** Modelo que gerou este passo (uma cadeia pode misturar fast/quality quando a quota de um esgota). */
+  model?: string;
 }
 
 interface JobState {
@@ -227,8 +230,12 @@ async function produceEpisode(slug: SeriesSlug, opts: {
   if (!opts.key) throw new Error("GEMINI_API_KEY em falta — define a variável de ambiente ou usa --dry-run");
 
   let state = loadState(stateFile);
-  if (!state || state.mode !== opts.mode || state.model !== opts.model) {
+  if (!state || state.mode !== opts.mode) {
     state = { slug, episode: sp.episode, mode: opts.mode, model: opts.model, resolution: opts.resolution, steps: [] };
+  } else if (state.model !== opts.model) {
+    // A extensão Veo aceita qualquer vídeo Veo, por isso os passos já feitos com outro modelo são reutilizados.
+    log(`a retomar cadeia iniciada com ${state.model} usando ${opts.model} (quota por modelo)`);
+    state.model = opts.model;
   }
   if (opts.fromStep >= 0) state.steps = state.steps.filter((s) => s.index < opts.fromStep);
   await mirrorJob(state, "running");
@@ -262,7 +269,7 @@ async function produceEpisode(slug: SeriesSlug, opts: {
 
       log(`passo ${step.index}/${plan.length - 1} (${step.kind}) — a submeter…`);
       const operation = await startOperation(opts.key, opts.model, { instances: [instance], parameters });
-      const rec: StepState = { index: step.index, kind: step.kind, operation, durationSeconds: step.durationSeconds };
+      const rec: StepState = { index: step.index, kind: step.kind, operation, durationSeconds: step.durationSeconds, model: opts.model };
       state.steps = [...state.steps.filter((s) => s.index !== step.index), rec].sort((a, b) => a.index - b.index);
       writeFileSync(stateFile, JSON.stringify(state, null, 2));
 
