@@ -13,6 +13,10 @@
     "mcp:dev": "npm run dev:http --prefix mcp",
     "mcp:install": "npm install --prefix mcp",
     "mcp:test": "npm test --prefix mcp",
+    "worker:install": "npm install --prefix worker",
+    "worker:dev": "npm run dev --prefix worker",
+    "worker:test": "npm test --prefix worker",
+    "worker:typecheck": "npm run typecheck --prefix worker",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -32,6 +36,7 @@
     "react-aria-components": "1.8.0",
     "react-dom": "19.1.0",
     "tailwind-merge": "3.3.0",
+    "tus-js-client": "^4.3.1",
     "xlsx": "0.18.5",
     "zod": "3.25.42"
   },

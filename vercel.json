@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/sync-models",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/clips-watchdog",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
