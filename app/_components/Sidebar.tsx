@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Clapperboard,
   LayoutDashboard,
   Workflow,
   Shield,
@@ -24,6 +25,10 @@ const navGroups: (
       { href: "/", icon: LayoutDashboard, label: "Agentes" },
       { href: "/flows", icon: Workflow, label: "Flows" },
     ],
+  },
+  {
+    title: "Zonas",
+    items: [{ href: "/tvibox", icon: Clapperboard, label: "TVI Box" }],
   },
   ...(showAdmin
     ? [

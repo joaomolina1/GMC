@@ -29,26 +29,43 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
-  const isPublicRoute =
-    request.nextUrl.pathname.startsWith("/auth") ||
-    request.nextUrl.pathname === "/login";
-  const isV1Api = request.nextUrl.pathname.startsWith("/api/v1/");
+  const pathname = request.nextUrl.pathname;
+  const isAuthRoute = pathname.startsWith("/login");
+  // TVI BOX tem o seu próprio ecrã de entrada (marca própria) sobre a mesma base de utilizadores.
+  const isTviboxAuthRoute = pathname === "/tvibox/entrar";
+  const isTvibox = pathname === "/tvibox" || pathname.startsWith("/tvibox/");
+  const isPublicRoute = pathname.startsWith("/auth") || pathname === "/login" || isTviboxAuthRoute;
+  const isV1Api = pathname.startsWith("/api/v1/");
   // Cron handlers authenticate with CRON_SECRET inside the route, not a user cookie.
-  const isCronApi = request.nextUrl.pathname.startsWith("/api/cron/");
+  const isCronApi = pathname.startsWith("/api/cron/");
 
   if (!user && !isPublicRoute && !isV1Api && !isCronApi) {
-    if (request.nextUrl.pathname.startsWith("/api/")) {
+    if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    if (isTvibox) {
+      url.pathname = "/tvibox/entrar";
+      url.search = pathname === "/tvibox" ? "" : `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`;
+    } else {
+      url.pathname = "/login";
+      url.search = "";
+    }
     return NextResponse.redirect(url);
   }
 
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && isTviboxAuthRoute) {
+    const url = request.nextUrl.clone();
+    const next = request.nextUrl.searchParams.get("next");
+    url.pathname = next && next.startsWith("/tvibox") && !next.startsWith("//") ? next.split("?")[0] : "/tvibox";
+    url.search = next && next.includes("?") ? `?${next.split("?")[1]}` : "";
     return NextResponse.redirect(url);
   }
 
