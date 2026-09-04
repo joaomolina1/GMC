@@ -72,8 +72,11 @@ Feed vertical à DramaBox sobre a mesma base de utilizadores (`profiles`), com a
 (paleta escura, vermelho `#ca234d`, logótipo com corte diagonal azul/laranja/amarelo). Mobile-first: em ecrãs
 pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóvel.
 
-- **Rotas** — `/tvibox` (Para Ti), `/tvibox/series`, `/tvibox/series/[slug]`, `/tvibox/carteira`, `/tvibox/perfil`,
-  `/tvibox/lista`, `/tvibox/entrar` (login com marca própria)
+- **Rotas** — `/tvibox` (Para Ti: um banner por série, pré-visualização muda), `/tvibox/ver/[slug]` (player imersivo:
+  EP1 → EP2 → EP3 por scroll, sem texto sobre o vídeo, paywall no episódio bloqueado), `/tvibox/series`,
+  `/tvibox/series/[slug]`, `/tvibox/carteira`, `/tvibox/perfil`, `/tvibox/lista`, `/tvibox/entrar` (login com marca própria)
+- **Estúdio (backoffice)** — `/admin/tvibox` (admins): criar/editar séries e episódios, upload direto de vídeo 9:16,
+  poster e legendas WebVTT para o Storage (URL assinado), estados Rascunho / Em breve (cliffhanger) / Publicado
 - **Economia** — moedas (bónus de boas-vindas, check-in diário com sequência, anúncios recompensados, pacotes
   simulados, TVI Box+), desbloqueio atómico via funções SQL `tvibox_*`
 - **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, legendas e controlo parental
