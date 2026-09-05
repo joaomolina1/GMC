@@ -1,3 +1,4 @@
+import { SCREENPLAYS_EP2 } from "./screenplays-ep2";
 import type { Screenplay, SeriesSlug } from "./types";
 
 /**
@@ -252,13 +253,13 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
     beats: [
       {
         dur: 8,
-        shot: "Night bedroom in moonlight; Paulo asleep. On his nightstand a phone screen lights up reading 'Número desconhecido' and vibrates. Marta stirs and opens her eyes.",
+        shot: "Night bedroom in moonlight; Paulo asleep. On his nightstand his phone screen lights up with an incoming call and vibrates. Marta stirs and opens her eyes.",
         lines: [],
         sfx: "phone vibrating on wood, wind outside",
       },
       {
         dur: 7,
-        shot: "Close on the clock: 03:04. Marta looks at Paulo, then at the phone. She hesitates, then answers in a whisper.",
+        shot: "Close on the bedside clock showing a few minutes past three. Marta looks at Paulo, then at the phone. She hesitates, then answers in a whisper.",
         lines: [{ who: "Marta", text: "Estou sim?", tone: "whisper" }],
       },
       {
@@ -280,24 +281,19 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
       },
       {
         dur: 7,
-        shot: "She looks back at sleeping Paulo, breathes, and silently lifts his car keys from the dresser.",
+        shot: "She looks back at sleeping Paulo, silently lifts his car keys from the dresser and slips out; exterior gravel courtyard in cold blue moonlight as she opens the car door.",
         lines: [],
-        sfx: "keys barely clinking, floorboard creak",
+        sfx: "keys barely clinking, floorboard creak, gravel, car door",
       },
       {
         dur: 7,
-        shot: "Exterior gravel courtyard, cold blue. She opens the car and the glovebox: inside, a second phone and a hotel key card printed 'Hotel Palácio · 214'.",
-        lines: [],
-        sfx: "gravel, car door, glovebox click",
-      },
-      {
-        dur: 7,
-        shot: "The second phone lights up by itself with a text: 'Ela já está a ver? 🙂'. Marta drops it on the seat.",
+        shot: "Inside the glovebox: a second phone and a hotel key card with a gold crest and the room number 214. Marta holds them up in the moonlight, hands shaking.",
         lines: [{ who: "Marta", text: "Meu Deus...", tone: "breathless" }],
+        sfx: "glovebox click, wind",
       },
       {
         dur: 7,
-        shot: "Close on her own phone still on the call. The voice returns. Marta slowly turns toward the house.",
+        shot: "The second phone lights up in her hand with a new message. She reads it, drops it on the seat and steps back. Her own phone is still on the call, pressed to her ear.",
         lines: [{ who: "Voz (mulher)", text: "Ainda estás aí, Marta? Vira-te.", tone: "phone voice, amused" }],
       },
       {
@@ -308,7 +304,15 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
       },
       {
         dur: 7,
-        shot: "Tight on Marta's face as the call ends with a beep. Then her own phone rings in her robe pocket; the screen reads 'Paulo ❤️'. Hard cut to black.",
+        shot: "Marta backs against the car, phone pressed to her ear, eyes locked on the lit window.",
+        lines: [
+          { who: "Voz (mulher)", text: "Ele vai ligar-te agora. Atende. E não lhe digas que falaste comigo.", tone: "phone voice, calm" },
+          { who: "Marta", text: "Quem és tu?", tone: "shaking whisper" },
+        ],
+      },
+      {
+        dur: 7,
+        shot: "Tight on Marta's face as the call ends with a beep. A second later her own phone rings in her hand — her husband is calling from the window above. She looks up. Hard cut to black.",
         lines: [],
         sfx: "call-ended beep, ringtone, cut to silence",
       },
@@ -843,6 +847,15 @@ export const SCREENPLAYS: Record<SeriesSlug, Screenplay> = {
 };
 
 export const PT_ACCENT_NOTE = PT;
+
+/** Todos os argumentos escritos (EP1 de cada série + episódios seguintes), por série e número. */
+export const ALL_SCREENPLAYS: Screenplay[] = [...Object.values(SCREENPLAYS), ...SCREENPLAYS_EP2].sort(
+  (a, b) => a.series.localeCompare(b.series) || a.episode - b.episode
+);
+
+export function getScreenplay(slug: SeriesSlug, episode = 1): Screenplay | undefined {
+  return ALL_SCREENPLAYS.find((sp) => sp.series === slug && sp.episode === episode);
+}
 
 export function screenplayDuration(sp: Screenplay): number {
   return sp.beats.reduce((acc, b) => acc + b.dur, 0);

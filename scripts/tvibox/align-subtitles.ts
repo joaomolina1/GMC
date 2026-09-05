@@ -14,7 +14,7 @@
  *   4. escreve o WebVTT em /tmp/tvibox/align/ e, com --publish, substitui a legenda
  *      no Storage e em tvibox_episodes.subtitles_url (com ?v= para furar a cache).
  *
- * Fonte das falas, por ordem: o argumento em lib/tvibox/screenplays.ts; o argumento
+ * Fonte das falas, por ordem: o argumento (getScreenplay — EP1 e seguintes); o argumento
  * guardado no Storage (episodes/<slug>/epN.script.vtt); a legenda já publicada.
  * Ao publicar, o argumento completo fica sempre guardado em epN.script.vtt — a legenda
  * alinhada perde as falas não ditas e não serviria de fonte para uma nova passagem.
@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { alignLinesToWords, linesFromVtt, type AsrWord, type ScriptLine } from "../../lib/tvibox/align";
 import { TVIBOX_BUCKET, episodeScriptPath, episodeSubtitlesPath, publicUrl } from "../../lib/tvibox/media";
-import { SCREENPLAYS } from "../../lib/tvibox/screenplays";
+import { getScreenplay } from "../../lib/tvibox/screenplays";
 import { cuesToVtt } from "../../lib/tvibox/subtitles";
 import type { SeriesSlug } from "../../lib/tvibox/types";
 import { loadLocalEnv, log, serviceClient, supabaseUrl } from "./env";
@@ -77,8 +77,8 @@ function bestAlignment(lines: ScriptLine[], wav: string, promptFile: string, mod
 type Sb = ReturnType<typeof serviceClient>;
 
 async function scriptLines(sb: Sb, slug: string, number: number, currentVtt: string | null): Promise<{ lines: ScriptLine[]; source: string }> {
-  const sp = SCREENPLAYS[slug as SeriesSlug];
-  if (sp && sp.episode === number) {
+  const sp = getScreenplay(slug as SeriesSlug, number);
+  if (sp) {
     return { lines: sp.beats.flatMap((b) => b.lines.map((l) => ({ who: l.who, text: l.text }))), source: "argumento" };
   }
   const { data: saved } = await sb.storage.from(TVIBOX_BUCKET).download(episodeScriptPath(slug, number));

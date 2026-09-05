@@ -34,6 +34,21 @@ export function nameTokens(name: string): string[] {
     .filter((t) => t.length >= 3 && !TITLES.has(t));
 }
 
+/**
+ * Nome curto para os prompts (título + primeiro nome). Nomes completos como "Rodrigo Sequeira"
+ * ou "Tiago Ferreira" coincidem com pessoas reais e o Veo bloqueia o pedido ("celebrity reference").
+ */
+export function promptName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts.findIndex((t) => !TITLES.has(t.toLowerCase().replace(/[.,]/g, "")));
+  return first < 0 ? name : parts.slice(0, first + 1).join(" ");
+}
+
+/** Substitui os nomes completos do elenco pelo nome curto em todo o prompt (Characters, Action, Dialogue). */
+function shortenNames(text: string, cast: CastMember[]): string {
+  return cast.reduce((acc, c) => acc.split(c.name).join(promptName(c.name)), text);
+}
+
 /** Personagens que aparecem no beat (pelas falas ou por menção no plano). */
 export function detectCharacters(beat: Beat, cast: CastMember[]): CastMember[] {
   const hay = `${beat.shot} ${beat.lines.map((l) => l.who).join(" ")}`.toLowerCase();
@@ -60,7 +75,7 @@ function soundBlock(beat: Beat): string {
 export function buildOpeningPrompt(sp: Screenplay): string {
   const beat = sp.beats[0];
   const chars = detectCharacters(beat, sp.cast);
-  return [
+  const prompt = [
     sp.visualBible,
     "Vertical 9:16 portrait composition.",
     `Setting: ${sp.setting}`,
@@ -72,14 +87,16 @@ export function buildOpeningPrompt(sp: Screenplay): string {
   ]
     .filter(Boolean)
     .join(" ");
+  return shortenNames(prompt, sp.cast);
 }
 
 export function buildExtensionPrompt(sp: Screenplay, index: number): string {
   const beat = sp.beats[index];
   if (!beat) throw new Error(`Beat ${index} não existe`);
   const chars = detectCharacters(beat, sp.cast);
-  return [
-    "Continue the same scene seamlessly: same actors, same faces, same wardrobe, same lighting and camera language. Vertical 9:16.",
+  const prompt = [
+    // Sem "same actors/faces": o filtro de semelhança do Veo bloqueia extensões com essa formulação.
+    "Continue the same scene seamlessly, keeping the same wardrobe, lighting and camera language. Vertical 9:16.",
     castBlock(chars),
     `Action: ${beat.shot}`,
     dialogueBlock(beat),
@@ -88,6 +105,7 @@ export function buildExtensionPrompt(sp: Screenplay, index: number): string {
   ]
     .filter(Boolean)
     .join(" ");
+  return shortenNames(prompt, sp.cast);
 }
 
 /** Prompt autónomo para um beat (modo "shots"). */
@@ -95,7 +113,7 @@ export function buildShotPrompt(sp: Screenplay, index: number): string {
   const beat = sp.beats[index];
   if (!beat) throw new Error(`Beat ${index} não existe`);
   const chars = detectCharacters(beat, sp.cast);
-  return [
+  const prompt = [
     sp.visualBible,
     "Vertical 9:16 portrait composition.",
     `Setting: ${sp.setting}`,
@@ -107,6 +125,7 @@ export function buildShotPrompt(sp: Screenplay, index: number): string {
   ]
     .filter(Boolean)
     .join(" ");
+  return shortenNames(prompt, sp.cast);
 }
 
 export interface PlannedStep {

@@ -7,7 +7,7 @@
  * Não toca em video_url/duration/render_kind quando já existem (geridos pelos scripts de media).
  */
 import { EPISODES, SERIES } from "../../lib/tvibox/catalog";
-import { SCREENPLAYS, screenplayDuration, MAX_EPISODE_SECONDS } from "../../lib/tvibox/screenplays";
+import { ALL_SCREENPLAYS, SCREENPLAYS, getScreenplay, screenplayDuration, MAX_EPISODE_SECONDS } from "../../lib/tvibox/screenplays";
 import { posterPublicUrl } from "../../lib/tvibox/media";
 import { loadLocalEnv, log, serviceClient, supabaseUrl } from "./env";
 
@@ -16,9 +16,9 @@ async function main() {
   const sb = serviceClient();
   const base = supabaseUrl();
 
-  for (const [slug, sp] of Object.entries(SCREENPLAYS)) {
+  for (const sp of ALL_SCREENPLAYS) {
     const dur = screenplayDuration(sp);
-    if (dur > MAX_EPISODE_SECONDS) throw new Error(`${slug} EP${sp.episode} excede ${MAX_EPISODE_SECONDS}s (${dur}s)`);
+    if (dur > MAX_EPISODE_SECONDS) throw new Error(`${sp.series} EP${sp.episode} excede ${MAX_EPISODE_SECONDS}s (${dur}s)`);
   }
 
   const seriesIds = new Map<string, string>();
@@ -52,7 +52,7 @@ async function main() {
   for (const e of EPISODES) {
     const series_id = seriesIds.get(e.series);
     if (!series_id) throw new Error(`Série ${e.series} não semeada`);
-    const sp = e.number === 1 ? SCREENPLAYS[e.series] : null;
+    const sp = getScreenplay(e.series, e.number) ?? null;
     const seed = SERIES.find((s) => s.slug === e.series)!;
 
     const { data: existing } = await sb

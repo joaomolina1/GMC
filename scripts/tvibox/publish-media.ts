@@ -1,22 +1,24 @@
 /**
  * Publica media TVI BOX no Supabase Storage (bucket público `tvibox`) e atualiza o catálogo.
  *
- *   npx tsx scripts/tvibox/publish-media.ts --posters <dir> --frames <dir> --videos <dir> [--kind animatic|final] [--series a,b]
+ *   npx tsx scripts/tvibox/publish-media.ts --posters <dir> --frames <dir> --videos <dir> [--kind animatic|final] [--series a,b] [--episode N]
  *
  * - posters/<slug>.jpg           → posters/<slug>.jpg              (tvibox_series.poster_url)
- * - frames/<slug>_f1.jpg         → episodes/<slug>/ep1-poster.jpg  (tvibox_episodes.poster_url)
- * - videos/<slug>-ep1-<kind>.mp4 → episodes/<slug>/ep1-<kind>.mp4  (video_url, duration, render_kind, status=published)
- * - legendas WebVTT geradas do argumento → episodes/<slug>/ep1.pt.vtt (subtitles_url; só para renders finais)
+ * - frames/<slug>_f1.jpg         → episodes/<slug>/epN-poster.jpg  (tvibox_episodes.poster_url)
+ * - videos/<slug>-epN-<kind>.mp4 → episodes/<slug>/epN-<kind>.mp4  (video_url, duration, render_kind, status=published)
+ * - legendas WebVTT geradas do argumento → episodes/<slug>/epN.pt.vtt (subtitles_url; só para renders finais)
+ *
+ * N = --episode (por omissão 1); tem de existir argumento para esse episódio.
  *
  * Um render "animatic" nunca substitui um render "final" já publicado.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { SCREENPLAYS } from "../../lib/tvibox/screenplays";
-import { beatsToVtt } from "../../lib/tvibox/subtitles";
+import { SCREENPLAYS, getScreenplay } from "../../lib/tvibox/screenplays";
+import { beatsToCues, beatsToVtt, cuesToVtt } from "../../lib/tvibox/subtitles";
 import { TVIBOX_BUCKET, episodePosterPath, episodeSubtitlesPath, episodeVideoPath, posterPath, publicUrl } from "../../lib/tvibox/media";
-import type { SeriesSlug } from "../../lib/tvibox/types";
+import type { Screenplay, SeriesSlug } from "../../lib/tvibox/types";
 import { loadLocalEnv, log, serviceClient, supabaseUrl } from "./env";
 
 function arg(name: string, def?: string): string | undefined {
@@ -24,9 +26,44 @@ function arg(name: string, def?: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : def;
 }
 
+function probeSeconds(file: string): number {
+  return Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim());
+}
+
 function probeDuration(file: string): number {
-  const out = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim();
-  return Math.round(Number(out));
+  return Math.round(probeSeconds(file));
+}
+
+/** Genérico TVI BOX que o produce.ts antepõe ao vídeo Veo. */
+const BUMPER_SECONDS = 1.8;
+
+/**
+ * Legendas alinhadas com o render. Em modo "shots" cada beat é um clip independente de ~8 s
+ * (não os 7 s do argumento), por isso os instantes vêm das durações reais dos clips
+ * guardadas em <videos>/state/<slug>-epN.json pelo produce.ts.
+ */
+function subtitlesFor(slug: SeriesSlug, sp: Screenplay, videosDir: string): string {
+  const stateFile = join(videosDir, "state", `${slug}-ep${sp.episode}.json`);
+  if (existsSync(stateFile)) {
+    const state = JSON.parse(readFileSync(stateFile, "utf8")) as {
+      mode?: string;
+      steps?: { index: number; file?: string; durationSeconds?: number }[];
+    };
+    if (state.mode === "shots" && state.steps?.length === sp.beats.length) {
+      const durations = [...state.steps]
+        .sort((a, b) => a.index - b.index)
+        .map((s) => (s.file && existsSync(s.file) ? probeSeconds(s.file) : (s.durationSeconds ?? 8)));
+      const starts: number[] = [];
+      let t = BUMPER_SECONDS;
+      for (const d of durations) {
+        starts.push(t);
+        t += d;
+      }
+      // Os beats do argumento têm 7 s; os clips têm ~8 s — o 1.º parâmetro só serve para o offset, os instantes vêm de `starts`.
+      return cuesToVtt(beatsToCues(sp.beats, BUMPER_SECONDS, 0.4, 0.25, starts));
+    }
+  }
+  return beatsToVtt(sp.beats, BUMPER_SECONDS);
 }
 
 async function upload(sb: ReturnType<typeof serviceClient>, path: string, body: Buffer | string, contentType: string) {
@@ -42,8 +79,9 @@ async function main() {
   const framesDir = arg("frames") ? resolve(arg("frames") as string) : null;
   const videosDir = arg("videos") ? resolve(arg("videos") as string) : null;
   const kind = (arg("kind", "animatic") as "animatic" | "final") ?? "animatic";
+  const episode = Math.max(1, Number(arg("episode", "1")) || 1);
   const only = arg("series")?.split(",").map((s) => s.trim()).filter(Boolean) as SeriesSlug[] | undefined;
-  const slugs = (only?.length ? only : (Object.keys(SCREENPLAYS) as SeriesSlug[])).filter((s) => SCREENPLAYS[s]);
+  const slugs = (only?.length ? only : (Object.keys(SCREENPLAYS) as SeriesSlug[])).filter((s) => getScreenplay(s, episode));
 
   const { data: seriesRows, error: sErr } = await sb.from("tvibox_series").select("id, slug");
   if (sErr) throw sErr;
@@ -55,7 +93,11 @@ async function main() {
       log(`série ${slug} não existe na BD — corre seed.ts primeiro`);
       continue;
     }
-    const sp = SCREENPLAYS[slug];
+    const sp = getScreenplay(slug, episode);
+    if (!sp) {
+      log(`${slug}: sem argumento para o EP${episode} — ignorado`);
+      continue;
+    }
 
     if (postersDir) {
       const f = join(postersDir, `${slug}.jpg`);
@@ -81,7 +123,7 @@ async function main() {
     const patch: Record<string, unknown> = {};
 
     if (framesDir) {
-      const f = join(framesDir, `${slug}_f1.jpg`);
+      const f = join(framesDir, sp.episode === 1 ? `${slug}_f1.jpg` : `${slug}-ep${sp.episode}_f1.jpg`);
       if (existsSync(f)) {
         patch.poster_url = await upload(sb, episodePosterPath(slug, sp.episode), readFileSync(f), "image/jpeg");
       }
@@ -101,7 +143,7 @@ async function main() {
           patch.published_at = new Date().toISOString();
           if (kind === "final") {
             // Legendas só nos renders com voz; o animatic já as tem gravadas na imagem.
-            patch.subtitles_url = await upload(sb, episodeSubtitlesPath(slug, sp.episode), beatsToVtt(sp.beats, 1.8), "text/vtt");
+            patch.subtitles_url = await upload(sb, episodeSubtitlesPath(slug, sp.episode), subtitlesFor(slug, sp, videosDir), "text/vtt");
           } else {
             patch.subtitles_url = null;
           }

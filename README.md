@@ -82,7 +82,8 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
 - **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, controlo parental
 - **Legendas** — desligadas por defeito; o botão **CC** no player liga-as só para a sessão (sessionStorage, sem
   persistência na conta). Os tempos vêm do alinhamento à fala real (`tvibox:align`), não do argumento
-- **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos em `lib/tvibox/screenplays.ts`
+- **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos do EP1 em
+  `lib/tvibox/screenplays.ts` e dos episódios seguintes em `lib/tvibox/screenplays-ep2.ts` (`getScreenplay(slug, n)`)
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
 ### Produção de conteúdos
@@ -94,6 +95,7 @@ npm run tvibox:publish -- --posters <dir> --frames <dir> --videos <dir> --kind a
 npm run tvibox:plan                                   # prompts Veo 3.1 + custo estimado (sem chamar a API)
 npm run tvibox:produce -- --check                     # valida GEMINI_API_KEY e o acesso ao modelo Veo
 npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-PT e lip sync (1 série primeiro)
+npm run tvibox:produce -- --series sangue --episode 2 --model fast --publish   # episódio seguinte (precisa de argumento)
 npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível se falhar (repete o comando)
 npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legendas no instante exato da fala
 ```
@@ -102,7 +104,14 @@ npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legend
 (`scripts/tvibox/asr.py`, faster-whisper em CPU — `pip install faster-whisper`), alinha as falas do argumento às
 palavras reconhecidas (`lib/tvibox/align.ts`) e publica um novo WebVTT. Falas que o Veo não disse ficam de fora;
 o argumento completo fica guardado em `episodes/<slug>/epN.script.vtt` para repetir o processo. Correr sempre
-depois de `tvibox:produce` ou de substituir um vídeo no Estúdio.
+depois de `tvibox:produce`, `tvibox:publish` ou de substituir um vídeo no Estúdio.
+
+Quotas Veo (preview): ~10 pedidos/dia por modelo — um episódio de 10 beats esgota um modelo; a cadeia pode ser
+retomada com outro (`--model quality`) porque a extensão aceita qualquer vídeo Veo. Alternativa sem quota diária:
+**Wan 3.0 (Higgsfield)** com referências de imagem das personagens (5 clips de 15 s, 2 beats por clip, ≈190 créditos
+por episódio) — foi assim que se produziram *A Patroa* (EP1–EP2) e *Traição em Sintra* (EP1). Os episódios Wan são
+montados com o mesmo genérico + loudnorm do `produce.ts` e publicados com `tvibox:publish --kind final`, que lê as
+durações reais dos clips de `<videos>/state/<slug>-epN.json` para alinhar as legendas.
 
 `GEMINI_API_KEY` vem de `.env.local` ou dos Secrets do Cursor (Cloud Agents → Secrets); os secrets só são
 injetados em agentes **novos**, por isso o pipeline tem de correr num Cloud Agent iniciado depois de criar o segredo.
