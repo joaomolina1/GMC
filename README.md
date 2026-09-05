@@ -103,8 +103,9 @@ npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legend
 `tvibox:align` extrai o áudio do render publicado, reconhece a fala com timestamps por palavra
 (`scripts/tvibox/asr.py`, faster-whisper em CPU — `pip install faster-whisper`), alinha as falas do argumento às
 palavras reconhecidas (`lib/tvibox/align.ts`) e publica um novo WebVTT. Falas que o Veo não disse ficam de fora;
-o argumento completo fica guardado em `episodes/<slug>/epN.script.vtt` para repetir o processo. Correr sempre
-depois de `tvibox:produce`, `tvibox:publish` ou de substituir um vídeo no Estúdio.
+o argumento completo fica guardado em `episodes/<slug>/epN.script.vtt` para repetir o processo. `tvibox:publish`
+(e por isso `tvibox:produce --publish`) corre-o automaticamente para cada render final quando o faster-whisper está
+instalado; correr à mão depois de substituir um vídeo no Estúdio.
 
 Quotas Veo (preview): ~10 pedidos/dia por modelo — um episódio de 10 beats esgota um modelo; a cadeia pode ser
 retomada com outro (`--model quality`) porque a extensão aceita qualquer vídeo Veo. Alternativa sem quota diária:

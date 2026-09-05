@@ -1,12 +1,13 @@
 /**
  * Publica media TVI BOX no Supabase Storage (bucket público `tvibox`) e atualiza o catálogo.
  *
- *   npx tsx scripts/tvibox/publish-media.ts --posters <dir> --frames <dir> --videos <dir> [--kind animatic|final] [--series a,b] [--episode N]
+ *   npx tsx scripts/tvibox/publish-media.ts --posters <dir> --frames <dir> --videos <dir> [--kind animatic|final] [--series a,b] [--episode N] [--no-align]
  *
  * - posters/<slug>.jpg           → posters/<slug>.jpg              (tvibox_series.poster_url)
  * - frames/<slug>_f1.jpg         → episodes/<slug>/epN-poster.jpg  (tvibox_episodes.poster_url)
  * - videos/<slug>-epN-<kind>.mp4 → episodes/<slug>/epN-<kind>.mp4  (video_url, duration, render_kind, status=published)
- * - legendas WebVTT geradas do argumento → episodes/<slug>/epN.pt.vtt (subtitles_url; só para renders finais)
+ * - legendas WebVTT geradas do argumento → episodes/<slug>/epN.pt.vtt (subtitles_url; só para renders finais),
+ *   realinhadas à fala real no fim via align-subtitles.ts quando o faster-whisper está instalado (salta com --no-align)
  *
  * N = --episode (por omissão 1); tem de existir argumento para esse episódio.
  *
@@ -86,6 +87,7 @@ async function main() {
   const { data: seriesRows, error: sErr } = await sb.from("tvibox_series").select("id, slug");
   if (sErr) throw sErr;
   const seriesId = new Map((seriesRows ?? []).map((r) => [r.slug as string, r.id as string]));
+  const toAlign: { slug: string; episode: number }[] = [];
 
   for (const slug of slugs) {
     const sid = seriesId.get(slug);
@@ -148,6 +150,7 @@ async function main() {
             patch.subtitles_url = null;
           }
           log(`${slug}: vídeo ${kind} (${patch.duration_seconds}s) → ${url}`);
+          if (kind === "final") toAlign.push({ slug, episode: sp.episode });
         }
       }
     }
@@ -158,6 +161,28 @@ async function main() {
     }
   }
   log("publicação concluída");
+
+  // As legendas acima têm tempos nominais (do argumento). Com o faster-whisper instalado,
+  // alinham-se logo à fala real; sem ele fica o aviso para correr `tvibox:align` depois.
+  if (toAlign.length && !process.argv.includes("--no-align")) {
+    if (hasWhisper()) {
+      for (const { slug, episode } of toAlign) {
+        log(`${slug}: a alinhar legendas do EP${episode} à fala…`);
+        execFileSync("npx", ["tsx", "scripts/tvibox/align-subtitles.ts", "--series", slug, "--ep", String(episode), "--publish"], { stdio: "inherit" });
+      }
+    } else {
+      log("faster-whisper não instalado (pip install faster-whisper) — corre depois: npm run tvibox:align -- --publish");
+    }
+  }
+}
+
+function hasWhisper(): boolean {
+  try {
+    execFileSync("python3", ["-c", "import faster_whisper"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 main().catch((e) => {
