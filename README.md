@@ -99,7 +99,10 @@ npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível
 
 Quotas Veo (preview): ~10 pedidos/dia por modelo — um episódio de 10 beats esgota um modelo; a cadeia pode ser
 retomada com outro (`--model quality`) porque a extensão aceita qualquer vídeo Veo. Alternativa sem quota diária:
-**Wan 3.0 (Higgsfield)** com referências de imagem das personagens — foi assim que se produziu *A Patroa*.
+**Wan 3.0 (Higgsfield)** com referências de imagem das personagens (5 clips de 15 s, 2 beats por clip, ≈190 créditos
+por episódio) — foi assim que se produziram *A Patroa* (EP1–EP2) e *Traição em Sintra* (EP1). Os episódios Wan são
+montados com o mesmo genérico + loudnorm do `produce.ts` e publicados com `tvibox:publish --kind final`, que lê as
+durações reais dos clips de `<videos>/state/<slug>-epN.json` para alinhar as legendas.
 
 `GEMINI_API_KEY` vem de `.env.local` ou dos Secrets do Cursor (Cloud Agents → Secrets); os secrets só são
 injetados em agentes **novos**, por isso o pipeline tem de correr num Cloud Agent iniciado depois de criar o segredo.
