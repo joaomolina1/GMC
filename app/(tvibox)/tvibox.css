@@ -555,6 +555,12 @@
   transition: opacity 0.35s;
   pointer-events: none;
 }
+/* Na moldura de desktop o "notch" simulado (30 px) tapava o «EP n / N»; no telemóvel manda o safe-area. */
+@media (min-width: 481px) {
+  .tb-chrome {
+    padding-top: 36px;
+  }
+}
 .tb-chrome.hidden {
   opacity: 0;
 }

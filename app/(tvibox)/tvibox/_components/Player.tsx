@@ -8,7 +8,7 @@ import type { FeedItem, SeriesRow } from "@lib/tvibox/types";
 import { useSubtitles } from "./useSubtitles";
 import { useWallet } from "./WalletProvider";
 
-const CHROME_MS = 2800;
+const CHROME_MS = 3500;
 const SAVE_EVERY_SECONDS = 5;
 
 /**
@@ -25,6 +25,7 @@ export function Player({ series, initialItems, startNumber }: { series: SeriesRo
   const [active, setActive] = useState(startIndex);
   const [muted, setMuted] = useState(false);
   const [chrome, setChrome] = useState(true);
+  const [paused, setPaused] = useState(false);
   const [saved, setSaved] = useState(initialItems[0]?.saved ?? false);
   const feedRef = useRef<HTMLDivElement>(null);
   const chromeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,6 +136,7 @@ export function Player({ series, initialItems, startNumber }: { series: SeriesRo
             muted={muted}
             subtitles={subtitles}
             onTap={showChrome}
+            onPausedChange={setPaused}
             onAutoplayBlocked={() => setMuted(true)}
             onUnlock={() => onUnlock(item)}
             onProgress={(pos, done) => onProgress(item, pos, done)}
@@ -161,7 +163,8 @@ export function Player({ series, initialItems, startNumber }: { series: SeriesRo
         </article>
       </div>
 
-      <div className={`tb-chrome ${chrome || atEnd ? "" : "hidden"}`} onPointerDown={showChrome}>
+      {/* Com o vídeo em pausa a barra fica visível: é aí que se mexe nas legendas e no som. */}
+      <div className={`tb-chrome ${chrome || atEnd || paused ? "" : "hidden"}`} onPointerDown={showChrome}>
         <Link href="/tvibox" className="tb-chrome-btn" aria-label="Voltar">
           ‹
         </Link>
@@ -207,6 +210,7 @@ function PlayerCard({
   muted,
   subtitles,
   onTap,
+  onPausedChange,
   onAutoplayBlocked,
   onUnlock,
   onProgress,
@@ -219,6 +223,7 @@ function PlayerCard({
   muted: boolean;
   subtitles: boolean;
   onTap: () => void;
+  onPausedChange: (paused: boolean) => void;
   onAutoplayBlocked: () => void;
   onUnlock: () => void;
   onProgress: (position: number, completed: boolean) => void;
@@ -236,13 +241,19 @@ function PlayerCard({
   const mutedRef = useRef(muted);
   const resumeAtRef = useRef(item.resumeAt);
   const blockedRef = useRef(onAutoplayBlocked);
+  const pausedChangeRef = useRef(onPausedChange);
   mutedRef.current = muted;
   resumeAtRef.current = item.resumeAt;
   blockedRef.current = onAutoplayBlocked;
+  pausedChangeRef.current = onPausedChange;
 
   const posterUrl = episode.poster_url || series.poster_url || undefined;
   const hasVideo = !item.locked && !!episode.video_url;
   const cost = unlockCost(episode, plusActive);
+
+  useEffect(() => {
+    if (active) pausedChangeRef.current(paused && hasVideo);
+  }, [active, paused, hasVideo]);
 
   useEffect(() => {
     const v = videoRef.current;
