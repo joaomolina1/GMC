@@ -7,6 +7,7 @@
  *
  * Opções:
  *   --series a,b        slugs (por omissão: todas as séries com argumento)
+ *   --episode N         número do episódio (por omissão 1; tem de existir argumento em lib/tvibox/screenplays*.ts)
  *   --mode extend|shots extend = 8 s + extensões de 7 s no mesmo vídeo (continuidade real, 720p);
  *                       shots  = um clip de 8 s por beat, concatenados (permite 1080p)
  *   --model quality|fast|lite   veo-3.1-generate-preview | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
@@ -27,7 +28,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { SCREENPLAYS, screenplayDuration } from "../../lib/tvibox/screenplays";
+import { SCREENPLAYS, getScreenplay, screenplayDuration } from "../../lib/tvibox/screenplays";
 import { NEGATIVE_PROMPT, VEO_MODELS, VEO_PROMPT_TOKEN_LIMIT, planEpisode, type PlannedStep } from "../../lib/tvibox/veo-prompts";
 import type { SeriesSlug } from "../../lib/tvibox/types";
 import { geminiKey, loadLocalEnv, log, serviceClient } from "./env";
@@ -195,6 +196,7 @@ async function mirrorJob(state: JobState, status: "running" | "completed" | "fai
 
 async function produceEpisode(slug: SeriesSlug, opts: {
   key: string | null;
+  episode: number;
   mode: "extend" | "shots";
   model: string;
   modelKey: keyof typeof VEO_MODELS;
@@ -206,10 +208,12 @@ async function produceEpisode(slug: SeriesSlug, opts: {
   dryRun: boolean;
   bumper: string;
 }) {
-  const sp = SCREENPLAYS[slug];
+  const sp = getScreenplay(slug, opts.episode);
+  if (!sp) throw new Error(`Não há argumento para ${slug} EP${opts.episode}`);
   const plan = planEpisode(sp, opts.mode);
   const total = screenplayDuration(sp);
-  const work = join(opts.out, "work", slug);
+  // EP1 mantém a pasta histórica work/<slug>; episódios seguintes têm pasta própria para não sobrepor os passos.
+  const work = join(opts.out, "work", sp.episode === 1 ? slug : `${slug}-ep${sp.episode}`);
   const stateDir = join(opts.out, "state");
   mkdirSync(work, { recursive: true });
   mkdirSync(stateDir, { recursive: true });
@@ -311,8 +315,13 @@ async function main() {
   const out = resolve(arg("out", "/tmp/tvibox/final") as string);
   const bumper = resolve(arg("bumper", "public/tvibox/bumper.png") as string);
   const fromStep = Number(arg("from-step", "-1"));
+  const episode = Math.max(1, Number(arg("episode", "1")) || 1);
   const only = arg("series")?.split(",").map((s) => s.trim()).filter(Boolean) as SeriesSlug[] | undefined;
-  const slugs = (only?.length ? only : (Object.keys(SCREENPLAYS) as SeriesSlug[])).filter((s) => SCREENPLAYS[s]);
+  const slugs = (only?.length ? only : (Object.keys(SCREENPLAYS) as SeriesSlug[])).filter((s) => getScreenplay(s, episode));
+  if (!slugs.length) {
+    console.error(`Nenhuma série tem argumento para o EP${episode}${only?.length ? ` (${only.join(", ")})` : ""}.`);
+    process.exit(2);
+  }
   const key = geminiKey();
 
   if (!dryRun && !key) {
@@ -339,7 +348,7 @@ async function main() {
   const worker = async () => {
     for (let slug = queue.shift(); slug; slug = queue.shift()) {
       try {
-        await produceEpisode(slug, { key, mode, model, modelKey, resolution, person, out, fromStep, inline: flag("inline"), dryRun, bumper });
+        await produceEpisode(slug, { key, episode, mode, model, modelKey, resolution, person, out, fromStep, inline: flag("inline"), dryRun, bumper });
         done.push(slug);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -352,7 +361,11 @@ async function main() {
 
   if (!dryRun && flag("publish") && done.length) {
     log(`a publicar renders finais (${done.join(", ")})…`);
-    execFileSync("npx", ["tsx", "scripts/tvibox/publish-media.ts", "--videos", out, "--kind", "final", "--series", done.join(",")], { stdio: "inherit" });
+    execFileSync(
+      "npx",
+      ["tsx", "scripts/tvibox/publish-media.ts", "--videos", out, "--kind", "final", "--series", done.join(","), "--episode", String(episode)],
+      { stdio: "inherit" }
+    );
   }
 
   if (failed.length) {
