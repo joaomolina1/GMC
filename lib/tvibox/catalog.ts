@@ -15,7 +15,7 @@ export const SERIES: SeriesSeed[] = [
     badge: "hot",
     palette: { from: "#7a0d14", to: "#2a0508" },
     totalEpisodes: 40,
-    sortOrder: 1,
+    sortOrder: 2,
     stats: { likes: 14200, comments: 892 },
   },
   {
@@ -28,7 +28,7 @@ export const SERIES: SeriesSeed[] = [
     badge: "new",
     palette: { from: "#0d2340", to: "#05080f" },
     totalEpisodes: 36,
-    sortOrder: 2,
+    sortOrder: 1,
     stats: { likes: 9800, comments: 511 },
   },
   {

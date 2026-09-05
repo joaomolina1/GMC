@@ -90,8 +90,8 @@ export interface Banner {
 }
 
 /**
- * Feed "Para Ti": um banner por série. Séries em curso primeiro (continuar a ver),
- * depois a ordem editorial. Só entram séries com pelo menos um episódio com vídeo.
+ * Feed "Para Ti": um banner por série, estritamente pela ordem editorial
+ * (`sort_order`, gerida no Estúdio). Só entram séries com pelo menos um episódio com vídeo.
  */
 export function buildBanners(series: SeriesRow[], episodes: EpisodeRow[], user: FeedUserState): Banner[] {
   const banners: Banner[] = [];
@@ -119,8 +119,7 @@ export function buildBanners(series: SeriesRow[], episodes: EpisodeRow[], user: 
       progressLabel: `EP ${Math.min(s.total_episodes, Math.max(1, seen + 1))}/${s.total_episodes}`,
     });
   }
-  // Estável: em curso primeiro, mantendo a ordem editorial dentro de cada grupo.
-  return banners.sort((a, b) => Number(b.started) - Number(a.started));
+  return banners;
 }
 
 /** Percentagem de progresso numa série (episódios concluídos / total anunciado). */

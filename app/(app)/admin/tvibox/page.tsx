@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clapperboard, Plus, RefreshCw, Upload, ExternalLink, Trash2, Film, Image as ImageIcon, Captions } from "lucide-react";
+import { Clapperboard, Plus, RefreshCw, Upload, ExternalLink, Trash2, Film, Image as ImageIcon, Captions, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/_design_system/Card";
 import { Badge } from "@/_design_system/Badge";
 import { Button } from "@/_design_system/Button";
@@ -215,6 +215,32 @@ export default function TviBoxStudioPage() {
     }
   }
 
+  /** Move a série uma posição para cima/baixo na ordem do feed e persiste a ordem completa. */
+  async function moveSeries(s: SeriesRow, dir: -1 | 1) {
+    const ordered = [...series].sort((a, b) => a.sort_order - b.sort_order);
+    const from = ordered.findIndex((x) => x.id === s.id);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= ordered.length) return;
+    [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+    const optimistic = ordered.map((x, i) => ({ ...x, sort_order: i + 1 }));
+    const previous = series;
+    setSeries(optimistic);
+    setBusy("reorder");
+    try {
+      const r = await api<{ series: SeriesRow[] }>("/api/tvibox/admin/series", {
+        method: "PATCH",
+        body: JSON.stringify({ order: optimistic.map((x) => x.id) }),
+      });
+      setSeries(r.series);
+      notify("ok", `«${s.title}» agora em #${to + 1} no feed`);
+    } catch (e) {
+      setSeries(previous);
+      notify("err", e instanceof Error ? e.message : "Não foi possível reordenar");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function uploadSeriesPoster(s: SeriesRow, file: File) {
     setBusy("series-poster");
     try {
@@ -390,37 +416,70 @@ export default function TviBoxStudioPage() {
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         {/* lista de séries */}
         <Card padding="sm" className="self-start">
-          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Séries (ordem editorial)</p>
+          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Séries (ordem no feed)</p>
           <div className="flex flex-col gap-1">
-            {series.map((s) => {
-              const count = episodes.filter((e) => e.series_id === s.id).length;
-              const active = s.id === selectedId;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    setSelectedId(s.id);
-                    setSeriesForm(null);
-                    setEpisodeForm(null);
-                  }}
-                  className={`flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors ${active ? "bg-brand-50 ring-1 ring-brand-100" : "hover:bg-slate-50"}`}
-                >
+            {[...series]
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((s, i, arr) => {
+                const count = episodes.filter((e) => e.series_id === s.id).length;
+                const active = s.id === selectedId;
+                return (
                   <div
-                    className="h-14 w-10 flex-none rounded-md bg-cover bg-center"
-                    style={{ backgroundImage: s.poster_url ? `url(${s.poster_url})` : `linear-gradient(155deg, ${s.palette.from}, ${s.palette.to})` }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900">{s.title}</p>
-                    <p className="truncate text-xs text-slate-500">
-                      {s.genre} · {count} ep. · #{s.sort_order}
-                    </p>
+                    key={s.id}
+                    className={`flex items-center gap-2 rounded-xl px-2 py-2 transition-colors ${active ? "bg-brand-50 ring-1 ring-brand-100" : "hover:bg-slate-50"}`}
+                  >
+                    <div className="flex flex-none flex-col text-slate-400">
+                      <button
+                        type="button"
+                        aria-label={`Subir ${s.title}`}
+                        title="Subir no feed"
+                        disabled={i === 0 || busy === "reorder"}
+                        onClick={() => moveSeries(s, -1)}
+                        className="rounded p-0.5 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-25 disabled:hover:bg-transparent"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Descer ${s.title}`}
+                        title="Descer no feed"
+                        disabled={i === arr.length - 1 || busy === "reorder"}
+                        onClick={() => moveSeries(s, 1)}
+                        className="rounded p-0.5 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-25 disabled:hover:bg-transparent"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(s.id);
+                        setSeriesForm(null);
+                        setEpisodeForm(null);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <div
+                        className="h-14 w-10 flex-none rounded-md bg-cover bg-center"
+                        style={{ backgroundImage: s.poster_url ? `url(${s.poster_url})` : `linear-gradient(155deg, ${s.palette.from}, ${s.palette.to})` }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          <span className="mr-1.5 text-xs font-semibold text-slate-400">#{i + 1}</span>
+                          {s.title}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          {s.genre} · {count} ep.
+                        </p>
+                      </div>
+                      {s.badge && <Badge tone={s.badge === "hot" ? "warning" : "brand"}>{s.badge === "hot" ? "Em alta" : "Novo"}</Badge>}
+                    </button>
                   </div>
-                  {s.badge && <Badge tone={s.badge === "hot" ? "warning" : "brand"}>{s.badge === "hot" ? "Em alta" : "Novo"}</Badge>}
-                </button>
-              );
-            })}
+                );
+              })}
             {!loading && series.length === 0 && <p className="px-2 py-6 text-center text-sm text-slate-400">Sem séries. Cria a primeira.</p>}
           </div>
+          {series.length > 1 && <p className="mt-2 px-1 text-[11px] leading-snug text-slate-400">As setas mudam a ordem em que as séries aparecem no «Para Ti». A primeira da lista é o primeiro banner.</p>}
         </Card>
 
         <div className="space-y-6">

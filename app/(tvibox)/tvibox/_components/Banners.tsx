@@ -195,7 +195,6 @@ function BannerCard({
     }
   }, [active]);
 
-  const cta = `Ver EP ${first.number}`;
   const duration = first.duration_seconds ? `${Math.round(first.duration_seconds)} s` : null;
 
   return (
@@ -242,7 +241,7 @@ function BannerCard({
         <h2>{series.title}</h2>
         <p>{shorten(series.synopsis)}</p>
         <button type="button" className="tb-banner-cta" onClick={onOpen}>
-          ▶ {cta}
+          ▶ Ver
           {duration && <small>{duration}</small>}
         </button>
       </div>

@@ -106,13 +106,18 @@ describe("buildBanners", () => {
     expect(banners[0].progressLabel).toBe("EP 1/40");
   });
 
-  it("séries em curso vêm primeiro e apontam para o episódio seguinte", () => {
+  it("mantém a ordem editorial mesmo com séries em curso; o banner abre sempre o EP 1", () => {
     const st = emptyFeedUserState();
     st.progress.set("c-1", { position: 75, completed: true });
     const banners = buildBanners(S, EPS, st);
-    expect(banners[0].series.id).toBe("c");
-    expect(banners[0]).toMatchObject({ first: { id: "c-1" }, next: { id: "c-2" }, started: true, progressLabel: "EP 2/40" });
-    expect(banners.slice(1).map((b) => b.series.id)).toEqual(["a", "b"]);
+    expect(banners.map((b) => b.series.id)).toEqual(["a", "b", "c"]);
+    expect(banners[2]).toMatchObject({ first: { id: "c-1" }, next: { id: "c-2" }, started: true, progressLabel: "EP 2/40" });
+  });
+
+  it("respeita sort_order e não a ordem do array", () => {
+    const series = [...S].reverse().map((s, i) => ({ ...s, sort_order: i === 0 ? 5 : s.sort_order }));
+    const banners = buildBanners(series, EPS, emptyFeedUserState());
+    expect(banners.map((b) => b.series.id)).toEqual(["a", "b", "c"]);
   });
 
   it("ignora séries sem nenhum episódio com vídeo", () => {
