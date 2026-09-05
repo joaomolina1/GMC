@@ -131,5 +131,6 @@ export interface WalletState {
   lastCheckin: string | null;
   plusUntil: string | null;
   adsLeft: number;
-  settings: { subtitles: boolean; parental: boolean };
+  /** Definições persistidas na conta. As legendas não entram aqui: são por sessão (ver useSubtitles). */
+  settings: { parental: boolean };
 }

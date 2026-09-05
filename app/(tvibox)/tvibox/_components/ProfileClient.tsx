@@ -4,37 +4,37 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@lib/supabase/client";
+import { useSubtitles } from "./useSubtitles";
 import { useWallet } from "./WalletProvider";
 
 export function ProfileClient({ stats }: { stats: { seen: number; following: number; unlocked: number } }) {
   const { viewer, wallet, setWallet, api, toast, plusActive } = useWallet();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [subtitles, setSubtitles] = useSubtitles();
 
   const since = new Date(viewer.memberSince).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
 
-  async function toggleSetting(key: "subtitles" | "parental") {
+  async function toggleSetting(key: "parental") {
     if (busy) return;
     const next = !wallet.settings[key];
     setBusy(key);
     setWallet({ settings: { ...wallet.settings, [key]: next } });
     try {
       await api("/api/tvibox/settings", { [key]: next }, "PATCH");
-      toast(
-        key === "subtitles"
-          ? next
-            ? "Legendas automáticas ativadas"
-            : "Legendas desativadas"
-          : next
-            ? "Controlo parental ativo — só conteúdos para todas as idades"
-            : "Controlo parental desativado"
-      );
+      toast(next ? "Controlo parental ativo — só conteúdos para todas as idades" : "Controlo parental desativado");
     } catch {
       setWallet({ settings: { ...wallet.settings, [key]: !next } });
       toast("Não foi possível guardar a definição");
     } finally {
       setBusy(null);
     }
+  }
+
+  function toggleSubtitles() {
+    const next = !subtitles;
+    setSubtitles(next);
+    toast(next ? "Legendas ligadas nesta sessão" : "Legendas desligadas");
   }
 
   async function signOut() {
@@ -86,9 +86,9 @@ export function ProfileClient({ stats }: { stats: { seen: number; following: num
             <span className="e">🛡️</span> Controlo parental
             <span className={`tb-switch ${wallet.settings.parental ? "on" : ""}`} aria-hidden />
           </button>
-          <button type="button" className="tb-pli" onClick={() => toggleSetting("subtitles")} aria-pressed={wallet.settings.subtitles}>
-            <span className="e">💬</span> Legendas automáticas (IA)
-            <span className={`tb-switch ${wallet.settings.subtitles ? "on" : ""}`} aria-hidden />
+          <button type="button" className="tb-pli" onClick={toggleSubtitles} aria-pressed={subtitles}>
+            <span className="e">💬</span> Legendas (só nesta sessão)
+            <span className={`tb-switch ${subtitles ? "on" : ""}`} aria-hidden />
           </button>
           <Link href="/tvibox/carteira" className="tb-pli">
             <span className="e">🪙</span> Carteira e subscrição

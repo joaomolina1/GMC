@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { unlockCost } from "@lib/tvibox/economy";
 import type { FeedItem, SeriesRow } from "@lib/tvibox/types";
+import { useSubtitles } from "./useSubtitles";
 import { useWallet } from "./WalletProvider";
 
 const CHROME_MS = 2800;
@@ -17,7 +18,8 @@ const SAVE_EVERY_SECONDS = 5;
  */
 export function Player({ series, initialItems, startNumber }: { series: SeriesRow; initialItems: FeedItem[]; startNumber: number }) {
   const router = useRouter();
-  const { api, unlock, wallet } = useWallet();
+  const { api, unlock } = useWallet();
+  const [subtitles, setSubtitles] = useSubtitles();
   const [items, setItems] = useState<FeedItem[]>(initialItems);
   const startIndex = Math.max(0, items.findIndex((i) => i.episode.number === startNumber));
   const [active, setActive] = useState(startIndex);
@@ -131,7 +133,7 @@ export function Player({ series, initialItems, startNumber }: { series: SeriesRo
             active={i === active}
             near={Math.abs(i - active) <= 1}
             muted={muted}
-            subtitles={wallet.settings.subtitles}
+            subtitles={subtitles}
             onTap={showChrome}
             onAutoplayBlocked={() => setMuted(true)}
             onUnlock={() => onUnlock(item)}
@@ -173,6 +175,17 @@ export function Player({ series, initialItems, startNumber }: { series: SeriesRo
             </>
           )}
         </div>
+        {!atEnd && current?.episode.subtitles_url && (
+          <button
+            type="button"
+            className={`tb-chrome-btn tb-cc ${subtitles ? "on" : ""}`}
+            aria-label={subtitles ? "Desligar legendas" : "Ligar legendas"}
+            aria-pressed={subtitles}
+            onClick={() => setSubtitles(!subtitles)}
+          >
+            CC
+          </button>
+        )}
         <button
           type="button"
           className="tb-chrome-btn"
@@ -260,7 +273,7 @@ function PlayerCard({
     const v = videoRef.current;
     if (!v) return;
     for (const t of Array.from(v.textTracks)) t.mode = subtitles ? "showing" : "hidden";
-  }, [subtitles, hasVideo]);
+  }, [subtitles, hasVideo, near]);
 
   const tap = useCallback(() => {
     onTap();
@@ -323,7 +336,7 @@ function PlayerCard({
           onPlay={() => setPaused(false)}
         >
           {episode.subtitles_url && (
-            <track kind="subtitles" src={episode.subtitles_url} srcLang="pt" label="Português" default={subtitles} />
+            <track kind="subtitles" src={episode.subtitles_url} srcLang="pt" label="Português" />
           )}
         </video>
       )}

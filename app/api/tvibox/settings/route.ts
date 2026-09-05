@@ -2,7 +2,6 @@ import { z } from "zod";
 import { fail, json, parseBody, withUser } from "@lib/tvibox/api";
 
 const schema = z.object({
-  subtitles: z.boolean().optional(),
   parental: z.boolean().optional(),
 });
 
@@ -12,7 +11,7 @@ export async function PATCH(req: Request) {
     if (body instanceof Response) return body;
     await supabase.rpc("tvibox_ensure_wallet");
     const { data: current } = await supabase.from("tvibox_wallets").select("settings").eq("user_id", userId).maybeSingle();
-    const settings = { subtitles: true, parental: false, ...(current?.settings ?? {}), ...body };
+    const settings = { parental: false, ...(current?.settings ?? {}), ...body };
     const { error } = await supabase.from("tvibox_wallets").update({ settings }).eq("user_id", userId);
     if (error) return fail(error.message, 500);
     return json({ ok: true, settings });

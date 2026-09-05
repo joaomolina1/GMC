@@ -67,7 +67,7 @@ interface WalletRow {
   plus_until: string | null;
   ads_today: number;
   ads_day: string | null;
-  settings: { subtitles?: boolean; parental?: boolean } | null;
+  settings: { parental?: boolean } | null;
 }
 
 export function toWalletState(row: WalletRow | null): WalletState {
@@ -78,10 +78,7 @@ export function toWalletState(row: WalletRow | null): WalletState {
     lastCheckin: row?.last_checkin ?? null,
     plusUntil: row?.plus_until ?? null,
     adsLeft: adsLeftToday(row?.ads_today ?? 0, row?.ads_day ?? null, today),
-    settings: {
-      subtitles: row?.settings?.subtitles ?? true,
-      parental: row?.settings?.parental ?? false,
-    },
+    settings: { parental: row?.settings?.parental ?? false },
   };
 }
 
