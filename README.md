@@ -79,7 +79,9 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   poster e legendas WebVTT para o Storage (URL assinado), estados Rascunho / Em breve (cliffhanger) / Publicado
 - **Economia** — moedas (bónus de boas-vindas, check-in diário com sequência, anúncios recompensados, pacotes
   simulados, TVI Box+), desbloqueio atómico via funções SQL `tvibox_*`
-- **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, legendas e controlo parental
+- **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, controlo parental
+- **Legendas** — desligadas por defeito; o botão **CC** no player liga-as só para a sessão (sessionStorage, sem
+  persistência na conta). Os tempos vêm do alinhamento à fala real (`tvibox:align`), não do argumento
 - **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos em `lib/tvibox/screenplays.ts`
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
@@ -93,7 +95,14 @@ npm run tvibox:plan                                   # prompts Veo 3.1 + custo 
 npm run tvibox:produce -- --check                     # valida GEMINI_API_KEY e o acesso ao modelo Veo
 npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-PT e lip sync (1 série primeiro)
 npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível se falhar (repete o comando)
+npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legendas no instante exato da fala
 ```
+
+`tvibox:align` extrai o áudio do render publicado, reconhece a fala com timestamps por palavra
+(`scripts/tvibox/asr.py`, faster-whisper em CPU — `pip install faster-whisper`), alinha as falas do argumento às
+palavras reconhecidas (`lib/tvibox/align.ts`) e publica um novo WebVTT. Falas que o Veo não disse ficam de fora;
+o argumento completo fica guardado em `episodes/<slug>/epN.script.vtt` para repetir o processo. Correr sempre
+depois de `tvibox:produce` ou de substituir um vídeo no Estúdio.
 
 `GEMINI_API_KEY` vem de `.env.local` ou dos Secrets do Cursor (Cloud Agents → Secrets); os secrets só são
 injetados em agentes **novos**, por isso o pipeline tem de correr num Cloud Agent iniciado depois de criar o segredo.

@@ -14,6 +14,11 @@ export function episodeSubtitlesPath(slug: string, number: number): string {
   return `episodes/${slug}/ep${number}.pt.vtt`;
 }
 
+/** Argumento completo (todas as falas) guardado como WebVTT — fonte para realinhar legendas. */
+export function episodeScriptPath(slug: string, number: number): string {
+  return `episodes/${slug}/ep${number}.script.vtt`;
+}
+
 export function episodePosterPath(slug: string, number: number): string {
   return `episodes/${slug}/ep${number}-poster.jpg`;
 }

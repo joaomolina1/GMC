@@ -23,7 +23,8 @@
     "tvibox:animatic": "tsx scripts/tvibox/animatic.ts",
     "tvibox:publish": "tsx scripts/tvibox/publish-media.ts",
     "tvibox:produce": "tsx scripts/tvibox/produce.ts",
-    "tvibox:plan": "tsx scripts/tvibox/produce.ts --dry-run"
+    "tvibox:plan": "tsx scripts/tvibox/produce.ts --dry-run",
+    "tvibox:align": "tsx scripts/tvibox/align-subtitles.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
