@@ -322,7 +322,8 @@ export function toReplaceWeekPayload(
       q.quadros.map((quadro) => ({
         question_number: q.number,
         idx: quadro.idx,
-        title: quadro.title,
+        // pessoa sem correspondência: guarda o nome no título para ficar visível e reassociável
+        title: quadro.title ?? (quadro.personName && !quadro.personId ? quadro.personName : null),
         person_id: quadro.personId,
         results: quadro.items.map((it) => ({
           item_key: it.key,
