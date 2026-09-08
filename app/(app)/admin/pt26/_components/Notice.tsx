@@ -14,7 +14,11 @@ export function useNotify() {
   return useContext(Ctx).notify;
 }
 
-/** Mensagem temporária (sucesso/erro) partilhada por todas as secções do back-office. */
+/**
+ * Mensagem temporária (sucesso/erro) partilhada por todas as secções do back-office.
+ * Fixa no canto inferior direito para ficar visível mesmo com a página deslocada (ex.: depois de
+ * percorrer uma pré-visualização longa).
+ */
 export function NoticeProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<{ kind: NoticeKind; text: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,7 +33,7 @@ export function NoticeProvider({ children }: { children: React.ReactNode }) {
       {message && (
         <div
           role="status"
-          className={`rounded-xl border px-4 py-3 text-sm ${message.kind === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}
+          className={`fixed bottom-6 right-6 z-[60] max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg animate-fade-in ${message.kind === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}
         >
           {message.text}
         </div>
