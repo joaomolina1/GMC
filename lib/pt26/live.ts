@@ -47,7 +47,7 @@ export function computeSaldo(items: { key: string; value: number }[]): number | 
 }
 
 /** Identidade de um item para o emparelhar com a semana anterior: pessoa > partido > chave normalizada. */
-function itemIdentity(i: { key: string; personId: string | null; partyId: string | null }): string {
+export function itemIdentity(i: { key: string; personId: string | null; partyId: string | null }): string {
   if (i.personId) return `person:${i.personId}`;
   if (i.partyId) return `party:${i.partyId}`;
   return `key:${normalizeText(i.key)}`;
