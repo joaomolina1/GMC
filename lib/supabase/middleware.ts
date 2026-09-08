@@ -38,8 +38,11 @@ export async function updateSession(request: NextRequest) {
   const isV1Api = pathname.startsWith("/api/v1/");
   // Cron handlers authenticate with CRON_SECRET inside the route, not a user cookie.
   const isCronApi = pathname.startsWith("/api/cron/");
+  // PT26: o ecrã do pivot (ecrã tátil em estúdio) não tem login — protegido por token `?key=`
+  // validado na rota. A variante /preview e o back-office continuam a exigir sessão admin.
+  const isPt26Live = pathname === "/pt26/live" || pathname === "/api/pt26/live";
 
-  if (!user && !isPublicRoute && !isV1Api && !isCronApi) {
+  if (!user && !isPublicRoute && !isV1Api && !isCronApi && !isPt26Live) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
