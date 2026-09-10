@@ -37,7 +37,8 @@ describe("argumentos", () => {
     expect(getScreenplay("sangue")).toBe(SCREENPLAYS.sangue);
     expect(getScreenplay("sangue", 2)?.title).toBe("O terceiro envelope");
     expect(getScreenplay("patroa", 2)?.title).toBe("Sete da manhã");
-    expect(getScreenplay("traicao", 2)).toBeUndefined();
+    expect(getScreenplay("traicao", 2)?.title).toBe("Quarto 214");
+    expect(getScreenplay("traicao", 3)).toBeUndefined();
     const keys = ALL_SCREENPLAYS.map((sp) => `${sp.series}-${sp.episode}`);
     expect(new Set(keys).size).toBe(keys.length);
   });
