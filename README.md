@@ -83,7 +83,8 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
 - **Legendas** — desligadas por defeito; o botão **CC** no player liga-as só para a sessão (sessionStorage, sem
   persistência na conta). Os tempos vêm do alinhamento à fala real (`tvibox:align`), não do argumento
 - **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos do EP1 em
-  `lib/tvibox/screenplays.ts` e dos episódios seguintes em `lib/tvibox/screenplays-ep2.ts` (`getScreenplay(slug, n)`)
+  `lib/tvibox/screenplays.ts` e dos episódios seguintes em `lib/tvibox/screenplays-ep2.ts` (`getScreenplay(slug, n)`).
+  Guiões completos (leitura editorial) em [`docs/tvibox-guioes-telenovelas.md`](docs/tvibox-guioes-telenovelas.md).
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
 ### Produção de conteúdos
