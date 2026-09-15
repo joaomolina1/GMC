@@ -416,6 +416,7 @@ export default function TviBoxStudioPage() {
 
       <ImportPanel
         notify={notify}
+        onChanged={() => void load()}
         onOpenSeries={async (id) => {
           await load();
           setSelectedId(id);

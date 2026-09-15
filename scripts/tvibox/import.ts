@@ -8,13 +8,14 @@
  *
  * Opções: --model medium (Whisper) · --claude <modelo> · --work <dir> · --limit N (só os N primeiros) · --frames 6
  *         --dry-run (não carrega nem escreve na BD; deixa proposta, posters e legendas em <work>/<slug>/) · --fresh (ignora propostas em cache)
+ *         --skip-media (numa repetição, mantém vídeo/poster já carregados e só refaz textos e legendas)
  *
  * Passos (cada um com cache em <work>/<slug>/, por isso pode ser repetido):
  *   1. deteção dos episódios pelo nome dos ficheiros (duplicados, corrompidos, buracos)
  *   2. ffprobe + transcodificação para H.264/AAC faststart quando o codec não é H.264 (AV1 não toca em iPhone)
  *   3. folha de contacto (N frames numerados) + transcrição com timestamps (faster-whisper)
  *   4. Claude, episódio a episódio com memória dos anteriores: título, sinopse, gancho, poster, resumo
- *   5. Claude, série: título, género, tagline, sinopse, paleta, elenco
+ *   5. Claude, série: título, género, tagline, sinopse, paleta, elenco; revisão anti-spoiler de toda a temporada
  *   6. legendas WebVTT a partir da transcrição, com correção ortográfica de nomes pelo modelo
  *   7. upload (vídeo, poster, legendas) e criação/atualização da série e episódios
  *      (rascunho por omissão; --publish publica EP1 grátis e os restantes a 15 moedas)
@@ -22,8 +23,9 @@
  * Requisitos: ffmpeg/ffprobe, unzip, python3 + faster-whisper, ANTHROPIC_API_KEY, SUPABASE_SECRET_KEY.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import {
   episodeProposalSchema,
@@ -160,7 +162,12 @@ function walk(dir: string): string[] {
 /* Media: transcodificação, frames, transcrição */
 
 function ensureVideo(src: string, out: string, p: Probe) {
-  if (existsSync(out)) return;
+  // Um ficheiro truncado (processo interrompido) não conta como cache.
+  if (existsSync(out)) {
+    const q = probe(out);
+    if (q && q.duration > 0 && Math.abs(q.duration - p.duration) < 2) return;
+    rmSync(out, { force: true });
+  }
   const remux = p.vcodec === "h264" && p.width <= 1080 && /\.mp4$/i.test(src);
   const args = remux
     ? ["-i", src, "-c", "copy", "-movflags", "+faststart", out]
@@ -247,9 +254,11 @@ ${transcriptText(ctx.segments)}
 
 A imagem é a folha de contacto do episódio: ${ctx.frames} frames numerados de 1 a ${ctx.frames}, por ordem cronológica.
 
+Regra de ouro: título, sinopse e gancho são lidos ANTES de ver o episódio (lista da série e cartão bloqueado). Nunca revelam reviravoltas, confissões, a identidade do assassino, mortes, parentescos secretos nem o desfecho de uma cena — levantam a pergunta, não dão a resposta. Esses factos vão só para "summary".
+
 Devolve JSON com:
-- "title": título do episódio (máx. 40 caracteres, sem "EP n", sem aspas, intrigante mas fiel ao que acontece)
-- "synopsis": sinopse do episódio para a ficha (máx. 200 caracteres, presente do indicativo, sem revelar o final)
+- "title": título do episódio (máx. 40 caracteres, sem "EP n", sem aspas, intrigante mas fiel ao que acontece, sem spoilers)
+- "synopsis": sinopse do episódio para a ficha (máx. 200 caracteres, presente do indicativo, sem revelar o que se descobre no episódio)
 - "hookTitle": título curto do gancho (máx. 40 caracteres) — aparece no cartão bloqueado antes de a pessoa desbloquear este episódio
 - "hookText": frase de gancho (máx. 160 caracteres) que faz a pessoa querer pagar para ver este episódio, sem contar o que acontece
 - "posterFrame": número (1–${ctx.frames}) do frame com mais força para poster: rosto nítido, emoção, boa luz; evita frames escuros ou com texto
@@ -281,6 +290,50 @@ Devolve JSON com:
 - "cast": lista de {"name","role"} das personagens principais (máx. 10), com o papel em poucas palavras
 - "badge": "new" | "hot" | null`;
   return claudeJson(client, model, [{ type: "text", text }, image(ctx.sheet)], (raw) => seriesProposalSchema.parse(raw));
+}
+
+const seasonReviewSchema = z.object({
+  episodes: z.array(
+    z.object({
+      number: z.number().int().min(1),
+      title: z.string().trim().min(2).max(60),
+      synopsis: z.string().trim().min(10).max(260),
+      hookTitle: z.string().trim().min(2).max(60),
+      hookText: z.string().trim().min(10).max(220),
+    })
+  ),
+});
+
+/**
+ * Revisão de temporada: com a história toda conhecida, o modelo reescreve os textos
+ * que, lidos antes de ver, estragam surpresas (quem matou, confissões, parentescos, mortes).
+ */
+async function reviewSeason(client: Anthropic, model: string, episodes: { number: number; proposal: EpisodeProposal }[]): Promise<Map<number, EpisodeProposal>> {
+  const text = `Revisão editorial final de uma novela de mistério com ${episodes.length} episódios. Abaixo tens, por episódio, o RESUMO factual (o que acontece de facto, incluindo o desfecho) e os textos públicos que o espectador lê ANTES de ver o episódio: título, sinopse e gancho do cartão bloqueado.
+
+Tarefa: devolve os textos públicos de TODOS os episódios, reescrevendo apenas os que revelam algo que só se deve descobrir a ver — identidade do assassino ou do ladrão, confissões, mortes, parentescos secretos, romances escondidos, o resultado de um confronto. Mantém intactos os que já estão bem. Um bom título/gancho de mistério faz a pergunta ("Quem levou o Galo?") em vez de dar a resposta ("Foi o mordomo"). Limites: título e hookTitle ≤ 40 caracteres, sinopse ≤ 200, hookText ≤ 160. Português europeu.
+
+${episodes
+  .map(
+    (e) => `EP ${e.number}
+RESUMO: ${e.proposal.summary}
+title: ${e.proposal.title}
+synopsis: ${e.proposal.synopsis}
+hookTitle: ${e.proposal.hookTitle}
+hookText: ${e.proposal.hookText}`
+  )
+  .join("\n\n")}
+
+Devolve JSON: {"episodes":[{"number":1,"title":"…","synopsis":"…","hookTitle":"…","hookText":"…"}, …]} com os ${episodes.length} episódios.`;
+  const res = await client.messages.create({ model, max_tokens: 16000, temperature: 0.3, system: SYSTEM, messages: [{ role: "user", content: text }] });
+  const raw = res.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+  const parsed = seasonReviewSchema.parse(extractJson(raw));
+  const out = new Map<number, EpisodeProposal>();
+  for (const e of episodes) {
+    const r = parsed.episodes.find((x) => x.number === e.number);
+    out.set(e.number, r ? { ...e.proposal, title: r.title, synopsis: r.synopsis, hookTitle: r.hookTitle, hookText: r.hookText } : e.proposal);
+  }
+  return out;
 }
 
 /** Corrige ortografia/nomes das legendas sem alterar o sentido nem o número de linhas. */
@@ -325,6 +378,8 @@ async function main() {
   const frames = Math.max(3, Math.min(12, Number(arg("frames", "6"))));
   const limit = arg("limit") ? Number(arg("limit")) : Infinity;
   const dryRun = flag("dry-run");
+  // --skip-media: repete só textos/legendas, mantendo vídeo e poster já carregados.
+  const skipMedia = flag("skip-media");
 
   try {
     await jl.set({ status: "running", error: null, progress: 1 });
@@ -405,6 +460,24 @@ async function main() {
       writeFileSync(seriesCache, JSON.stringify(series, null, 2));
     }
     if (arg("title") ?? hints.title) series.title = (arg("title") ?? hints.title) as string;
+
+    // 5b. revisão anti-spoiler da temporada inteira (o modelo já conhece o desfecho)
+    const reviewCache = join(work, "season.review.json");
+    let reviewed: Map<number, EpisodeProposal>;
+    if (existsSync(reviewCache) && !flag("fresh")) {
+      reviewed = new Map(Object.entries(JSON.parse(readFileSync(reviewCache, "utf8")) as Record<string, EpisodeProposal>).map(([k, v]) => [Number(k), v]));
+    } else {
+      await jl.log("Revisão anti-spoiler dos títulos, sinopses e ganchos…", 79, "review");
+      reviewed = await reviewSeason(client, claudeModel, done.map((d) => ({ number: d.number, proposal: d.proposal })));
+      writeFileSync(reviewCache, JSON.stringify(Object.fromEntries(reviewed), null, 2));
+    }
+    let changed = 0;
+    for (const d of done) {
+      const r = reviewed.get(d.number);
+      if (r && (r.title !== d.proposal.title || r.synopsis !== d.proposal.synopsis || r.hookText !== d.proposal.hookText)) changed++;
+      if (r) d.proposal = r;
+    }
+    await jl.log(`Revisão: ${changed} episódio(s) reescritos para não estragar surpresas`);
     await jl.log(`Série: «${series.title}» · ${series.genre} · elenco: ${series.cast.map((c) => c.name).join(", ")}`, 80);
     const castNames = series.cast.map((c) => c.name);
 
@@ -441,6 +514,8 @@ async function main() {
       await jl.set({ series_id: seriesId });
     }
 
+    const { data: existingEps } = dryRun ? { data: [] } : await sb.from("tvibox_episodes").select("number, video_url, poster_url").eq("series_id", seriesId);
+    const existingByNumber = new Map((existingEps ?? []).map((e) => [e.number as number, e as { video_url: string | null; poster_url: string | null }]));
     const proposalOut: ImportProposal = { series, episodes: [], warnings: detection.warnings };
     for (const [i, d] of done.entries()) {
       const pad = String(d.number).padStart(2, "0");
@@ -453,8 +528,10 @@ async function main() {
 
       proposalOut.episodes.push({ ...d.proposal, number: d.number, durationSeconds: Math.round(d.probe.duration), sourceName: basename(d.src) });
       if (dryRun) continue;
-      const videoUrl = await upload(sb, episodeVideoPath(slug, d.number, "final"), readFileSync(d.video), "video/mp4");
-      const posterUrl = await upload(sb, episodePosterPath(slug, d.number), readFileSync(poster), "image/jpeg");
+      const prev = existingByNumber.get(d.number);
+      const reuse = skipMedia && prev?.video_url && prev?.poster_url;
+      const videoUrl = reuse ? (prev.video_url as string) : await upload(sb, episodeVideoPath(slug, d.number, "final"), readFileSync(d.video), "video/mp4");
+      const posterUrl = reuse ? (prev.poster_url as string) : await upload(sb, episodePosterPath(slug, d.number), readFileSync(poster), "image/jpeg");
       const subtitlesUrl = cues.length ? await upload(sb, episodeSubtitlesPath(slug, d.number), vtt, "text/vtt") : null;
 
       const first = d.number === 1;

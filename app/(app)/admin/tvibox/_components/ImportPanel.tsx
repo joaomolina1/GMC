@@ -48,7 +48,16 @@ const fmtSize = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n > 1e6
  * Importar novela: zip (ou MP4s soltos) → Storage privado (TUS) → job para o worker,
  * que transcodifica, transcreve, pede a ficha editorial ao modelo e cria a série em rascunho.
  */
-export function ImportPanel({ onOpenSeries, notify }: { onOpenSeries: (seriesId: string) => void; notify: (kind: "ok" | "err", text: string) => void }) {
+export function ImportPanel({
+  onOpenSeries,
+  onChanged,
+  notify,
+}: {
+  onOpenSeries: (seriesId: string) => void;
+  /** Chamado quando uma ação altera o catálogo (publicar), para a página recarregar séries/episódios. */
+  onChanged?: () => void;
+  notify: (kind: "ok" | "err", text: string) => void;
+}) {
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
@@ -140,6 +149,7 @@ export function ImportPanel({ onOpenSeries, notify }: { onOpenSeries: (seriesId:
       await api("/api/tvibox/admin/imports", { method: "PATCH", body: JSON.stringify({ id: job.id, action }) });
       notify("ok", action === "publish" ? "Série publicada" : action === "cancel" ? "Importação cancelada" : "Job de volta à fila");
       await load();
+      if (action === "publish") onChanged?.();
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "Erro");
     } finally {
