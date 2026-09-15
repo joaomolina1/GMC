@@ -79,7 +79,7 @@ export function ImportPanel({
     void load();
   }, [load]);
 
-  const active = jobs.some((j) => j.status === "queued" || j.status === "running");
+  const active = jobs.some((j) => j.status === "queued" || j.status === "running" || j.status === "uploading");
   useEffect(() => {
     if (!active) return;
     const t = setInterval(load, 5000);
@@ -102,6 +102,10 @@ export function ImportPanel({
         removeFingerprintOnSuccess: true,
         metadata: { bucketName: bucket, objectName, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
         chunkSize,
+        onShouldRetry: (err) => {
+          const status = err.originalResponse?.getStatus() ?? 0;
+          return status !== 413 && status !== 401 && status !== 403;
+        },
         onError: (err) => reject(err instanceof Error ? err : new Error(String(err))),
         onProgress: (sent, total) => onPct(total ? Math.round((sent / total) * 100) : 0),
         onSuccess: () => resolve(),
@@ -118,11 +122,13 @@ export function ImportPanel({
   async function start() {
     if (!files.length) return;
     setBusy("upload");
+    let jobId: string | null = null;
     try {
       const r = await api<{ job: { id: string; files: { name: string; path: string }[] }; upload: { endpoint: string; bucket: string; chunkSize: number } }>(
         "/api/tvibox/admin/imports",
         { method: "POST", body: JSON.stringify({ files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })), hints: title.trim() ? { title: title.trim() } : {} }) }
       );
+      jobId = r.job.id;
       for (const [i, f] of files.entries()) {
         const target = r.job.files[i];
         setUploading({ file: f.name, pct: 0, index: i });
@@ -135,7 +141,15 @@ export function ImportPanel({
       if (inputRef.current) inputRef.current.value = "";
       await load();
     } catch (e) {
-      notify("err", e instanceof Error ? e.message : "Falha no upload");
+      const raw = e instanceof Error ? e.message : "Falha no upload";
+      const msg = /413|too large|payload/i.test(raw)
+        ? "O Storage recusou o zip (HTTP 413 — acima do limite global de tamanho). Sobe o «Global file size limit» nas Definições do Storage do projeto, ou importa com `npm run tvibox:import -- --zip`."
+        : raw;
+      if (jobId) {
+        await api("/api/tvibox/admin/imports", { method: "PATCH", body: JSON.stringify({ id: jobId, action: "fail", error: msg }) }).catch(() => undefined);
+      }
+      notify("err", msg);
+      await load();
     } finally {
       setUploading(null);
       setBusy(null);
