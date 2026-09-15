@@ -77,6 +77,12 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   `/tvibox/series/[slug]`, `/tvibox/carteira`, `/tvibox/perfil`, `/tvibox/lista`, `/tvibox/entrar` (login com marca própria)
 - **Estúdio (backoffice)** — `/admin/tvibox` (admins): criar/editar séries e episódios, upload direto de vídeo 9:16,
   poster e legendas WebVTT para o Storage (URL assinado), estados Rascunho / Em breve (cliffhanger) / Publicado
+- **Importar novela** (Estúdio) — zip ou MP4s de uma novela já produzida → bucket privado `tvibox-imports` (TUS,
+  retomável) → job em `tvibox_import_jobs` → worker `npm run tvibox:import -- --job <id>`: deteta a ordem pelo nome
+  dos ficheiros, converte para H.264 faststart (AV1 não toca em iPhone), transcreve (faster-whisper), pede a Claude a
+  ficha de cada episódio (título, sinopse, gancho, poster, resumo) e da série (título, género, sinopse, paleta,
+  elenco), gera legendas WebVTT com nomes corrigidos e cria a série em rascunho; o admin revê e carrega em
+  «Publicar todos os episódios». Também corre localmente: `npm run tvibox:import -- --zip novela.zip --publish`
 - **Economia** — moedas (bónus de boas-vindas, check-in diário com sequência, anúncios recompensados, pacotes
   simulados, TVI Box+), desbloqueio atómico via funções SQL `tvibox_*`
 - **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, controlo parental
@@ -99,6 +105,7 @@ npm run tvibox:produce -- --series sangue --publish   # render final com voz PT-
 npm run tvibox:produce -- --series sangue --episode 2 --model fast --publish   # episódio seguinte (precisa de argumento)
 npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível se falhar (repete o comando)
 npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legendas no instante exato da fala
+npm run tvibox:import -- --job <id> | --zip novela.zip [--slug x --title "…" --publish --dry-run --limit N]  # novela pronta → série completa
 ```
 
 `tvibox:align` extrai o áudio do render publicado, reconhece a fala com timestamps por palavra

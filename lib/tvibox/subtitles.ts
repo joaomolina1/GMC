@@ -58,13 +58,13 @@ function ts(sec: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(r).padStart(3, "0")}`;
 }
 
-/** WebVTT em português, com o nome da personagem em <v>. */
+/** WebVTT em português, com o nome da personagem em <v> (ou só o texto quando não há orador). */
 export function cuesToVtt(cues: Cue[]): string {
   const out = ["WEBVTT", "", "NOTE Legendas TVI BOX — português europeu", ""];
   cues.forEach((c, i) => {
     out.push(String(i + 1));
     out.push(`${ts(c.start)} --> ${ts(c.end)}`);
-    out.push(`<v ${c.who}>${c.text}`);
+    out.push(c.who ? `<v ${c.who}>${c.text}` : c.text);
     out.push("");
   });
   return out.join("\n");

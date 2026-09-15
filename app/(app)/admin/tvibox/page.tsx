@@ -8,6 +8,7 @@ import { Badge } from "@/_design_system/Badge";
 import { Button } from "@/_design_system/Button";
 import { Input, Select, Textarea } from "@/_design_system/Input";
 import { createClient } from "@lib/supabase/client";
+import { ImportPanel } from "./_components/ImportPanel";
 
 interface SeriesRow {
   id: string;
@@ -413,6 +414,16 @@ export default function TviBoxStudioPage() {
         </Card>
       </div>
 
+      <ImportPanel
+        notify={notify}
+        onOpenSeries={async (id) => {
+          await load();
+          setSelectedId(id);
+          setSeriesForm(null);
+          setEpisodeForm(null);
+        }}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         {/* lista de séries */}
         <Card padding="sm" className="self-start">
@@ -712,6 +723,7 @@ export default function TviBoxStudioPage() {
                   <li><b>Rascunho</b> — invisível para os utilizadores.</li>
                   <li>O EP 1 deve ser grátis; a partir do EP 2 o custo padrão é 15 moedas. A série só entra no feed «Para Ti» quando tem pelo menos um episódio com vídeo.</li>
                   <li>Os renders do pipeline Veo (<code>npm run tvibox:produce</code>) publicam-se aqui automaticamente e podem ser substituídos por upload manual.</li>
+                  <li><b>Importar novela</b> (topo da página): zip ou MP4s de uma novela já produzida → o worker <code>npm run tvibox:import</code> converte, transcreve e propõe títulos, sinopses, ganchos, posters e legendas; a série fica em rascunho até publicares.</li>
                 </ul>
               </div>
             </Card>
