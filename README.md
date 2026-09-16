@@ -91,6 +91,9 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
 - **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos do EP1 em
   `lib/tvibox/screenplays.ts` e dos episódios seguintes em `lib/tvibox/screenplays-ep2.ts` (`getScreenplay(slug, n)`).
   Guiões completos (leitura editorial) em [`docs/tvibox-guioes-telenovelas.md`](docs/tvibox-guioes-telenovelas.md).
+  Arquitectura e custos de escala (0,5 / 1 / 2 M views/dia, pico = 10%) em
+  [`docs/tvibox-escala-plataforma.pdf`](docs/tvibox-escala-plataforma.pdf)
+  (fonte HTML `docs/tvibox-escala-plataforma.html`; regenerar com `npm run tvibox:escala-pdf`).
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
 ### Produção de conteúdos
@@ -106,6 +109,7 @@ npm run tvibox:produce -- --series sangue --episode 2 --model fast --publish   #
 npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível se falhar (repete o comando)
 npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legendas no instante exato da fala
 npm run tvibox:import -- --job <id> | --zip novela.zip [--slug x --title "…" --publish --dry-run --limit N]  # novela pronta → série completa
+npm run tvibox:escala-pdf                         # PDF interno: arquitectura + custos 0,5/1/2 M views/dia
 ```
 
 `tvibox:align` extrai o áudio do render publicado, reconhece a fala com timestamps por palavra

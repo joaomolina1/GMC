@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <title>TVI BOX — Arquitectura e custos de escala</title>
+  <style>
+    :root {
+      --bg: #1a1c22;
+      --bg2: #22242c;
+      --surface: #2a2c35;
+      --line: rgba(255,255,255,.14);
+      --red: #ca234d;
+      --red-deep: #8f1735;
+      --blue: #37c8f5;
+      --gold: #f8a53d;
+      --green: #54c44d;
+      --text: #f4f5f7;
+      --muted: #a8a9ad;
+      --ink: #1a1c22;
+      --paper: #f6f5f2;
+      --paper2: #eceae4;
+      --rule: #d8d5cc;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Liberation Sans", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      font-size: 10.2pt;
+      line-height: 1.42;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page { size: A4; margin: 0; }
+    h1, h2, h3 { font-family: "Liberation Sans", "Noto Sans", system-ui, sans-serif; page-break-after: avoid; }
+    h1 { font-size: 22pt; letter-spacing: -.02em; margin: 0 0 .35em; }
+    h2 { font-size: 13.5pt; color: var(--red-deep); border-bottom: 2px solid var(--red); padding-bottom: .18em; margin: 1.15em 0 .5em; }
+    h3 { font-size: 11pt; margin: .85em 0 .3em; }
+    p { margin: 0 0 .48em; }
+    ul, ol { margin: 0 0 .55em; padding-left: 1.15em; }
+    li { margin-bottom: .16em; }
+    .small { font-size: 8.3pt; color: #5c5e66; }
+    .footnote { font-size: 8pt; color: #5c5e66; margin: 0 0 .7em; }
+    .cover {
+      width: 210mm;
+      height: 297mm;
+      background: var(--bg);
+      color: var(--text);
+      padding: 15mm 16mm 0;
+      display: flex;
+      flex-direction: column;
+      break-after: page;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800; letter-spacing: .12em; font-size: 11pt;
+    }
+    .stripes {
+      width: 34px; height: 12px;
+      background: linear-gradient(90deg, #37c8f5 0 33%, #f8a53d 33% 66%, #f0d24a 66%);
+      clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+    }
+    .kicker {
+      color: var(--red);
+      font-weight: 700;
+      letter-spacing: .16em;
+      font-size: 8pt;
+      text-transform: uppercase;
+    }
+    .cover h1 { color: #fff; font-size: 26pt; margin-top: 11mm; line-height: 1.12; }
+    .cover .sub { color: var(--muted); font-size: 11pt; max-width: 168mm; margin: 5mm 0 8mm; }
+    .vol {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin: 0 0 8mm;
+    }
+    .vol article {
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .vol .lbl { font-size: 8pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .vol .n { font-size: 18pt; font-weight: 800; color: #fff; margin: 2px 0 4px; }
+    .vol .d { font-size: 8.5pt; color: #c9cad0; line-height: 1.45; }
+    .vol .d b { color: var(--gold); font-weight: 700; }
+    .cover table { font-size: 9pt; margin: 0; }
+    .cover th { background: #12141a; color: #c9cad0; font-weight: 650; border-color: #3a3d48; }
+    .cover td, .cover th { border-color: #3a3d48; color: #f4f5f7; }
+    .cover td.sc-a { background: #1e3a22; color: #d4f5d0; }
+    .cover td.sc-b { background: #163445; color: #cfeefb; }
+    .cover td.sc-c { background: #3a1824; color: #fad4de; }
+    .cover .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 8.5pt;
+      color: #c9cad0;
+      margin-top: 8mm;
+    }
+    .cover .meta b {
+      color: #fff; display: block; font-size: 7.5pt;
+      letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .cover-foot {
+      margin-top: auto;
+      margin-left: -16mm;
+      margin-right: -16mm;
+      padding: 8mm 16mm;
+      background: #12141a;
+      border-top: 3px solid var(--red);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 8pt;
+      color: #9a9b9d;
+    }
+    .cover-foot strong { color: #fff; }
+    .doc { padding: 12mm 14mm 14mm; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.8pt; page-break-inside: avoid; margin: 0 0 .85em; }
+    th, td { border: 1px solid var(--rule); padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: var(--bg); color: #fff; font-weight: 650; }
+    th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.sc-a { background: #eaf6ea; font-weight: 700; }
+    td.sc-b { background: #e7f5fb; }
+    td.sc-c { background: #fdecef; }
+    .legend { display: flex; gap: 14px; font-size: 8.3pt; margin: 0 0 6px; flex-wrap: wrap; }
+    .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+    .callout {
+      background: #fff;
+      border-left: 4px solid var(--red);
+      padding: 7px 11px;
+      margin: 0 0 .8em;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 .8em; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0 0 .8em; }
+    .card { background: #fff; border: 1px solid var(--rule); padding: 8px 10px; page-break-inside: avoid; }
+    .card h3 { margin-top: 0; }
+    .kpi { font-size: 15pt; font-weight: 800; color: var(--red-deep); }
+    .arch { width: 100%; background: var(--bg); border-radius: 8px; padding: 7px; margin: 0 0 .8em; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    .avoid { page-break-inside: avoid; }
+    code { font-family: "Liberation Mono", ui-monospace, monospace; font-size: 8.2pt; background: var(--paper2); padding: 1px 4px; border-radius: 3px; }
+    .bars { margin: 0 0 .9em; }
+    .bar-row { display: grid; grid-template-columns: 92px 1fr 58px; align-items: center; gap: 8px; margin: 3px 0; font-size: 8pt; }
+    .bar-track { height: 11px; background: #e6e3db; border-radius: 99px; overflow: hidden; }
+    .bar-fill { display: block; height: 100%; border-radius: 99px; }
+    .bar-row b { text-align: right; font-variant-numeric: tabular-nums; }
+    .group-label { font-size: 8pt; font-weight: 700; margin: 6px 0 2px; color: #5c5e66; }
+    .decision {
+      break-before: page;
+      page-break-before: always;
+    }
+    .check li { margin-bottom: .28em; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="brand-row">
+    <div class="logo"><span class="stripes"></span>TVI BOX</div>
+    <div class="kicker">Documento interno · Produto / IT / Financeiro</div>
+  </div>
+  <h1>Arquitectura de escala<br/>e custos mensais expectáveis</h1>
+  <p class="sub">Plano para servir folhetins verticais (modelo DramaBox) com 0,5 / 1 / 2 milhões de visualizações por dia. Pico simultâneo = sempre 10% dessas visualizações (50 k / 100 k / 200 k). Três cenários de vídeo: origem própria + CDN, Mux, Cloudflare Stream.</p>
+
+  <div class="vol">
+    <article>
+      <div class="lbl">Volume baixo</div>
+      <div class="n">0,5 M / dia</div>
+      <div class="d">Pico <b>50 000</b> CCU · <b>100 Gbit/s</b><br/>15 M views · 0,29 PB · 19,5 M min</div>
+    </article>
+    <article>
+      <div class="lbl">Volume médio</div>
+      <div class="n">1 M / dia</div>
+      <div class="d">Pico <b>100 000</b> CCU · <b>200 Gbit/s</b><br/>30 M views/mês · 0,59 PB · 39 M min</div>
+    </article>
+    <article>
+      <div class="lbl">Volume alvo</div>
+      <div class="n">2 M / dia</div>
+      <div class="d">Pico <b>200 000</b> CCU · <b>400 Gbit/s</b><br/>60 M views/mês · 1,17 PB · 78 M min</div>
+    </article>
+  </div>
+
+  <p class="small" style="color:#a8a9ad;margin:0 0 6px">Custo expectável por mês (vídeo + app), USD, IVA excluído. Pico = 10% das views/dia.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Cenário</th>
+        <th class="num">0,5 M/dia<br/>pico 50 k</th>
+        <th class="num">1 M/dia<br/>pico 100 k</th>
+        <th class="num">2 M/dia<br/>pico 200 k</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>A · HLS próprio + Bunny Volume</td>
+        <td class="num sc-a">~ 3,0 k$</td>
+        <td class="num sc-a">~ 5,1 k$</td>
+        <td class="num sc-a">~ 8,3 k$</td>
+      </tr>
+      <tr>
+        <td>B · Mux Video 720p</td>
+        <td class="num sc-b">~ 13,3 k$</td>
+        <td class="num sc-b">~ 24,8 k$</td>
+        <td class="num sc-b">~ 47,4 k$</td>
+      </tr>
+      <tr>
+        <td>C · Cloudflare Stream</td>
+        <td class="num sc-c">~ 20,8 k$</td>
+        <td class="num sc-c">~ 40,9 k$</td>
+        <td class="num sc-c">~ 80,8 k$</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="meta">
+    <div><b>Audiência</b>IT, arquitectura, financeiro</div>
+    <div><b>Moeda</b>USD (factura cloud), IVA excl.</div>
+    <div><b>Data</b>16 Set 2026 · v1.1</div>
+    <div><b>Âmbito</b>Plano de bits + plano de app</div>
+    <div><b>Produto hoje</b>Prototype Next.js + Storage MP4</div>
+    <div><b>Fora de âmbito</b>Pessoal, DRM, ads, aquisição</div>
+  </div>
+
+  <div class="cover-foot">
+    <div>Catálogo: média <strong>78 s</strong>/ep · 720×1280 · ~2 Mbit/s · 19,5 MB/view</div>
+    <div>Recomendação: <strong>A a prazo</strong> · <strong>B se o prazo apertar</strong></div>
+  </div>
+</section>
+
+<div class="doc">
+
+<h2>1. Resumo executivo</h2>
+<p>O TVI BOX de hoje serve MP4 progressivo a partir do Storage público do Supabase. Isso serve o prototype. <b>Não serve 50–200 mil pessoas a ver ao mesmo tempo.</b> O número que manda a arquitectura é o pico (10% das visualizações diárias em simultâneo), não a média. A média com 2 M views/dia são ~1 800 sessões; o pico são 200 000 — cerca de 110×.</p>
+<p>Recomendação: <b>cenário A</b> (HLS próprio + CDN Bunny Volume ou Cloudflare Enterprise) para custo; <b>cenário B (Mux)</b> se a prioridade for tempo de chegada sem operar packager. O cenário C (Cloudflare Stream) é o mais simples e o mais caro à tabela pública.</p>
+
+<div class="legend">
+  <span><i class="sw" style="background:#c8e6c9"></i>A · DIY HLS + Bunny Volume</span>
+  <span><i class="sw" style="background:#b3e5fc"></i>B · Mux Video 720p</span>
+  <span><i class="sw" style="background:#f8bbd0"></i>C · Cloudflare Stream</span>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Views / dia</th>
+      <th class="num">Pico simultâneo<br/>(10%)</th>
+      <th class="num">Pico de bits<br/>(720p)</th>
+      <th class="num">Tráfego / mês</th>
+      <th class="num">A · HLS + Bunny</th>
+      <th class="num">B · Mux</th>
+      <th class="num">C · CF Stream</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>0,5 milhões</b></td>
+      <td class="num">50 000</td>
+      <td class="num">100 Gbit/s</td>
+      <td class="num">0,29 PB · 19,5 M min</td>
+      <td class="num sc-a">~ 3,0 k$</td>
+      <td class="num sc-b">~ 13,3 k$</td>
+      <td class="num sc-c">~ 20,8 k$</td>
+    </tr>
+    <tr>
+      <td><b>1 milhão</b></td>
+      <td class="num">100 000</td>
+      <td class="num">200 Gbit/s</td>
+      <td class="num">0,59 PB · 39 M min</td>
+      <td class="num sc-a">~ 5,1 k$</td>
+      <td class="num sc-b">~ 24,8 k$</td>
+      <td class="num sc-c">~ 40,9 k$</td>
+    </tr>
+    <tr>
+      <td><b>2 milhões</b></td>
+      <td class="num">200 000</td>
+      <td class="num">400 Gbit/s</td>
+      <td class="num">1,17 PB · 78 M min</td>
+      <td class="num sc-a">~ 8,3 k$</td>
+      <td class="num sc-b">~ 47,4 k$</td>
+      <td class="num sc-c">~ 80,8 k$</td>
+    </tr>
+  </tbody>
+</table>
+<p class="footnote">Totais = vídeo + app (Workers/API, Postgres, Redis, observabilidade, encoding de ingestão no A). Intervalo útil: ±25% conforme conclusão de episódio, mix ABR e região. Preços públicos Set 2026, sem desconto enterprise. O vídeo <b>não</b> pode passar pela Vercel (Fast Data Transfer 0,15 $/GB tornaria 1,17 PB em ~175 k$ só de egress).</p>
+
+<div class="group-label">Comparação visual dos totais mensais (escala = C a 2 M/dia = 80,8 k$)</div>
+<div class="bars avoid">
+  <div class="group-label">0,5 M/dia · pico 50 k</div>
+  <div class="bar-row"><span>A Bunny</span><div class="bar-track"><i class="bar-fill" style="width:3.7%;background:#54c44d"></i></div><b>3,0 k$</b></div>
+  <div class="bar-row"><span>B Mux</span><div class="bar-track"><i class="bar-fill" style="width:16.5%;background:#37c8f5"></i></div><b>13,3 k$</b></div>
+  <div class="bar-row"><span>C Stream</span><div class="bar-track"><i class="bar-fill" style="width:25.7%;background:#ca234d"></i></div><b>20,8 k$</b></div>
+  <div class="group-label">1 M/dia · pico 100 k</div>
+  <div class="bar-row"><span>A Bunny</span><div class="bar-track"><i class="bar-fill" style="width:6.3%;background:#54c44d"></i></div><b>5,1 k$</b></div>
+  <div class="bar-row"><span>B Mux</span><div class="bar-track"><i class="bar-fill" style="width:30.7%;background:#37c8f5"></i></div><b>24,8 k$</b></div>
+  <div class="bar-row"><span>C Stream</span><div class="bar-track"><i class="bar-fill" style="width:50.6%;background:#ca234d"></i></div><b>40,9 k$</b></div>
+  <div class="group-label">2 M/dia · pico 200 k</div>
+  <div class="bar-row"><span>A Bunny</span><div class="bar-track"><i class="bar-fill" style="width:10.3%;background:#54c44d"></i></div><b>8,3 k$</b></div>
+  <div class="bar-row"><span>B Mux</span><div class="bar-track"><i class="bar-fill" style="width:58.7%;background:#37c8f5"></i></div><b>47,4 k$</b></div>
+  <div class="bar-row"><span>C Stream</span><div class="bar-track"><i class="bar-fill" style="width:100%;background:#ca234d"></i></div><b>80,8 k$</b></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h3>O que muda o custo</h3>
+    <p class="kpi">×3 a ×10</p>
+    <p class="small">Entre A e C no mesmo volume. A diferença é quem opera o HLS e se pagas por minuto entregue ou por GB.</p>
+  </div>
+  <div class="card">
+    <h3>O que muda a arquitectura</h3>
+    <p class="kpi">110×</p>
+    <p class="small">Pico vs média. Dimensionas CDN e Redis para o pico; Postgres e workers para a média + fila.</p>
+  </div>
+</div>
+
+<h2>2. Hipóteses de tráfego</h2>
+<table>
+  <thead>
+    <tr><th>Parâmetro</th><th>Valor</th><th>Origem</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Visualização</td><td>1 play de um episódio (start)</td><td>Definição de produto</td></tr>
+    <tr><td>Duração média</td><td>78 s (mediana 75 s; min 31 / máx 142)</td><td>Catálogo publicado TVI BOX, Set 2026</td></tr>
+    <tr><td>Bitrate de referência</td><td>2,0 Mbit/s a 720×1280 H.264</td><td>Medido nos MP4 importados (~1,5–2,5 Mbit/s)</td></tr>
+    <tr><td>Bytes por view</td><td>19,5 MB = 0,0195 GB</td><td>78 s × 2 Mbit/s / 8</td></tr>
+    <tr><td>Minutos por view</td><td>1,30 min</td><td>78 / 60</td></tr>
+    <tr><td>Mês</td><td>30 dias</td><td>Convenção orçamental</td></tr>
+    <tr><td>Pico simultâneo</td><td>10% das visualizações desse dia</td><td>Pedido de negócio (2 M → 200 k; 1 M → 100 k; 0,5 M → 50 k)</td></tr>
+    <tr><td>Conclusão / buffering</td><td>Entrega ≈ 1,0 × duração</td><td>Conservador (buffer HLS conta; skip reduz)</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead>
+    <tr>
+      <th>Views / dia</th>
+      <th class="num">Views / mês</th>
+      <th class="num">CCU médio</th>
+      <th class="num">CCU pico (10%)</th>
+      <th class="num">Pico / média</th>
+      <th class="num">Gbit/s pico</th>
+      <th class="num">PB / mês</th>
+      <th class="num">M min / mês</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0,5 M</td>
+      <td class="num">15 M</td>
+      <td class="num">451</td>
+      <td class="num">50 000</td>
+      <td class="num">111×</td>
+      <td class="num">100</td>
+      <td class="num">0,29</td>
+      <td class="num">19,5</td>
+    </tr>
+    <tr>
+      <td>1 M</td>
+      <td class="num">30 M</td>
+      <td class="num">903</td>
+      <td class="num">100 000</td>
+      <td class="num">111×</td>
+      <td class="num">200</td>
+      <td class="num">0,59</td>
+      <td class="num">39,0</td>
+    </tr>
+    <tr>
+      <td>2 M</td>
+      <td class="num">60 M</td>
+      <td class="num">1 806</td>
+      <td class="num">200 000</td>
+      <td class="num">111×</td>
+      <td class="num">400</td>
+      <td class="num">1,17</td>
+      <td class="num">78,0</td>
+    </tr>
+  </tbody>
+</table>
+<p class="footnote">CCU médio = views/dia × 78 s / 86 400 s. Pico Gbit/s = CCU pico × 2 Mbit/s. Com ABR (360/540/720) o pico real de bits cai tipicamente para 50–70% deste valor; o contrato CDN dimensiona-se no pior caso (todos em 720p).</p>
+
+<div class="callout">
+  <b>Alavanca n.º 1 — o feed autoplay.</b> No prototype, o banner activo faz loop do episódio completo, muted. Com 200 k no «Para Ti» isso é outro canal de ~400 Gbit/s. Em produção: poster + clip de 3–5 s a 480p, ou um único segmento HLS.
+</div>
+
+<h2>3. O que o prototype actual não aguenta</h2>
+<table>
+  <thead><tr><th>Camada</th><th>Hoje</th><th>No pico</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Vídeo</td>
+      <td>MP4 público no bucket Supabase <code>tvibox</code></td>
+      <td>Origin não é CDN de 100–400 Gbit/s. Sem ABR. URL copiável fura o paywall.</td>
+    </tr>
+    <tr>
+      <td>Feed</td>
+      <td>Loop muted do episódio no banner visível</td>
+      <td>Pode duplicar o tráfego de vídeo.</td>
+    </tr>
+    <tr>
+      <td>Progresso</td>
+      <td><code>POST /api/tvibox/progress</code> a cada 5 s</td>
+      <td>No pico de 200 k: ~40 000 writes/s na Postgres. A tabela e o PostgREST saturam.</td>
+    </tr>
+    <tr>
+      <td>App / auth</td>
+      <td>SSR Next.js + sessão Supabase em cada página</td>
+      <td>200 k aberturas simultâneas não cabem num plano Vercel Pro / Auth standard.</td>
+    </tr>
+    <tr>
+      <td>Vercel</td>
+      <td>Hosting do prototype</td>
+      <td>Se o MP4 passar na Fast Data Transfer (0,15 $/GB após 1 TB), 1,17 PB ≈ 175 k$ / mês.</td>
+    </tr>
+  </tbody>
+</table>
+<p>O catálogo, a economia de moedas (<code>tvibox_unlock_episode</code>), o Estúdio e o worker de import (ffmpeg + Whisper) <b>mantêm-se</b>. O que muda é o caminho do ficheiro até ao telemóvel e o que a app escreve na base a cada segundo.</p>
+
+<div class="avoid">
+<h2>4. Arquitectura alvo</h2>
+<p>Dois planos que nunca se misturam: <b>plano de bits</b> (vídeo no CDN) e <b>plano de app</b> (login, moedas, catálogo).</p>
+
+<svg class="arch" viewBox="0 0 860 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagrama de arquitectura TVI BOX à escala">
+  <style>
+    .b { fill: #2a2c35; stroke: #4a4d58; stroke-width: 1.2; }
+    .t { fill: #f4f5f7; font-family: Liberation Sans, sans-serif; font-size: 12px; }
+    .t2 { fill: #9a9b9d; font-family: Liberation Sans, sans-serif; font-size: 10px; }
+    .h { fill: #ca234d; font-family: Liberation Sans, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+    .line { stroke: #37c8f5; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#37c8f5"/></marker>
+  </defs>
+  <rect x="20" y="36" width="160" height="70" rx="8" class="b"/>
+  <text x="36" y="64" class="t">App / browser 9:16</text>
+  <text x="36" y="82" class="t2">HLS + API JSON</text>
+
+  <text x="220" y="24" class="h">BORDA</text>
+  <rect x="210" y="36" width="200" height="348" rx="10" fill="#202227" stroke="#ca234d" stroke-width="1.4"/>
+  <rect x="224" y="52" width="172" height="64" rx="6" class="b"/>
+  <text x="236" y="76" class="t">CDN + WAF</text>
+  <text x="236" y="94" class="t2">Bunny ou CF Enterprise</text>
+  <rect x="224" y="128" width="172" height="64" rx="6" class="b"/>
+  <text x="236" y="152" class="t">Workers / edge</text>
+  <text x="236" y="170" class="t2">JWT, signed URL, catálogo</text>
+  <rect x="224" y="204" width="172" height="64" rx="6" class="b"/>
+  <text x="236" y="228" class="t">KV cache catálogo</text>
+  <text x="236" y="246" class="t2">TTL 30–60 s</text>
+  <rect x="224" y="280" width="172" height="64" rx="6" class="b"/>
+  <text x="236" y="304" class="t">Redis</text>
+  <text x="236" y="322" class="t2">Carteira, rate limit, sessão</text>
+
+  <text x="450" y="24" class="h">VÍDEO</text>
+  <rect x="440" y="36" width="180" height="160" rx="10" fill="#202227" stroke="#37c8f5" stroke-width="1.4"/>
+  <rect x="454" y="52" width="152" height="60" rx="6" class="b"/>
+  <text x="466" y="76" class="t">Origin R2 / Bunny</text>
+  <text x="466" y="94" class="t2">HLS 360 / 540 / 720</text>
+  <rect x="454" y="122" width="152" height="56" rx="6" class="b"/>
+  <text x="466" y="146" class="t">Packager no import</text>
+  <text x="466" y="164" class="t2">Não no request</text>
+
+  <text x="450" y="220" class="h">APP</text>
+  <rect x="440" y="232" width="180" height="152" rx="10" fill="#202227" stroke="#f8a53d" stroke-width="1.4"/>
+  <rect x="454" y="248" width="152" height="52" rx="6" class="b"/>
+  <text x="466" y="270" class="t">Postgres + pool</text>
+  <text x="466" y="286" class="t2">Unlocks, wallets</text>
+  <rect x="454" y="310" width="152" height="52" rx="6" class="b"/>
+  <text x="466" y="332" class="t">Fila</text>
+  <text x="466" y="348" class="t2">Progresso, likes</text>
+
+  <text x="660" y="24" class="h">INGESTÃO</text>
+  <rect x="650" y="36" width="190" height="160" rx="10" fill="#202227" stroke="#54c44d" stroke-width="1.4"/>
+  <rect x="664" y="52" width="162" height="56" rx="6" class="b"/>
+  <text x="676" y="76" class="t">Estúdio TVI BOX</text>
+  <text x="676" y="94" class="t2">Já existe</text>
+  <rect x="664" y="120" width="162" height="56" rx="6" class="b"/>
+  <text x="676" y="144" class="t">Worker ffmpeg</text>
+  <text x="676" y="162" class="t2">Whisper + HLS</text>
+
+  <path class="line" d="M180 64 H210"/>
+  <path class="line" d="M410 84 H440"/>
+  <path class="line" d="M410 160 H440"/>
+  <path class="line" d="M410 312 H440"/>
+  <path class="line" d="M620 150 H650"/>
+  <path class="line" d="M745 196 V232"/>
+  <text x="36" y="408" class="t2">O browser pede segmentos HLS ao CDN. A API é JSON pequeno. O Estúdio nunca está no caminho do pico.</text>
+</svg>
+</div>
+
+<h3>4.1 Plano de vídeo</h3>
+<ul>
+  <li>Deixar de servir MP4 progressivo ao público. No <code>tvibox:import</code>, gerar HLS/CMAF com três rendições: 360p (~0,5 Mbit/s), 540p (~1 Mbit/s), 720p (~2 Mbit/s).</li>
+  <li>Origin no R2 ou Bunny Storage. CDN com ≥95% de hit. O bucket Supabase fica para o Estúdio / origin privado.</li>
+  <li>URL assinada (JWT ou cookie, 2–5 min, amarrada a utilizador + episódio). O EP2 não existe como URL público.</li>
+  <li>Player: HLS nativo no iOS + hls.js no resto.</li>
+</ul>
+<h3>4.2 Plano de app</h3>
+<ul>
+  <li>Catálogo em cache de borda 30–60 s (quase estático).</li>
+  <li>Carteira / unlocks / progresso: Redis à frente, Postgres atrás. Manter a RPC atómica <code>tvibox_unlock_episode</code>.</li>
+  <li>Pool de 200–500 ligações Postgres, nunca 50–200 k. Rate limit por utilizador no Redis.</li>
+  <li>Pior caso (todos a desbloquear o EP2 no mesmo cliffhanger): fila curta com idempotência; a UI mostra «A desbloquear…».</li>
+  <li>Progresso: só no fim do episódio + a cada 30 s, via fila — não a cada 5 s.</li>
+  <li>Auth: JWT validado na borda. O GoTrue aguenta o login, não 200 k <code>getUser()</code> por heartbeat.</li>
+</ul>
+<h3>4.3 Hosting da app</h3>
+<p>Manter Next.js, <b>tirar o vídeo da Vercel</b>. Cloudflare Workers/Pages para <code>/tvibox</code> (PoP em Lisboa, sem egress de vídeo) ou Vercel Enterprise só para HTML/API com o player a apontar para o CDN de vídeo. Estúdio, import e Whisper <b>não</b> precisam deste scale — continuam no worker com ffmpeg.</p>
+
+<h2>5. Os três cenários</h2>
+<div class="card avoid">
+  <h3>A — Custo baixo, ops vossas (recomendado a prazo)</h3>
+  <p>Packager HLS no import já existente → origin R2 ou Bunny Storage → CDN Bunny <b>Volume</b> (ou Standard EU se a qualidade de PoP em Portugal o justificar) → player HLS. App em Workers + Postgres always-on + Redis.</p>
+  <p class="small">Bunny Volume (docs oficiais): 0–500 TB a 0,005 $/GB; 500 TB–1 PB a 0,004; 1–2 PB a 0,003. 10 PoPs. Confirmar com o sales o pico de 100–400 Gbit/s. A página comercial ainda lista 0,002 $/GB no último escalão — usámos 0,003 (conservador, +170 $ no patamar de 2 M/dia). Alternativa: Cloudflare Enterprise + R2 — sem preço de lista para 1 PB de streaming; só com proposta (ordem de grandeza 8–20 k$ no patamar de 2 M/dia).</p>
+</div>
+<div class="card avoid">
+  <h3>B — Tempo de chegada (recomendado se o prazo apertar)</h3>
+  <p>Mux Video a 720p: ingestão, ABR, CDN multi-POP e player. Pagas por minuto entregue, com desconto de volume acima de 10 M min/mês (último escalão público 0,00056 $/min). A app é a mesma do A, sem packager próprio.</p>
+</div>
+<div class="card avoid">
+  <h3>C — Um fornecedor, factura simples</h3>
+  <p>Cloudflare Stream: 1 $ / 1 000 minutos entregues na tabela pública, encoding e bandwidth incluídos. Há volume via sales; sem contrato fica o mais caro dos três.</p>
+</div>
+
+<h2>6. Custos desagregados (USD / mês)</h2>
+<p class="small">App (comum aos três, escala com o volume): Workers/API, Postgres always-on, Redis, observabilidade QoE, encoding de ingestão no A. No B e C o encoding de entrega vai no preço do vídeo.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Linha</th>
+      <th class="num">0,5 M / dia<br/>pico 50 k</th>
+      <th class="num">1 M / dia<br/>pico 100 k</th>
+      <th class="num">2 M / dia<br/>pico 200 k</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td colspan="4"><b>Tráfego de referência</b></td></tr>
+    <tr><td>Views / mês</td><td class="num">15 M</td><td class="num">30 M</td><td class="num">60 M</td></tr>
+    <tr><td>Minutos entregues</td><td class="num">19,5 M</td><td class="num">39 M</td><td class="num">78 M</td></tr>
+    <tr><td>Egress (720p, 19,5 MB/view)</td><td class="num">293 TB</td><td class="num">585 TB</td><td class="num">1 170 TB</td></tr>
+    <tr><td colspan="4"><b>A — CDN Bunny Volume (só vídeo)</b></td></tr>
+    <tr><td>CDN Volume (0,005 / 0,004 / 0,003 $/GB)</td><td class="num">1 463 $</td><td class="num">2 840 $</td><td class="num">5 010 $</td></tr>
+    <tr><td>Storage origin HLS (3 ladders)</td><td class="num">&lt; 50 $</td><td class="num">&lt; 50 $</td><td class="num">&lt; 50 $</td></tr>
+    <tr><td>App + DB + Redis + QoE + ingest</td><td class="num">1 500 $</td><td class="num">2 200 $</td><td class="num">3 200 $</td></tr>
+    <tr><td><b>A total</b></td><td class="num sc-a">~ 3 000 $</td><td class="num sc-a">~ 5 100 $</td><td class="num sc-a">~ 8 300 $</td></tr>
+    <tr><td colspan="4"><b>B — Mux Video 720p (tabela pública, último escalão 0,00056 $/min)</b></td></tr>
+    <tr><td>Entrega Mux</td><td class="num">11 940 $</td><td class="num">22 860 $</td><td class="num">44 700 $</td></tr>
+    <tr><td>Storage Mux</td><td class="num">desprezável</td><td class="num">desprezável</td><td class="num">desprezável</td></tr>
+    <tr><td>App + DB + Redis + QoE</td><td class="num">1 300 $</td><td class="num">1 900 $</td><td class="num">2 700 $</td></tr>
+    <tr><td><b>B total</b></td><td class="num sc-b">~ 13 300 $</td><td class="num sc-b">~ 24 800 $</td><td class="num sc-b">~ 47 400 $</td></tr>
+    <tr><td colspan="4"><b>C — Cloudflare Stream (1 $ / 1 000 min, tabela pública)</b></td></tr>
+    <tr><td>Minutos entregues Stream</td><td class="num">19 500 $</td><td class="num">39 000 $</td><td class="num">78 000 $</td></tr>
+    <tr><td>App + DB + Redis + QoE</td><td class="num">1 300 $</td><td class="num">1 900 $</td><td class="num">2 700 $</td></tr>
+    <tr><td><b>C total</b></td><td class="num sc-c">~ 20 800 $</td><td class="num sc-c">~ 40 900 $</td><td class="num sc-c">~ 80 800 $</td></tr>
+  </tbody>
+</table>
+
+<h3>6.1 Sensibilidade Bunny Standard EU</h3>
+<p>Se o tráfego for sobretudo Portugal/UE e se preferir a rede Standard (0,01 $/GB EU, 119 PoPs) em vez da Volume:</p>
+<table>
+  <thead><tr><th></th><th class="num">0,5 M · pico 50 k</th><th class="num">1 M · pico 100 k</th><th class="num">2 M · pico 200 k</th></tr></thead>
+  <tbody>
+    <tr><td>CDN Standard EU (0,01 $/GB × TB)</td><td class="num">2 925 $</td><td class="num">5 850 $</td><td class="num">11 700 $</td></tr>
+    <tr><td>A total com Standard EU (em vez de Volume)</td><td class="num">~ 4 500 $</td><td class="num">~ 8 100 $</td><td class="num">~ 15 000 $</td></tr>
+  </tbody>
+</table>
+<p class="footnote">Mistura 20% Ásia/África na Standard sobe o GB (0,03–0,06 $). Volume continua a ser o tecto baixo se o sales confirmar o pico de Gbit/s.</p>
+
+<h3>6.2 O que não fazer (mesmo volume, 2 M/dia)</h3>
+<table>
+  <thead><tr><th>Caminho</th><th>Resultado</th></tr></thead>
+  <tbody>
+    <tr><td>MP4 no Supabase Storage</td><td>Origin não aguenta 400 Gbit/s; paywall furável</td></tr>
+    <tr><td>Vídeo pela Vercel</td><td>~175 k$ de Fast Data Transfer</td></tr>
+    <tr><td>CloudFront + S3 sem contrato</td><td>~60–90 k$ de egress</td></tr>
+    <tr><td>Cloudflare Pro/Business a 400 Gbit/s de vídeo</td><td>Fair use; empurram para Enterprise ou Stream</td></tr>
+  </tbody>
+</table>
+
+<h2>7. App — custos de referência (incluídos nos totais)</h2>
+<table>
+  <thead>
+    <tr><th>Componente</th><th class="num">0,5 M / dia</th><th class="num">1 M / dia</th><th class="num">2 M / dia</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Cloudflare Workers (~50 / 100 / 150 M req)</td><td class="num">20–50 $</td><td class="num">40–80 $</td><td class="num">50–150 $</td></tr>
+    <tr><td>Postgres always-on (4→8 vCPU)</td><td class="num">200–400 $</td><td class="num">350–600 $</td><td class="num">500–900 $</td></tr>
+    <tr><td>Redis (sessão + carteira quente)</td><td class="num">50–120 $</td><td class="num">80–200 $</td><td class="num">150–300 $</td></tr>
+    <tr><td>Observabilidade / QoE</td><td class="num">300–600 $</td><td class="num">500–1 000 $</td><td class="num">800–1 500 $</td></tr>
+    <tr><td>Ingest ffmpeg (só A; B/C incluído no vídeo)</td><td class="num">100–250 $</td><td class="num">150–300 $</td><td class="num">200–400 $</td></tr>
+  </tbody>
+</table>
+<p class="small">Workers a 0,30 $/milhão de requests depois de 10 M incluídos: mesmo a 150 M req/mês são ~50 $. A Postgres <b>não</b> escala para 200 k ligações — escala para 200–500 via PgBouncer. Redis no pico de 200 k sessões × ~2 kB ≈ 400 MB de working set.</p>
+
+<h2>8. Riscos e alavancas</h2>
+<ol>
+  <li><b>Pico 111× a média.</b> CDN e Redis para 50/100/200 k CCU. Postgres e workers para a média + fila no pico.</li>
+  <li><b>Feed autoplay</b> pode igualar o custo do player. Clip curto obrigatório.</li>
+  <li><b>ABR paga-se a si próprio.</b> Sem 360p, toda a gente no comboio puxa 2 Mbit/s e o pico de 100/200/400 Gbit/s é real.</li>
+  <li><b>Conclusão de episódio.</b> Se a view média for 20 s e não 78 s, tráfego e factura caem ~4×. Os números desta tabela são o tecto (view ≈ episódio completo).</li>
+  <li><b>Contrato CDN antes da campanha.</b> Nenhum plano self-serve aguenta 200 k CCU de vídeo na primeira estreia.</li>
+  <li><b>Paywall real</b> só com URL assinada. O <code>video_url</code> público actual não pode ir para o cliente.</li>
+</ol>
+
+<h2>9. Ordem de implementação (prototype → produção)</h2>
+<ol>
+  <li>Packager HLS no <code>tvibox:import</code> + origin R2/Bunny + player HLS. O Estúdio não muda para o editor.</li>
+  <li>Signed URLs no unlock; o cliente deixa de receber o MP4 público.</li>
+  <li>Preview do banner: clip de 5 s, não o MP4 do EP1.</li>
+  <li>Progresso para fila (30 s / complete).</li>
+  <li>Redis à frente de carteira, unlocks e rate limit; Postgres fica fonte de verdade.</li>
+  <li>Contrato CDN (Bunny Volume/Standard ou CF Enterprise / Mux) <b>antes</b> de qualquer campanha no patamar de 50 k+ CCU.</li>
+  <li>Mux ou Stream só se se quiser saltar os passos 1–5 e pagar 3–10×.</li>
+</ol>
+
+<h2>10. Anexo — fórmulas e preçários usados</h2>
+<p><code>views_mês = views_dia × 30</code><br/>
+<code>minutos = views_mês × 78 / 60</code><br/>
+<code>TB = views_mês × 0,0195 / 1 000</code><br/>
+<code>CCU_pico = 0,10 × views_dia</code><br/>
+<code>Gbit/s_pico = CCU_pico × 2 / 1 000</code><br/>
+<code>CCU_médio = views_dia × 78 / 86 400</code></p>
+
+<section class="decision">
+  <h2>11. Folha de decisão para IT</h2>
+  <p>Esta página é o briefing para a reunião de arquitectura. Os números da capa repetem-se aqui com o pedido de cotação e a checklist técnica.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Critério</th>
+        <th>A · HLS + Bunny Volume</th>
+        <th>B · Mux 720p</th>
+        <th>C · Cloudflare Stream</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Custo / mês 0,5 · 1 · 2 M</td>
+        <td class="sc-a">3,0 · 5,1 · 8,3 k$</td>
+        <td class="sc-b">13,3 · 24,8 · 47,4 k$</td>
+        <td class="sc-c">20,8 · 40,9 · 80,8 k$</td>
+      </tr>
+      <tr>
+        <td>Quem opera o HLS</td>
+        <td>Nós (packager no import)</td>
+        <td>Mux</td>
+        <td>Cloudflare</td>
+      </tr>
+      <tr>
+        <td>Tempo até à 1.ª estreia à escala</td>
+        <td>Packager + contrato CDN</td>
+        <td>Dias (SDK + tokens)</td>
+        <td>Dias (Stream + signed URLs)</td>
+      </tr>
+      <tr>
+        <td>Pico 100 / 200 / 400 Gbit/s</td>
+        <td>Contrato Volume obrigatório</td>
+        <td>Incluído na entrega</td>
+        <td>Incluído na entrega</td>
+      </tr>
+      <tr>
+        <td>Paywall (URL assinada)</td>
+        <td>A construir (JWT/cookie)</td>
+        <td>Playback tokens Mux</td>
+        <td>Signed URLs Stream</td>
+      </tr>
+      <tr>
+        <td>ABR 360 / 540 / 720</td>
+        <td>ffmpeg no import</td>
+        <td>Mux</td>
+        <td>Stream</td>
+      </tr>
+      <tr>
+        <td>Vendor lock-in</td>
+        <td>Baixo (ficheiros vossos)</td>
+        <td>Médio</td>
+        <td>Médio</td>
+      </tr>
+      <tr>
+        <td>Quando escolher</td>
+        <td>Custo e catálogo próprio a prazo</td>
+        <td>Estreia rápida sem ops de vídeo</td>
+        <td>Um fornecedor, aceitar 10× o A</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Pedido de cotação (copiar para o sales)</h3>
+  <div class="card">
+    <p>Plataforma de VOD vertical 9:16, origem UE (Lisboa). Três patamares, pico = 10% das views/dia:</p>
+    <ul>
+      <li><b>0,5 M views/dia</b> — 50 000 CCU, 100 Gbit/s, 293 TB/mês, 19,5 M min</li>
+      <li><b>1 M views/dia</b> — 100 000 CCU, 200 Gbit/s, 585 TB/mês, 39 M min</li>
+      <li><b>2 M views/dia</b> — 200 000 CCU, 400 Gbit/s, 1 170 TB/mês, 78 M min</li>
+    </ul>
+    <p class="small" style="margin:0">Pedir: committed bandwidth no pico, hit ratio origin, PoPs em PT/ES/FR, token auth, e o preço com e sem ABR. Bunny: Volume vs Standard EU. Cloudflare: Enterprise + R2 vs Stream. Mux: 720p basic, committed minutes.</p>
+  </div>
+
+  <h3>Checklist antes de qualquer campanha ≥ 50 k CCU</h3>
+  <ol class="check">
+    <li>Vídeo fora da Vercel e fora do bucket público Supabase.</li>
+    <li>HLS (próprio ou Mux/Stream) com 360/540/720 e URL assinada por utilizador + episódio.</li>
+    <li>Banner «Para Ti»: clip de 3–5 s, nunca o episódio completo em loop.</li>
+    <li>Progresso em fila (30 s / complete), não a cada 5 s.</li>
+    <li>Redis à frente de carteira e unlock; Postgres com PgBouncer 200–500 ligações.</li>
+    <li>Contrato CDN/Mux assinado com o Gbit/s e o PB desta tabela — não self-serve.</li>
+    <li>Teste de carga: 10% do pico alvo (5 / 10 / 20 k CCU) antes da estreia.</li>
+  </ol>
+
+  <h3>Preçários usados</h3>
+  <p class="small"><b>Mux 720p (entrega, $/min):</b> primeiros 0,5 M → 0,00080; +0,5 M → 0,00076; +1 M → 0,00072; +4 M → 0,00067; +4 M → 0,00061; &gt;10 M → 0,00056. Primeiros 10 M min = 6 620 $; o resto a 0,00056. Crédito de 100 k min/mês irrelevante nesta escala.</p>
+  <p class="small"><b>Cloudflare Stream:</b> 5 $ / 1 000 min armazenados (irrelevante no catálogo); 1 $ / 1 000 min entregues.</p>
+  <p class="small"><b>Bunny Volume (docs):</b> 0,005 / 0,004 / 0,003 $/GB nos patamares 0–500 TB / 500 TB–1 PB / 1–2 PB. <code>docs.bunny.net/cdn/pricing</code>, Set 2026.</p>
+  <p class="small" style="margin:0">Catálogo TVI BOX (duração média 78 s). Documento de planeamento — não é proposta comercial dos fornecedores. Regenerar: <code>npm run tvibox:escala-pdf</code>.</p>
+</section>
+
+</div>
+</body>
+</html>
