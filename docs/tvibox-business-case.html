@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <title>TVI BOX — Business case de proveitos</title>
+  <style>
+    :root {
+      --bg: #1a1c22;
+      --red: #ca234d;
+      --red-deep: #8f1735;
+      --blue: #37c8f5;
+      --gold: #f8a53d;
+      --green: #54c44d;
+      --text: #f4f5f7;
+      --muted: #a8a9ad;
+      --ink: #1a1c22;
+      --paper: #f6f5f2;
+      --paper2: #eceae4;
+      --rule: #d8d5cc;
+      --line: rgba(255,255,255,.14);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Liberation Sans", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      font-size: 10.1pt;
+      line-height: 1.42;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page { size: A4; margin: 0; }
+    h1, h2, h3 { page-break-after: avoid; }
+    h1 { font-size: 22pt; letter-spacing: -.02em; margin: 0 0 .35em; }
+    h2 { font-size: 13.2pt; color: var(--red-deep); border-bottom: 2px solid var(--red); padding-bottom: .16em; margin: 1.05em 0 .45em; }
+    h3 { font-size: 11pt; margin: .8em 0 .28em; }
+    p { margin: 0 0 .45em; }
+    ul, ol { margin: 0 0 .5em; padding-left: 1.15em; }
+    li { margin-bottom: .14em; }
+    .small { font-size: 8.2pt; color: #5c5e66; }
+    .footnote { font-size: 7.9pt; color: #5c5e66; margin: 0 0 .65em; }
+    .cover {
+      width: 210mm; height: 297mm; background: var(--bg); color: var(--text);
+      padding: 14mm 16mm 0; display: flex; flex-direction: column;
+      break-after: page; page-break-after: always; overflow: hidden;
+    }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .12em; font-size: 11pt; }
+    .stripes {
+      width: 34px; height: 12px;
+      background: linear-gradient(90deg, #37c8f5 0 33%, #f8a53d 33% 66%, #f0d24a 66%);
+      clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+    }
+    .kicker { color: var(--red); font-weight: 700; letter-spacing: .16em; font-size: 8pt; text-transform: uppercase; }
+    .cover h1 { color: #fff; font-size: 25pt; margin-top: 9mm; line-height: 1.12; }
+    .cover .sub { color: var(--muted); font-size: 10.5pt; max-width: 170mm; margin: 4mm 0 7mm; }
+    .vol { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0 0 7mm; }
+    .vol article { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+    .vol .lbl { font-size: 7.5pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .vol .n { font-size: 16pt; font-weight: 800; color: #fff; margin: 2px 0 2px; }
+    .vol .d { font-size: 8.2pt; color: #c9cad0; line-height: 1.4; }
+    .vol .d b { color: var(--gold); }
+    table { width: 100%; border-collapse: collapse; font-size: 8.6pt; page-break-inside: avoid; margin: 0 0 .75em; }
+    th, td { border: 1px solid var(--rule); padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: var(--bg); color: #fff; font-weight: 650; }
+    th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.hi { background: #eaf6ea; font-weight: 700; }
+    td.gold { background: #fff6e8; }
+    .cover table { font-size: 8.7pt; margin: 0; }
+    .cover th { background: #12141a; color: #c9cad0; border-color: #3a3d48; }
+    .cover td, .cover th { border-color: #3a3d48; color: #f4f5f7; }
+    .cover td.hi { background: #1e3a22; color: #d4f5d0; }
+    .cover .meta {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 16px;
+      font-size: 8.3pt; color: #c9cad0; margin-top: 7mm;
+    }
+    .cover .meta b { color: #fff; display: block; font-size: 7.4pt; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+    .cover-foot {
+      margin-top: auto; margin-left: -16mm; margin-right: -16mm;
+      padding: 7mm 16mm; background: #12141a; border-top: 3px solid var(--red);
+      display: flex; justify-content: space-between; gap: 16px; font-size: 8pt; color: #9a9b9d;
+    }
+    .cover-foot strong { color: #fff; }
+    .doc { padding: 12mm 14mm 13mm; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 .7em; }
+    .card { background: #fff; border: 1px solid var(--rule); padding: 8px 10px; page-break-inside: avoid; }
+    .card h3 { margin-top: 0; }
+    .kpi { font-size: 15pt; font-weight: 800; color: var(--red-deep); }
+    .callout { background: #fff; border-left: 4px solid var(--red); padding: 7px 11px; margin: 0 0 .7em; }
+    .avoid { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    code { font-family: "Liberation Mono", ui-monospace, monospace; font-size: 8pt; background: var(--paper2); padding: 1px 4px; border-radius: 3px; }
+    .bars { margin: 0 0 .8em; }
+    .bar-row { display: grid; grid-template-columns: 118px 1fr 62px; align-items: center; gap: 8px; margin: 3px 0; font-size: 8pt; }
+    .bar-track { height: 10px; background: #e6e3db; border-radius: 99px; overflow: hidden; }
+    .bar-fill { display: block; height: 100%; border-radius: 99px; }
+    .bar-row b { text-align: right; font-variant-numeric: tabular-nums; }
+    .group-label { font-size: 8pt; font-weight: 700; margin: 6px 0 2px; color: #5c5e66; }
+    .fly { width: 100%; background: var(--bg); border-radius: 8px; padding: 8px; margin: 0 0 .7em; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="brand-row">
+    <div class="logo"><span class="stripes"></span>TVI BOX</div>
+    <div class="kicker">Documento interno · Produto / Comercial / Financeiro</div>
+  </div>
+  <h1>Business case de proveitos<br/>anúncios, moedas e IAP</h1>
+  <p class="sub">Estimativa mensal de receita para os mesmos três volumes de tráfego (0,5 / 1 / 2 M views/dia, pico = 10%). Economia comercial: anúncio recompensado ≤ 5 s → 5 moedas; episódio ≈ 15 moedas; resgate diário 15 moedas; anúncio de abertura 15 s para todos os utilizadores. Pacotes de compra = preços já na app.</p>
+
+  <div class="vol">
+    <article>
+      <div class="lbl">0,5 M views / dia</div>
+      <div class="n">~ 82 k€ / mês</div>
+      <div class="d">Piso <b>37 k€</b> · tecto <b>177 k€</b><br/>DAU 63 mil · pico 50 k CCU</div>
+    </article>
+    <article>
+      <div class="lbl">1 M views / dia</div>
+      <div class="n">~ 164 k€ / mês</div>
+      <div class="d">Piso <b>74 k€</b> · tecto <b>353 k€</b><br/>DAU 125 mil · pico 100 k CCU</div>
+    </article>
+    <article>
+      <div class="lbl">2 M views / dia</div>
+      <div class="n">~ 329 k€ / mês</div>
+      <div class="d">Piso <b>147 k€</b> · tecto <b>707 k€</b><br/>DAU 250 mil · pico 200 k CCU</div>
+    </article>
+  </div>
+
+  <p class="small" style="color:#a8a9ad;margin:0 0 6px">Proveito líquido / mês (anúncios já líquidos; IAP e Plus depois de IVA 23% + comissão loja). Caso base.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Linha</th>
+        <th class="num">0,5 M/dia<br/>pico 50 k</th>
+        <th class="num">1 M/dia<br/>pico 100 k</th>
+        <th class="num">2 M/dia<br/>pico 200 k</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Anúncio abertura 15 s</td><td class="num">26 k€</td><td class="num">52 k€</td><td class="num">104 k€</td></tr>
+      <tr><td>Anúncios 5 s (moedas)</td><td class="num">32 k€</td><td class="num">65 k€</td><td class="num">130 k€</td></tr>
+      <tr><td>Compra de moedas (líquido)</td><td class="num">19 k€</td><td class="num">39 k€</td><td class="num">78 k€</td></tr>
+      <tr><td>TVI Box+ (líquido)</td><td class="num">4 k€</td><td class="num">9 k€</td><td class="num">17 k€</td></tr>
+      <tr><td><b>Total líquido</b></td><td class="num hi">~ 82 k€</td><td class="num hi">~ 164 k€</td><td class="num hi">~ 329 k€</td></tr>
+    </tbody>
+  </table>
+
+  <div class="meta">
+    <div><b>Moeda</b>EUR. IVA incluído no preço de prateleira</div>
+    <div><b>Data</b>16 Set 2026 · v1.0</div>
+    <div><b>Âmbito</b>Proveitos run-rate, sem CAC</div>
+    <div><b>Tráfego</b>Igual ao briefing de escala</div>
+    <div><b>Pacotes</b>2,99 / 6,99 / 14,99 € (já na app)</div>
+    <div><b>Fora</b>Pessoal, DRM, aquisição paga</div>
+  </div>
+  <div class="cover-foot">
+    <div>3 anúncios de 5 s = 15 moedas = 1 episódio pago · abertura 15 s não dá moedas</div>
+    <div>Caso base: <strong>~71% anúncios</strong> · 24% IAP · 5% Plus</div>
+  </div>
+</section>
+
+<div class="doc">
+
+<h2>1. Resumo executivo</h2>
+<p>Com as regras comerciais pedidas, o TVI BOX é um negócio de <b>volume de anúncios</b> com um segundo motor de <b>compra de moedas</b>. Um episódio pago custa 15 moedas. O resgate diário dá 15 moedas (1 episódio/dia sem anúncio). Cada anúncio de ≤ 5 s dá 5 moedas — faltam 3 anúncios para o episódio seguinte. À entrada da app, todos vêem um anúncio de 15 s (inventário brand, sem moedas).</p>
+<p>O caso base (mix 40% inventário TVI Publicidade / 60% programático, PT/UE) dá <b>~ 82 / 164 / 329 k€ líquidos por mês</b> nos três volumes. Depois dos custos de plataforma do cenário A do briefing de escala (~ 2,8 / 4,7 / 7,6 k€), o resultado de exploração de infra + media fica na ordem dos <b>79 / 160 / 321 k€</b> — <b>antes de aquisição de utilizadores e de pessoal</b>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Views / dia</th>
+      <th class="num">Pico 10%</th>
+      <th class="num">DAU</th>
+      <th class="num">MAU</th>
+      <th class="num">Piso</th>
+      <th class="num">Caso base</th>
+      <th class="num">Tecto</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>0,5 milhões</b></td>
+      <td class="num">50 000</td>
+      <td class="num">63 mil</td>
+      <td class="num">156 mil</td>
+      <td class="num">37 k€</td>
+      <td class="num hi">82 k€</td>
+      <td class="num">177 k€</td>
+    </tr>
+    <tr>
+      <td><b>1 milhão</b></td>
+      <td class="num">100 000</td>
+      <td class="num">125 mil</td>
+      <td class="num">313 mil</td>
+      <td class="num">74 k€</td>
+      <td class="num hi">164 k€</td>
+      <td class="num">353 k€</td>
+    </tr>
+    <tr>
+      <td><b>2 milhões</b></td>
+      <td class="num">200 000</td>
+      <td class="num">250 mil</td>
+      <td class="num">625 mil</td>
+      <td class="num">147 k€</td>
+      <td class="num hi">329 k€</td>
+      <td class="num">707 k€</td>
+    </tr>
+  </tbody>
+</table>
+<p class="footnote">Escala linear com o DAU. RPM do caso base = 5,5 € / 1 000 views. ARPU = 1,32 € / DAU / mês (0,044 € / DAU / dia). Piso = sobretudo programático, menos anúncios e menos pagantes. Tecto = mais inventário TVI, mais fill e IAP mais forte.</p>
+
+<div class="group-label">Composição do líquido no caso base (escala = 329 k€ a 2 M/dia)</div>
+<div class="bars avoid">
+  <div class="group-label">0,5 M/dia</div>
+  <div class="bar-row"><span>Abertura 15 s</span><div class="bar-track"><i class="bar-fill" style="width:7.9%;background:#ca234d"></i></div><b>26 k€</b></div>
+  <div class="bar-row"><span>Rewarded 5 s</span><div class="bar-track"><i class="bar-fill" style="width:9.9%;background:#f8a53d"></i></div><b>32 k€</b></div>
+  <div class="bar-row"><span>IAP líquido</span><div class="bar-track"><i class="bar-fill" style="width:5.9%;background:#37c8f5"></i></div><b>19 k€</b></div>
+  <div class="bar-row"><span>Plus líquido</span><div class="bar-track"><i class="bar-fill" style="width:1.3%;background:#54c44d"></i></div><b>4 k€</b></div>
+  <div class="group-label">2 M/dia</div>
+  <div class="bar-row"><span>Abertura 15 s</span><div class="bar-track"><i class="bar-fill" style="width:31.6%;background:#ca234d"></i></div><b>104 k€</b></div>
+  <div class="bar-row"><span>Rewarded 5 s</span><div class="bar-track"><i class="bar-fill" style="width:39.5%;background:#f8a53d"></i></div><b>130 k€</b></div>
+  <div class="bar-row"><span>IAP líquido</span><div class="bar-track"><i class="bar-fill" style="width:23.6%;background:#37c8f5"></i></div><b>78 k€</b></div>
+  <div class="bar-row"><span>Plus líquido</span><div class="bar-track"><i class="bar-fill" style="width:5.2%;background:#54c44d"></i></div><b>17 k€</b></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h3>O que manda o proveito</h3>
+    <p class="kpi">eCPM × sessões</p>
+    <p class="small">O anúncio de 15 s na abertura vale quase tanto como todos os 5 s recompensados, com muito menos impressões. Vender este slot à TVI Publicidade é a alavanca n.º 1.</p>
+  </div>
+  <div class="card">
+    <h3>O que manda o binge</h3>
+    <p class="kpi">15 moedas / dia</p>
+    <p class="small">O resgate diário financia 1 episódio pago. O resto do catálogo ou se vê com 3 anúncios de 5 s, ou compra-se. Sem IAP, o binge profundo não fecha.</p>
+  </div>
+</div>
+
+<h2>2. Regras da economia (este caso)</h2>
+<p>Regras comerciais usadas aqui — <b>não</b> os defaults actuais do prototype (lá o anúncio ainda dá 15 moedas e o check-in 20).</p>
+<table>
+  <thead><tr><th>Regra</th><th>Valor</th><th>Efeito</th></tr></thead>
+  <tbody>
+    <tr><td>Episódio pago</td><td>15 moedas</td><td>EP1 grátis; a partir do EP2, unlock</td></tr>
+    <tr><td>Anúncio recompensado</td><td>≤ 5 s → +5 moedas</td><td>3 anúncios = 1 episódio</td></tr>
+    <tr><td>Resgate diário</td><td>+15 moedas / dia</td><td>1 episódio/dia sem anúncio nem compra</td></tr>
+    <tr><td>Abertura da app</td><td>15 s, todos os users</td><td>Sem moedas — inventário brand</td></tr>
+    <tr><td>Boas-vindas (já na app)</td><td>+60 moedas (1×)</td><td>4 episódios de amostragem</td></tr>
+    <tr><td>TVI Box+</td><td>4,99 €/mês</td><td>Sem anúncios, episódios sem custo</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>Pacote (já na app)</th><th class="num">Prateleira</th><th class="num">Moedas</th><th class="num">€ / moeda</th><th class="num">Episódios</th><th class="num">Líquido TVI (≈69%)</th></tr></thead>
+  <tbody>
+    <tr><td>p60</td><td class="num">2,99 €</td><td class="num">60</td><td class="num">0,050 €</td><td class="num">4</td><td class="num">2,06 €</td></tr>
+    <tr><td>p180 + 30 bónus</td><td class="num">6,99 €</td><td class="num">210</td><td class="num">0,033 €</td><td class="num">14</td><td class="num">4,82 €</td></tr>
+    <tr><td>p500 + 100 bónus</td><td class="num">14,99 €</td><td class="num">600</td><td class="num">0,025 €</td><td class="num">40</td><td class="num">10,34 €</td></tr>
+    <tr><td>TVI Box+</td><td class="num">4,99 €/mês</td><td class="num">ilimitado</td><td class="num">—</td><td class="num">tudo</td><td class="num">3,44 €</td></tr>
+  </tbody>
+</table>
+<p class="footnote">Líquido ≈ preço / 1,23 (IVA PT) × (1 − 0,15) comissão loja. Mix de pagantes no caso base: 60% um p60 / mês, 25% dois p180, 15% um p500 → ARPPU de prateleira 7,20 €.</p>
+
+<h2>3. De views a utilizadores</h2>
+<p>Os 0,5 / 1 / 2 M são <b>plays de episódio</b>, não pessoas. Usamos 8 views / DAU / dia (~10 min a 78 s) e DAU/MAU = 40% (app viciante, não TV linear).</p>
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th class="num">0,5 M / dia</th>
+      <th class="num">1 M / dia</th>
+      <th class="num">2 M / dia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Views / mês</td><td class="num">15 M</td><td class="num">30 M</td><td class="num">60 M</td></tr>
+    <tr><td>DAU</td><td class="num">62 500</td><td class="num">125 000</td><td class="num">250 000</td></tr>
+    <tr><td>MAU</td><td class="num">156 000</td><td class="num">313 000</td><td class="num">625 000</td></tr>
+    <tr><td>Sessões / DAU</td><td class="num">1,3</td><td class="num">1,3</td><td class="num">1,3</td></tr>
+    <tr><td>Pagantes IAP / mês (2,5% MAU)</td><td class="num">3 900</td><td class="num">7 800</td><td class="num">15 600</td></tr>
+    <tr><td>Subs Plus (0,8% MAU)</td><td class="num">1 250</td><td class="num">2 500</td><td class="num">5 000</td></tr>
+  </tbody>
+</table>
+
+<svg class="fly" viewBox="0 0 860 168" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ciclo de moedas TVI BOX">
+  <style>
+    .b { fill: #2a2c35; stroke: #4a4d58; }
+    .t { fill: #f4f5f7; font-family: Liberation Sans, sans-serif; font-size: 13px; }
+    .t2 { fill: #9a9b9d; font-family: Liberation Sans, sans-serif; font-size: 11px; }
+    .h { fill: #ca234d; font-family: Liberation Sans, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+  </style>
+  <text x="24" y="22" class="h">CICLO DE MOEDAS</text>
+  <rect x="20" y="36" width="190" height="88" rx="8" class="b"/>
+  <text x="34" y="68" class="t">Abertura 15 s</text>
+  <text x="34" y="88" class="t2">Todos os users</text>
+  <text x="34" y="106" class="t2">€ brand · 0 moedas</text>
+  <rect x="230" y="36" width="190" height="88" rx="8" class="b"/>
+  <text x="244" y="68" class="t">Resgate +15 / dia</text>
+  <text x="244" y="88" class="t2">1 episódio grátis/dia</text>
+  <text x="244" y="106" class="t2">Sem receita directa</text>
+  <rect x="440" y="36" width="190" height="88" rx="8" class="b"/>
+  <text x="454" y="68" class="t">Ad 5 s → +5</text>
+  <text x="454" y="88" class="t2">3 ads = 1 episódio</text>
+  <text x="454" y="106" class="t2">€ programático / TVI</text>
+  <rect x="650" y="36" width="190" height="88" rx="8" class="b"/>
+  <text x="664" y="68" class="t">Compra / Plus</text>
+  <text x="664" y="88" class="t2">Binge sem ads</text>
+  <text x="664" y="106" class="t2">2,99 – 14,99 €</text>
+  <text x="24" y="154" class="t2">O EP1 é sempre grátis. O binge a partir do EP2 ou gasta o resgate, ou vê 5 s, ou paga. Plus salta o ciclo e corta inventário de ads.</text>
+</svg>
+
+<h2>4. Anúncios — inventário e eCPM</h2>
+<p>Dois formatos. O de 5 s <b>não é</b> o rewarded clássico de 15–30 s (eCPM mais alto, fill mais fácil). É um bumper. O mercado programático PT paga pouco; a TVI Publicidade pode vendê-lo como brand junto ao 15 s de abertura.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Formato</th>
+      <th>Quem vê</th>
+      <th class="num">eCPM programático</th>
+      <th class="num">eCPM TVI</th>
+      <th class="num">Mix 40/60 (base)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Abertura 15 s, não skippável</td>
+      <td>1,3 sessões / DAU, fill 90% (Plus isento)</td>
+      <td class="num">8 €</td>
+      <td class="num">18 €</td>
+      <td class="num gold">12 €</td>
+    </tr>
+    <tr>
+      <td>Rewarded ≤ 5 s</td>
+      <td>3,2 / DAU (quem precisa de moedas)</td>
+      <td class="num">3,5 €</td>
+      <td class="num">9 €</td>
+      <td class="num gold">5,7 €</td>
+    </tr>
+  </tbody>
+</table>
+
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th class="num">0,5 M / dia</th>
+      <th class="num">1 M / dia</th>
+      <th class="num">2 M / dia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Impressões 15 s / mês</td><td class="num">2,17 M</td><td class="num">4,33 M</td><td class="num">8,67 M</td></tr>
+    <tr><td>Receita 15 s</td><td class="num">26,0 k€</td><td class="num">52,0 k€</td><td class="num">104,0 k€</td></tr>
+    <tr><td>Impressões 5 s / mês</td><td class="num">5,70 M</td><td class="num">11,4 M</td><td class="num">22,8 M</td></tr>
+    <tr><td>Receita 5 s</td><td class="num">32,5 k€</td><td class="num">65,0 k€</td><td class="num">130,0 k€</td></tr>
+    <tr><td><b>Anúncios total</b></td><td class="num hi">58,5 k€</td><td class="num hi">117,0 k€</td><td class="num hi">234,0 k€</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <b>Alavanca comercial.</b> Três ads de 5 s ocupam 15 s de ecrã — o mesmo tempo que um único rewarded clássico, mas o eCPM do bumper é ~metade. Se a TVI Publicidade só vender bem o slot de abertura de 15 s (garantido, 1.ª impressão do dia), já se leva ~1/3 do proveito total. O 5 s é volume; o 15 s é preço.
+</div>
+
+<h2>5. Compra de moedas e Plus</h2>
+<p>2,5% do MAU compra pelo menos um pacote por mês (ARPPU 7,20 € de prateleira). 0,8% do MAU está no TVI Box+. Os Plus não vêem anúncios — já descontados no inventário.</p>
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th class="num">0,5 M / dia</th>
+      <th class="num">1 M / dia</th>
+      <th class="num">2 M / dia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>GMV pacotes (o que o user paga)</td><td class="num">28,1 k€</td><td class="num">56,3 k€</td><td class="num">112,5 k€</td></tr>
+    <tr><td>IAP líquido (após IVA + loja)</td><td class="num">19,4 k€</td><td class="num">38,8 k€</td><td class="num">77,6 k€</td></tr>
+    <tr><td>GMV Plus</td><td class="num">6,2 k€</td><td class="num">12,5 k€</td><td class="num">25,0 k€</td></tr>
+    <tr><td>Plus líquido</td><td class="num">4,3 k€</td><td class="num">8,6 k€</td><td class="num">17,2 k€</td></tr>
+    <tr><td><b>IAP + Plus líquido</b></td><td class="num hi">23,7 k€</td><td class="num hi">47,4 k€</td><td class="num hi">94,8 k€</td></tr>
+  </tbody>
+</table>
+
+<h3>5.1 Equilíbrio de moedas (porque o IAP existe)</h3>
+<p>Resgate + ads de 5 s + boas-vindas + IAP financiam ~22% das views como unlocks pagos. O resto são EP1 grátis, retomas e Plus. Sem compra de moedas, o binge pára ao fim de ~2 episódios pagos/dia (1 do resgate + ~1,1 dos anúncios).</p>
+<table>
+  <thead>
+    <tr>
+      <th>Moedas / mês</th>
+      <th class="num">0,5 M</th>
+      <th class="num">1 M</th>
+      <th class="num">2 M</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Resgate diário (65% do DAU)</td><td class="num">18,3 M</td><td class="num">36,6 M</td><td class="num">73,1 M</td></tr>
+    <tr><td>Anúncios 5 s</td><td class="num">28,5 M</td><td class="num">57,0 M</td><td class="num">114,0 M</td></tr>
+    <tr><td>Boas-vindas</td><td class="num">1,1 M</td><td class="num">2,3 M</td><td class="num">4,5 M</td></tr>
+    <tr><td>Compra de pacotes</td><td class="num">0,8 M</td><td class="num">1,6 M</td><td class="num">3,2 M</td></tr>
+    <tr><td><b>Total → unlocks (÷ 15)</b></td><td class="num">3,25 M eps</td><td class="num">6,49 M eps</td><td class="num">13,0 M eps</td></tr>
+    <tr><td>Quota das views que são unlock pago</td><td class="num">22%</td><td class="num">22%</td><td class="num">22%</td></tr>
+  </tbody>
+</table>
+<p class="footnote">O IAP injeta poucas moedas (bónus nos pacotes grandes) mas muito euro. Quem binge 10+ episódios pagos num dia não o faz com ads de 5 s — compra o p180/p500. É o mesmo padrão DramaBox: ads para o casual, loja para o viciado.</p>
+
+<h2>6. Proveito vs custo de plataforma</h2>
+<p>Custos do briefing de escala, convertidos a 0,92 €/$. O business case não muda a arquitectura: o vídeo continua a não poder passar pela Vercel.</p>
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th class="num">0,5 M / dia</th>
+      <th class="num">1 M / dia</th>
+      <th class="num">2 M / dia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Proveito líquido (este doc)</td><td class="num hi">82 k€</td><td class="num hi">164 k€</td><td class="num hi">329 k€</td></tr>
+    <tr><td>Custo plataforma A (HLS + Bunny)</td><td class="num">2,8 k€</td><td class="num">4,7 k€</td><td class="num">7,6 k€</td></tr>
+    <tr><td>Custo plataforma B (Mux)</td><td class="num">12,2 k€</td><td class="num">22,8 k€</td><td class="num">43,6 k€</td></tr>
+    <tr><td>Custo plataforma C (CF Stream)</td><td class="num">19,1 k€</td><td class="num">37,6 k€</td><td class="num">74,3 k€</td></tr>
+    <tr><td><b>Resultado vs A</b></td><td class="num hi">~ 79 k€</td><td class="num hi">~ 160 k€</td><td class="num hi">~ 321 k€</td></tr>
+    <tr><td>Resultado vs C (pior custo)</td><td class="num">~ 63 k€</td><td class="num">~ 126 k€</td><td class="num">~ 255 k€</td></tr>
+  </tbody>
+</table>
+<p class="footnote">Ainda cabe pessoal editorial, QoE e um mínimo de UA. Não cabe uma campanha de aquisição paga agressiva: a 1,50 € de CPI, 12% de MAU novo/mês seriam ~ 28 / 56 / 113 k€ — come o IAP inteiro no caso base.</p>
+
+<h2>7. Sensibilidade</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Variável</th>
+      <th>Piso</th>
+      <th>Base</th>
+      <th>Tecto</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>eCPM 15 s</td><td>7,5 € (só programático)</td><td>12 € (mix 40/60)</td><td>18 € (quase só TVI)</td></tr>
+    <tr><td>eCPM 5 s</td><td>3,2 €</td><td>5,7 €</td><td>9 €</td></tr>
+    <tr><td>Ads 5 s / DAU</td><td>2,4</td><td>3,2</td><td>4,5</td></tr>
+    <tr><td>% MAU que paga IAP</td><td>1,5%</td><td>2,5%</td><td>4,0%</td></tr>
+    <tr><td>ARPPU prateleira</td><td>5,50 €</td><td>7,20 €</td><td>11 €</td></tr>
+    <tr><td>Plus / MAU</td><td>0,4%</td><td>0,8%</td><td>1,5%</td></tr>
+  </tbody>
+</table>
+<p>O intervalo 37–177 / 74–353 / 147–707 k€ é este piso–tecto. A variável que mais mexe o tecto é o eCPM do 15 s vendido pela TVI. A que mais mexe o piso é fill programático do bumper de 5 s (inventário curto, muitos SDKs nem o têm).</p>
+
+<h2>8. Riscos (proveito)</h2>
+<ol>
+  <li><b>5 s não é rewarded standard.</b> AdMob/AppLovin preferem 15–30 s. Fill pode ficar nos 50–70% se não houver campanha TVI. O piso já desconta isto; um lançamento só programático cai para o piso.</li>
+  <li><b>Resgate de 15 moedas/dia</b> é 1 episódio grátis. Se a sequência semanal do prototype (+50 ao 7.º dia) se mantiver, a diluição sobe. Este caso assume +15 limpos, todos os dias.</li>
+  <li><b>Plus come anúncios.</b> A 3–4% de MAU o IAP/Plus cresce mas o 15 s de abertura encolhe. Hoje 0,8% é conservador.</li>
+  <li><b>Abertura 15 s em 1,3 sessões/dia</b> cansa. Se a frequência cair para 1,0 (só o 1.º open), a linha de 15 s cai ~23%.</li>
+  <li><b>CAC.</b> Números deste PDF são run-rate de utilizadores já na app. TVI on-air pode trazer DAU barato; UA paga no iOS/Android não.</li>
+  <li><b>Pico 10%.</b> 50–200 k CCU não aumentam o eCPM — aumentam o risco de o SDK de ads falhar no mesmo instante que o vídeo. Waterfall e cache de criativos no open.</li>
+</ol>
+
+<h2>9. Pedido à TVI Publicidade (copiar)</h2>
+<div class="card avoid">
+  <p>Inventário in-app 9:16, audiência PT, dois slots:</p>
+  <ul>
+    <li><b>Abertura 15 s</b> não skippável, 1.ª impressão da sessão. Volume: 2,2 / 4,3 / 8,7 M imp/mês nos três patamares. Pedir CPM brand (piso deste doc 12 € mix, tecto 18 €).</li>
+    <li><b>Bumper 5 s</b> recompensado (user pede moedas). Volume: 5,7 / 11,4 / 22,8 M imp/mês. Pedir CPM bumper / unskip. Sem este slot vendido, o 5 s cai para programático a ~3,5 €.</li>
+  </ul>
+  <p class="small" style="margin:0">Não vender o episódio em si (paywall de moedas). Não meter anúncio a meio dos 78 s — só abertura e rewarded opt-in.</p>
+</div>
+
+<h2>10. Fórmulas</h2>
+<p><code>DAU = views_dia / 8</code> · <code>MAU = DAU / 0,40</code><br/>
+<code>imp_15s = DAU × 1,3 × 30 × 0,988 × 0,90</code> · <code>rev_15s = imp_15s / 1 000 × 12 €</code><br/>
+<code>imp_5s = DAU × 3,2 × 30 × 0,95</code> · <code>rev_5s = imp_5s / 1 000 × 5,7 €</code><br/>
+<code>IAP_líq = MAU × 0,025 × 7,20 € × 0,69</code> · <code>Plus_líq = MAU × 0,008 × 4,99 € × 0,69</code><br/>
+<code>líquido = rev_15s + rev_5s + IAP_líq + Plus_líq</code></p>
+<p class="footnote">Fontes de eCPM: gamas 2025–26 rewarded/interstitial Europa do Sul (programático 3–8 €; brand TVI acima). Pacotes e Plus: <code>lib/tvibox/economy.ts</code>. Tráfego: briefing de escala 16 Set 2026. Documento de planeamento — não é forecast contabilístico. Regenerar: <code>npm run tvibox:business-pdf</code>.</p>
+
+</div>
+</body>
+</html>

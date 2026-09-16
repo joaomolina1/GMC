@@ -94,6 +94,9 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   Arquitectura e custos de escala (0,5 / 1 / 2 M views/dia, pico = 10%) em
   [`docs/tvibox-escala-plataforma.pdf`](docs/tvibox-escala-plataforma.pdf)
   (fonte HTML `docs/tvibox-escala-plataforma.html`; regenerar com `npm run tvibox:escala-pdf`).
+  Business case de proveitos (anúncios 15 s + 5 s, moedas, IAP) em
+  [`docs/tvibox-business-case.pdf`](docs/tvibox-business-case.pdf)
+  (fonte HTML `docs/tvibox-business-case.html`; regenerar com `npm run tvibox:business-pdf`).
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
 ### Produção de conteúdos
@@ -110,6 +113,7 @@ npm run tvibox:produce -- --publish --concurrency 3   # as 8 séries; resumível
 npm run tvibox:align -- --publish [--series a,b --ep 1 --model medium]  # legendas no instante exato da fala
 npm run tvibox:import -- --job <id> | --zip novela.zip [--slug x --title "…" --publish --dry-run --limit N]  # novela pronta → série completa
 npm run tvibox:escala-pdf                         # PDF interno: arquitectura + custos 0,5/1/2 M views/dia
+npm run tvibox:business-pdf                       # PDF interno: business case de proveitos (mesmos 3 volumes)
 ```
 
 `tvibox:align` extrai o áudio do render publicado, reconhece a fala com timestamps por palavra
