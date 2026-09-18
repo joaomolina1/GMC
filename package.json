@@ -27,7 +27,9 @@
     "tvibox:align": "tsx scripts/tvibox/align-subtitles.ts",
     "test:e2e": "playwright test",
     "pt26:samples": "tsx scripts/pt26/make-samples.ts",
-    "tvibox:import": "tsx scripts/tvibox/import.ts"
+    "tvibox:import": "tsx scripts/tvibox/import.ts",
+    "tvibox:escala-pdf": "node scripts/tvibox/render-escala-pdf.mjs",
+    "tvibox:business-pdf": "node scripts/tvibox/render-business-pdf.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
