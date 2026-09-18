@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 
 const html = resolve("docs/tvibox-business-case.html");
 const outDocs = resolve("docs/tvibox-business-case.pdf");
-const outArt = "/opt/cursor/artifacts/tvi_box_business_case_proveitos.pdf";
+const outArt = "/opt/cursor/artifacts/tvi_box_business_case_proveitos_5_10_20m.pdf";
 
 async function main() {
   mkdirSync(dirname(outArt), { recursive: true });

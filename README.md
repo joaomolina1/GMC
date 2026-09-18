@@ -94,7 +94,7 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   Arquitectura e custos de escala (0,5 / 1 / 2 M views/dia, pico = 10%) em
   [`docs/tvibox-escala-plataforma.pdf`](docs/tvibox-escala-plataforma.pdf)
   (fonte HTML `docs/tvibox-escala-plataforma.html`; regenerar com `npm run tvibox:escala-pdf`).
-  Business case de proveitos (anúncios 15 s + 5 s, moedas, IAP) em
+  Business case de proveitos (0,5 / 1 / 2 / 5 / 10 / 20 M views/dia) em
   [`docs/tvibox-business-case.pdf`](docs/tvibox-business-case.pdf)
   (fonte HTML `docs/tvibox-business-case.html`; regenerar com `npm run tvibox:business-pdf`).
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
