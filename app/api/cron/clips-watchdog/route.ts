@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cronUnauthorized } from "@lib/cron/auth";
 import { tryCreateServiceClient } from "@lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -8,12 +9,8 @@ export const runtime = "nodejs";
  * trabalho: o ffmpeg/ASR correm exclusivamente no worker em container.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET?.trim();
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = cronUnauthorized(request);
+  if (denied) return denied;
 
   const supabase = await tryCreateServiceClient();
   if (!supabase) {

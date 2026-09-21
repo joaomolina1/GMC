@@ -178,7 +178,9 @@ Audiência em direto (concurrents Chartbeat) dos lineares **TVI**, **CNN Portuga
 A Real-Time API da Chartbeat só devolve o *agora* (toppages, actualizado a ~3 s; limite 200 req/min/host).
 O Advanced Queries (histórico) serve totais diários/semanais (pageviews, engaged time) — **não** concurrents ao minuto.
 O histórico ao minuto é nosso: um cron Vercel (`* * * * *` → `/api/cron/chartbeat-diretos`) grava um snapshot
-em `chartbeat_channel_minutes`. Autenticação: header `X-CB-AK` (o `?apikey=` da doc antiga está deprecated).
+em `chartbeat_channel_minutes` em produção, mesmo com a página fechada. Sem `CRON_SECRET` na Vercel o handler
+responde 401 e o histórico só avança se alguém tiver `/chartbeat` aberto (persistência no live). Autenticação
+Chartbeat: header `X-CB-AK` (o `?apikey=` da doc antiga está deprecated).
 
 No TVI Player o mesmo linear aparece em vários paths (ex.: `/direto`, `/direto/tvi`, `/direto/TVI`,
 app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por `cnnportugal.iol.pt/direto`.
@@ -226,6 +228,7 @@ cp .env.example .env.local
 #   ANTHROPIC_API_KEY
 #   VOYAGE_API_KEY  (recomendado para RAG semântico real)
 #   CHARTBEAT_API_KEY  (zona /chartbeat — também na Vercel, Production + Preview)
+#   CRON_SECRET        (obrigatório na Vercel Production + Preview; o Cron envia Bearer)
 
 npm install
 npm run dev
