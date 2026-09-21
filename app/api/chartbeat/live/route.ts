@@ -90,8 +90,9 @@ export async function GET() {
       const snapshot = buildSnapshot(pages, videos);
       const service = await tryCreateServiceClient();
       if (service) {
-        const last = ingest?.capturedAt ? new Date(ingest.capturedAt).getTime() : 0;
-        if (Date.now() - last > 90_000) {
+        const lastMinute = ingest?.capturedAt ? new Date(ingest.capturedAt).getTime() : 0;
+        const thisMinute = Math.floor(Date.now() / 60_000) * 60_000;
+        if (thisMinute > lastMinute) {
           await persistSnapshot(service, snapshot).catch((e) => console.error("[chartbeat/live persist]", e));
         }
       }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getChartbeatApiKey } from "@lib/chartbeat/client";
 import { ingestNow } from "@lib/chartbeat/ingest";
+import { cronUnauthorized } from "@lib/cron/auth";
 import { tryCreateServiceClient } from "@lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -8,11 +9,8 @@ export const maxDuration = 30;
 
 /** Cron Vercel a cada minuto: snapshot Chartbeat toppages → Postgres. */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET?.trim();
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = cronUnauthorized(request);
+  if (denied) return denied;
 
   const apiKey = getChartbeatApiKey();
   if (!apiKey) {
