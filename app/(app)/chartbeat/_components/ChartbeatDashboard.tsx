@@ -27,6 +27,7 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>("tvi");
@@ -58,8 +59,8 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   }, [loadLive, loadHistory, range, grain]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void loadLive().catch((e) => setError(e instanceof Error ? e.message : "Erro"));
+  }, [loadLive]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -67,6 +68,25 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     }, 30_000);
     return () => window.clearInterval(id);
   }, [loadLive]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHoverIndex(null);
+    setHistoryLoading(true);
+    loadHistory(range, grain)
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Falha a ler o histórico");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHistoryLoading(false);
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range, grain, loadHistory]);
 
   async function ingest() {
     setIngesting(true);
@@ -279,7 +299,7 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
             {pointCount > 0 && pointCount < 12 && grain === "minute"
               ? " · o cron ainda está a acumular minutos"
               : ""}
-            {loading ? " · a carregar…" : ""}
+            {historyLoading ? " · a carregar…" : ""}
           </p>
           <p>
             {live?.lastIngest

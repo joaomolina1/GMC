@@ -29,7 +29,7 @@ export const CHANNELS: ChannelDef[] = [
   {
     slug: "cnn",
     name: "CNN Portugal",
-    color: "#cc0000",
+    color: "#7f1d1d",
     sortOrder: 2,
     videoIds: ["618427ce0cf2648aa1626c36"],
   },
