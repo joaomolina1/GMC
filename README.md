@@ -170,6 +170,23 @@ de linhas SVG). Construída sobre a infra GMC (Supabase Postgres + Storage, Verc
 5. **Ecrã** — Definições → copiar o «URL do ecrã» para o browser do ecrã tátil (Chromium, F11, 1920×1080).
    Atalhos: ←/→ quadros, ↑/↓ perguntas, `H` histórico, `Esc` início, `1`–`8` pergunta.
 
+## Zona Chartbeat · Diretos ✅
+
+Audiência em direto (concurrents Chartbeat) dos lineares **TVI**, **CNN Portugal**, **TVI Reality**,
+**TVI Ficção**, **TVI Internacional** e **V+ TVI**, com histórico ao minuto.
+
+A Real-Time API da Chartbeat só devolve o *agora* (toppages, actualizado a ~3 s). O histórico é nosso:
+um cron Vercel (`* * * * *` → `/api/cron/chartbeat-diretos`) grava um snapshot por minuto em
+`chartbeat_channel_minutes`.
+
+No TVI Player o mesmo linear aparece em vários paths (ex.: `/direto`, `/direto/tvi`, `/direto/TVI`,
+app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por `cnnportugal.iol.pt/direto`.
+A zona soma essas linhas no canal correspondente — não as trata como programas diferentes.
+
+- **Rota** — `/chartbeat` (utilizadores autenticados). Admins podem forçar «Gravar este minuto».
+- **Hosts** — `tviplayer.iol.pt`, `cnnportugal.iol.pt` (`CHARTBEAT_API_KEY`, header `X-CB-AK`).
+- **Testes** — `npm test` (matching de aliases e agregação).
+
 ## Fase 7 — Clips (Fase 1: arquivo/VOD) 🚧
 
 Sugestão automática de clips a partir de vídeo de arquivo. O módulo **sugere** — nunca
@@ -205,6 +222,7 @@ cp .env.example .env.local
 #   SUPABASE_SERVICE_ROLE_KEY
 #   ANTHROPIC_API_KEY
 #   VOYAGE_API_KEY  (recomendado para RAG semântico real)
+#   CHARTBEAT_API_KEY  (zona /chartbeat — também na Vercel, Production + Preview)
 
 npm install
 npm run dev
@@ -246,6 +264,11 @@ npm run db:types
 | `/api/clips/candidates/[id]/decision` | Aprova/rejeita → `clip_decisions` (+ render) (POST) |
 | `/api/clips/renders/[id]/download` | Signed URL curta do MP4, só se `done` (GET) |
 | `/api/cron/clips-watchdog` | Requeue de leases expirados (Bearer `CRON_SECRET`) |
+| `/chartbeat` | Audiência ao minuto dos diretos Chartbeat (TVI Player + CNN Portugal) |
+| `/api/chartbeat/live` | Snapshot actual (toppages Chartbeat, canais agregados) |
+| `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d`) |
+| `/api/chartbeat/ingest` | Gravar este minuto (POST, admin) |
+| `/api/cron/chartbeat-diretos` | Cron ao minuto (Bearer `CRON_SECRET`) |
 | `/pt26/live` | Ecrã do pivot PT26 (token `?key=`), `/pt26/live/preview` inclui rascunhos (admin) |
 | `/admin/pt26` | Back-office PT26: semanas/import, pessoas, partidos, perguntas, definições (admin) |
 | `/api/pt26/live` | Payload completo do ecrã (semanas publicadas, deltas, imagens) — token ou sessão admin |
@@ -264,6 +287,7 @@ lib/supabase/     → SSR clients
 lib/flows/        → Flow Engine (Fase 5)
 lib/clips/        → Clips: snapping, janelas, legendas, prompts, sugestão (Fase 7)
 lib/pt26/         → PT26: parser Excel, matching, payload live (deltas/saldo), histórico, template
+lib/chartbeat/    → Chartbeat Diretos: toppages, agregação de canais, ingest ao minuto
 worker/           → Worker em container (GPU): ffmpeg + WhisperX + fila de jobs/renders
 mcp/              → Servidor MCP remoto/stdio
 ```

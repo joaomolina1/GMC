@@ -23,6 +23,7 @@ const TITLES: { match: (p: string) => boolean; title: string; subtitle: string }
   { match: (p) => p.startsWith("/clips/novo"), title: "Novo vídeo", subtitle: "Upload direto e parâmetros da sugestão" },
   { match: (p) => /\/clips\/[^/]+/.test(p), title: "Revisão de clips", subtitle: "Pré-visualize, ajuste e aprove candidatos" },
   { match: (p) => p.startsWith("/clips"), title: "Clips", subtitle: "Sugestão automática de clips a partir de arquivo" },
+  { match: (p) => p.startsWith("/chartbeat"), title: "Chartbeat · Diretos", subtitle: "Audiência ao minuto dos lineares TVI e CNN" },
   { match: (p) => p.startsWith("/admin"), title: "Backoffice", subtitle: "Administração e métricas" },
 ];
 

@@ -7,6 +7,12 @@
     "app/mcp/route.ts": {
       "maxDuration": 300,
       "memory": 1024
+    },
+    "app/api/cron/chartbeat-diretos/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/chartbeat/ingest/route.ts": {
+      "maxDuration": 30
     }
   },
   "crons": [
@@ -21,6 +27,10 @@
     {
       "path": "/api/cron/clips-watchdog",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/chartbeat-diretos",
+      "schedule": "* * * * *"
     }
   ]
 }
