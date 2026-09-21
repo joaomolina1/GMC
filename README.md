@@ -175,9 +175,10 @@ de linhas SVG). Construída sobre a infra GMC (Supabase Postgres + Storage, Verc
 Audiência em direto (concurrents Chartbeat) dos lineares **TVI**, **CNN Portugal**, **TVI Reality**,
 **TVI Ficção**, **TVI Internacional** e **V+ TVI**, com histórico ao minuto.
 
-A Real-Time API da Chartbeat só devolve o *agora* (toppages, actualizado a ~3 s). O histórico é nosso:
-um cron Vercel (`* * * * *` → `/api/cron/chartbeat-diretos`) grava um snapshot por minuto em
-`chartbeat_channel_minutes`.
+A Real-Time API da Chartbeat só devolve o *agora* (toppages, actualizado a ~3 s; limite 200 req/min/host).
+O Advanced Queries (histórico) serve totais diários/semanais (pageviews, engaged time) — **não** concurrents ao minuto.
+O histórico ao minuto é nosso: um cron Vercel (`* * * * *` → `/api/cron/chartbeat-diretos`) grava um snapshot
+em `chartbeat_channel_minutes`. Autenticação: header `X-CB-AK` (o `?apikey=` da doc antiga está deprecated).
 
 No TVI Player o mesmo linear aparece em vários paths (ex.: `/direto`, `/direto/tvi`, `/direto/TVI`,
 app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por `cnnportugal.iol.pt/direto`.
