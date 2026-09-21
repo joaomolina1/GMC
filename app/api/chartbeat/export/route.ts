@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { emptyHistory } from "@lib/chartbeat/payload";
+import { csvFilename, historyToCsv } from "@lib/chartbeat/csv";
 import { historySpec, parseHistoryGrain, parseHistoryRange } from "@lib/chartbeat/format";
 import { fetchHistoryBundle } from "@lib/chartbeat/query";
 import { createClient } from "@lib/supabase/server";
@@ -16,10 +16,18 @@ export async function GET(request: Request) {
 
   const sb = await createClient();
   try {
-    const payload = emptyHistory(range, grain, from);
-    payload.points = await fetchHistoryBundle(sb, from, grain);
-    return NextResponse.json(payload);
+    const points = await fetchHistoryBundle(sb, from, grain);
+    const csv = historyToCsv(points, grain);
+    const filename = csvFilename(range, grain);
+    return new NextResponse(csv, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Histórico indisponível" }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Exportação indisponível" }, { status: 500 });
   }
 }

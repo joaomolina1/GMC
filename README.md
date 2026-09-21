@@ -184,9 +184,11 @@ No TVI Player o mesmo linear aparece em vários paths (ex.: `/direto`, `/direto/
 app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por `cnnportugal.iol.pt/direto`.
 A zona soma essas linhas no canal correspondente — não as trata como programas diferentes.
 
-- **Rota** — `/chartbeat` (utilizadores autenticados). Admins podem forçar «Gravar este minuto».
+- **Rota** — `/chartbeat` (utilizadores autenticados). Gráfico de linhas (não empilhado) com
+  granularidade ao minuto (ideal), por hora ou por dia (média, fuso de Lisboa). «Exportar CSV»
+  descarrega a série visível (separador `;`, BOM, Excel pt-PT). Admins podem forçar «Gravar este minuto».
 - **Hosts** — `tviplayer.iol.pt`, `cnnportugal.iol.pt` (`CHARTBEAT_API_KEY`, header `X-CB-AK`).
-- **Testes** — `npm test` (matching de aliases e agregação).
+- **Testes** — `npm test` (matching de aliases, agregação, rollup hora/dia, CSV).
 
 ## Fase 7 — Clips (Fase 1: arquivo/VOD) 🚧
 
@@ -267,7 +269,8 @@ npm run db:types
 | `/api/cron/clips-watchdog` | Requeue de leases expirados (Bearer `CRON_SECRET`) |
 | `/chartbeat` | Audiência ao minuto dos diretos Chartbeat (TVI Player + CNN Portugal) |
 | `/api/chartbeat/live` | Snapshot actual (toppages Chartbeat, canais agregados) |
-| `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d`) |
+| `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d&grain=minute\|hour\|day`) |
+| `/api/chartbeat/export` | CSV da série (`?range=&grain=`, `;` + BOM) |
 | `/api/chartbeat/ingest` | Gravar este minuto (POST, admin) |
 | `/api/cron/chartbeat-diretos` | Cron ao minuto (Bearer `CRON_SECRET`) |
 | `/pt26/live` | Ecrã do pivot PT26 (token `?key=`), `/pt26/live/preview` inclui rascunhos (admin) |

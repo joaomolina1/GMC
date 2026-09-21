@@ -72,6 +72,9 @@ export interface Snapshot {
 
 export type HistoryRange = "6h" | "24h" | "7d" | "30d";
 
+/** Granularidade da série: minuto (ideal) ou médias em hora/dia de Lisboa. */
+export type HistoryGrain = "minute" | "hour" | "day";
+
 export interface HistoryPoint {
   bucket: string;
   people: Record<string, number>;
@@ -79,7 +82,7 @@ export interface HistoryPoint {
 
 export interface HistoryPayload {
   range: HistoryRange;
-  bucketSeconds: number;
+  grain: HistoryGrain;
   from: string;
   points: HistoryPoint[];
 }

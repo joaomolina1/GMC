@@ -1,13 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, RefreshCw, Radio } from "lucide-react";
+import { Activity, Download, RefreshCw, Radio } from "lucide-react";
 import { Badge } from "@/_design_system/Badge";
 import { Button } from "@/_design_system/Button";
 import { Card, CardHeader, CardTitle } from "@/_design_system/Card";
 import { CHANNELS, CHANNEL_BY_SLUG } from "@lib/chartbeat/channels";
-import { HISTORY_RANGES, formatLisbonDateTime, formatPeople } from "@lib/chartbeat/format";
-import type { HistoryPayload, HistoryRange, Snapshot, SourceKind } from "@lib/chartbeat/types";
+import { csvFilename, historyToCsv } from "@lib/chartbeat/csv";
+import {
+  HISTORY_GRAINS,
+  HISTORY_RANGES,
+  defaultGrain,
+  formatLisbonDateTime,
+  formatPeople,
+} from "@lib/chartbeat/format";
+import type { HistoryGrain, HistoryPayload, HistoryRange, Snapshot, SourceKind } from "@lib/chartbeat/types";
 import type { LivePayload } from "@lib/chartbeat/payload";
 import { AudienceChart } from "./AudienceChart";
 
@@ -15,11 +22,13 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   const [live, setLive] = useState<LivePayload | null>(null);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [range, setRange] = useState<HistoryRange>("24h");
+  const [grain, setGrain] = useState<HistoryGrain>("minute");
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>("tvi");
 
   const loadLive = useCallback(async () => {
@@ -29,8 +38,8 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     setLive(data as LivePayload);
   }, []);
 
-  const loadHistory = useCallback(async (r: HistoryRange) => {
-    const res = await fetch(`/api/chartbeat/history?range=${r}`, { cache: "no-store" });
+  const loadHistory = useCallback(async (r: HistoryRange, g: HistoryGrain) => {
+    const res = await fetch(`/api/chartbeat/history?range=${r}&grain=${g}`, { cache: "no-store" });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error ?? "Falha a ler o histórico");
     setHistory(data as HistoryPayload);
@@ -40,13 +49,13 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadLive(), loadHistory(range)]);
+      await Promise.all([loadLive(), loadHistory(range, grain)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro");
     } finally {
       setLoading(false);
     }
-  }, [loadLive, loadHistory, range]);
+  }, [loadLive, loadHistory, range, grain]);
 
   useEffect(() => {
     void reload();
@@ -73,9 +82,35 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  function pickRange(next: HistoryRange) {
+    setRange(next);
+    setGrain(defaultGrain(next));
+    setHoverIndex(null);
+  }
+
+  function downloadCsv() {
+    const points = history?.points ?? [];
+    if (points.length === 0) return;
+    setExporting(true);
+    try {
+      const csv = historyToCsv(points, grain);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = csvFilename(range, grain);
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const snapshot: Snapshot | null = live?.snapshot ?? null;
   const total = snapshot?.channels.reduce((n, c) => n + c.people, 0) ?? 0;
   const captured = snapshot?.capturedAt;
+  const grainMeta = HISTORY_GRAINS.find((g) => g.id === grain)!;
+  const pointCount = history?.points.length ?? 0;
 
   const sources = useMemo(() => {
     if (!snapshot) return [];
@@ -85,25 +120,29 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   }, [snapshot]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-slate-900">Chartbeat · Diretos</h2>
-            <Badge tone="brand">Analytics</Badge>
-            {live?.stale && <Badge tone="warning">Dados em atraso</Badge>}
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900">Audiência dos diretos</h2>
+            {live?.stale ? (
+              <Badge tone="warning">Dados em atraso</Badge>
+            ) : snapshot ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                </span>
+                Ao vivo
+              </span>
+            ) : null}
           </div>
-          <p className="text-sm text-slate-500">
-            Concurrents Chartbeat dos lineares TVI Player e CNN Portugal. Vários links do mesmo
-            direto (web, casing, app) somam-se no canal.
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Pessoas a ver cada linear no TVI Player e na CNN Portugal, minuto a minuto. Vários
+            links do mesmo direto (web, app, casing) somam-se no canal.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {captured && (
-            <span className="text-xs text-slate-400">
-              {formatLisbonDateTime(captured)} · {formatPeople(total)} em direto
-            </span>
-          )}
           <Button variant="outline" onClick={() => void reload()} disabled={loading}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             Atualizar
@@ -121,92 +160,135 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {CHANNELS.map((meta) => {
-          const ch = snapshot?.channels.find((c) => c.slug === meta.slug);
-          const people = ch?.people ?? 0;
-          const active = openSlug === meta.slug;
-          return (
-            <button
-              key={meta.slug}
-              type="button"
-              onClick={() => setOpenSlug(active ? null : meta.slug)}
-              className={`rounded-2xl border bg-white p-4 text-left shadow-[var(--shadow-card)] transition ${
-                active ? "border-slate-300 ring-2 ring-brand-500/15" : "border-line hover:border-slate-300"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: meta.color }} />
-                  {meta.name}
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  {people ? `${formatPeople(ch?.web ?? 0)} web · ${formatPeople(ch?.app ?? 0)} app` : "—"}
-                </span>
-              </div>
-              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">
-                {formatPeople(people)}
-              </p>
-              {ch?.programTitle && (
-                <p className="mt-1 truncate text-xs text-slate-500" title={ch.programTitle}>
-                  No ar: {ch.programTitle}
-                  {ch.videoWatching != null ? ` · ${formatPeople(ch.videoWatching)} a ver vídeo` : ""}
-                </p>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico ao minuto</CardTitle>
-          <div className="flex flex-wrap items-center gap-1">
-            {HISTORY_RANGES.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setRange(r.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  range === r.id ? "bg-brand-500 text-white" : "text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
+      <div className="overflow-hidden rounded-3xl border border-line bg-white shadow-[var(--shadow-card)]">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-5 py-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">Agora</p>
+            <p className="mt-0.5 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">
+              {formatPeople(total)}
+              <span className="ml-2 text-sm font-medium text-slate-400">pessoas em direto</span>
+            </p>
           </div>
-        </CardHeader>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {CHANNELS.map((c) => {
-            const off = hidden.has(c.slug);
+          {captured && (
+            <p className="text-xs text-slate-400">{formatLisbonDateTime(captured)} · Lisboa</p>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-6">
+          {CHANNELS.map((meta) => {
+            const ch = snapshot?.channels.find((c) => c.slug === meta.slug);
+            const people = ch?.people ?? 0;
+            const active = openSlug === meta.slug;
             return (
               <button
-                key={c.slug}
+                key={meta.slug}
                 type="button"
-                onClick={() => {
-                  const next = new Set(hidden);
-                  if (off) next.delete(c.slug);
-                  else next.add(c.slug);
-                  setHidden(next);
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
-                  off ? "bg-slate-50 text-slate-400 ring-slate-200" : "bg-white text-slate-700 ring-slate-200"
+                onClick={() => setOpenSlug(active ? null : meta.slug)}
+                className={`px-4 py-4 text-left transition ${
+                  active ? "bg-slate-50" : "bg-white hover:bg-slate-50/80"
                 }`}
               >
-                <span className="h-2 w-2 rounded-full" style={{ background: off ? "#cbd5e1" : c.color }} />
-                {c.name}
+                <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
+                  {meta.name}
+                </span>
+                <p className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">
+                  {formatPeople(people)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  {people ? `${formatPeople(ch?.web ?? 0)} web · ${formatPeople(ch?.app ?? 0)} app` : "sem audiência"}
+                </p>
+                {ch?.programTitle && (
+                  <p className="mt-1 truncate text-xs text-slate-500" title={ch.programTitle}>
+                    {ch.programTitle}
+                  </p>
+                )}
               </button>
             );
           })}
         </div>
-        <AudienceChart history={history} hidden={hidden} hoverIndex={hoverIndex} onHover={setHoverIndex} />
-        {live?.lastIngest && (
-          <p className="mt-2 text-xs text-slate-400">
-            Último cron: {formatLisbonDateTime(live.lastIngest.capturedAt)} · {live.lastIngest.status}
-            {live.lastIngest.error ? ` · ${live.lastIngest.error}` : ""}
+      </div>
+
+      <div className="overflow-hidden rounded-3xl border border-slate-800 bg-[#0a1018] shadow-[0_24px_60px_-24px_rgba(10,16,24,0.55)]">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-white">Pessoas ao longo do tempo</h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Gráfico de linhas independentes · {grainMeta.hint}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              items={HISTORY_RANGES.map((r) => ({ id: r.id, label: r.label }))}
+              value={range}
+              onChange={(id) => pickRange(id as HistoryRange)}
+            />
+            <Segmented
+              items={HISTORY_GRAINS.map((g) => ({ id: g.id, label: g.short }))}
+              value={grain}
+              onChange={(id) => {
+                setGrain(id as HistoryGrain);
+                setHoverIndex(null);
+              }}
+            />
+            <button
+              type="button"
+              onClick={downloadCsv}
+              disabled={exporting || pointCount === 0}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-xs font-medium text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={14} />
+              Exportar CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="px-2 pt-2 sm:px-4">
+          <div className="mb-2 flex flex-wrap gap-1.5 px-3">
+            {CHANNELS.map((c) => {
+              const off = hidden.has(c.slug);
+              return (
+                <button
+                  key={c.slug}
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(hidden);
+                    if (off) next.delete(c.slug);
+                    else next.add(c.slug);
+                    setHidden(next);
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition ${
+                    off
+                      ? "bg-transparent text-slate-500 ring-white/10"
+                      : "bg-white/10 text-slate-100 ring-white/15"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ background: off ? "#475569" : c.color }} />
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+          <AudienceChart history={history} hidden={hidden} hoverIndex={hoverIndex} onHover={setHoverIndex} />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-5 py-3 text-[11px] text-slate-500">
+          <p>
+            {pointCount > 0
+              ? `${formatPeople(pointCount)} ${pointCount === 1 ? "ponto" : "pontos"} · ${grainMeta.label.toLowerCase()}`
+              : "À espera do primeiro ponto"}
+            {pointCount > 0 && pointCount < 12 && grain === "minute"
+              ? " · o cron ainda está a acumular minutos"
+              : ""}
+            {loading ? " · a carregar…" : ""}
           </p>
-        )}
-      </Card>
+          <p>
+            {live?.lastIngest
+              ? `Último cron ${formatLisbonDateTime(live.lastIngest.capturedAt)} · ${live.lastIngest.status}`
+              : "Cron Vercel a cada minuto"}
+            {live?.lastIngest?.error ? ` · ${live.lastIngest.error}` : ""}
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
@@ -290,6 +372,36 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
           </ul>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Segmented({
+  items,
+  value,
+  onChange,
+}: {
+  items: { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg bg-white/10 p-0.5 ring-1 ring-inset ring-white/10">
+      {items.map((item) => {
+        const on = value === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onChange(item.id)}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+              on ? "bg-white text-slate-900 shadow-sm" : "text-slate-300 hover:text-white"
+            }`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
