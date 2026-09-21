@@ -28,6 +28,7 @@
     "test:e2e": "playwright test",
     "pt26:samples": "tsx scripts/pt26/make-samples.ts",
     "tvibox:import": "tsx scripts/tvibox/import.ts",
+    "tvibox:mercado-pdf": "tsx scripts/tvibox/render-mercado-pdf.ts",
     "chartbeat:live": "tsx scripts/chartbeat-live-check.ts"
   },
   "dependencies": {

@@ -1,0 +1,417 @@
+/**
+ * Gera o PDF de estimativa de visualizações TVI BOX só em Portugal.
+ *   npm run tvibox:mercado-pdf
+ */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { chromium } from "playwright";
+import {
+  DAYS_PER_MONTH,
+  EPISODE_SECONDS,
+  MEAN_EPISODES,
+  PT_INTERNET_USERS,
+  PT_POPULATION,
+  SAM,
+  SCENARIOS,
+  SERIES_PER_DAY,
+  TVI_DIGITAL_JUL_2026,
+  TVI_MOBILE_JUN_2026,
+  TVI_PLAYER_MAU_2024,
+  formatEurK,
+  formatPtInt,
+  formatPtVolume,
+  project,
+  type MarketSnapshot,
+} from "../../lib/tvibox/market-pt";
+
+const htmlPath = resolve("docs/tvibox-mercado-portugal.html");
+const outDocs = resolve("docs/tvibox-mercado-portugal.pdf");
+const outArt = "/opt/cursor/artifacts/tvi_box_mercado_portugal_views.pdf";
+
+const m3 = {
+  pessimista: project("pessimista", "m3"),
+  normal: project("normal", "m3"),
+  otimista: project("otimista", "m3"),
+};
+const m1 = {
+  pessimista: project("pessimista", "m1"),
+  normal: project("normal", "m1"),
+  otimista: project("otimista", "m1"),
+};
+
+function watch(id: keyof typeof SCENARIOS): string {
+  const min = (SCENARIOS[id].viewsPerDau * EPISODE_SECONDS) / 60;
+  return min.toFixed(1).replace(".", ",");
+}
+
+function row(s: MarketSnapshot, highlight = false): string {
+  const first = highlight ? ' class="hi"' : "";
+  const num = highlight ? ' class="num hi"' : ' class="num"';
+  return `<tr>
+    <td${first}><b>${s.label}</b></td>
+    <td${num}>${formatPtInt(s.mau)}</td>
+    <td${num}>${formatPtInt(s.dau)}</td>
+    <td${num}>${formatPtInt(s.viewsDay)}</td>
+    <td${num}>${formatPtVolume(s.viewsDay)}</td>
+    <td${num}>${formatPtInt(s.viewsMonth)}</td>
+    <td${num}>${formatPtVolume(s.viewsMonth)}</td>
+    <td${num}>${formatPtInt(s.peakCcu)}</td>
+  </tr>`;
+}
+
+const html = `<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <title>TVI BOX — Estimativa de visualizações em Portugal</title>
+  <style>
+    :root {
+      --bg: #1a1c22;
+      --red: #ca234d;
+      --red-deep: #8f1735;
+      --blue: #37c8f5;
+      --gold: #f8a53d;
+      --green: #54c44d;
+      --text: #f4f5f7;
+      --muted: #a8a9ad;
+      --ink: #1a1c22;
+      --paper: #f6f5f2;
+      --paper2: #eceae4;
+      --rule: #d8d5cc;
+      --line: rgba(255,255,255,.14);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Liberation Sans", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      font-size: 9.6pt;
+      line-height: 1.38;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page { size: A4; margin: 0; }
+    h1, h2, h3 { page-break-after: avoid; }
+    h1 { font-size: 21pt; letter-spacing: -.02em; margin: 0 0 .3em; }
+    h2 { font-size: 12.4pt; color: var(--red-deep); border-bottom: 2px solid var(--red); padding-bottom: .12em; margin: .7em 0 .32em; }
+    h3 { font-size: 10.3pt; margin: .55em 0 .2em; }
+    p { margin: 0 0 .35em; }
+    ul { margin: 0 0 .4em; padding-left: 1.1em; }
+    li { margin-bottom: .1em; }
+    .small { font-size: 8pt; color: #5c5e66; }
+    .footnote { font-size: 7.5pt; color: #5c5e66; margin: 0 0 .4em; }
+    .cover {
+      width: 210mm; height: 297mm; background: var(--bg); color: var(--text);
+      padding: 12mm 14mm 0; display: flex; flex-direction: column;
+      break-after: page; page-break-after: always; overflow: hidden;
+    }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .12em; font-size: 11pt; }
+    .stripes {
+      width: 34px; height: 12px;
+      background: linear-gradient(90deg, #37c8f5 0 33%, #f8a53d 33% 66%, #f0d24a 66%);
+      clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+    }
+    .kicker { color: var(--red); font-weight: 700; letter-spacing: .16em; font-size: 7.5pt; text-transform: uppercase; }
+    .cover h1 { color: #fff; font-size: 22pt; margin-top: 7mm; line-height: 1.12; }
+    .cover .sub { color: var(--muted); font-size: 9.5pt; max-width: 182mm; margin: 3mm 0 6mm; }
+    .vol { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0 0 5mm; }
+    .vol article { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+    .vol article.xl { border-color: rgba(248,165,61,.45); background: rgba(248,165,61,.08); }
+    .vol .lbl { font-size: 7.2pt; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    .vol .n { font-size: 22pt; font-weight: 800; color: #fff; margin: 2px 0 0; letter-spacing: -.03em; }
+    .vol .m { font-size: 13pt; font-weight: 800; color: var(--gold); margin: 0 0 4px; }
+    .vol .d { font-size: 7.7pt; color: #c9cad0; line-height: 1.4; }
+    .vol .d b { color: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: 7.7pt; page-break-inside: avoid; margin: 0 0 .55em; }
+    th, td { border: 1px solid var(--rule); padding: 4px 5px; text-align: left; vertical-align: top; }
+    th { background: var(--bg); color: #fff; font-weight: 650; }
+    th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.hi { background: #eaf6ea; font-weight: 700; }
+    .cover table { font-size: 7.6pt; margin: 0; }
+    .cover th { background: #12141a; color: #c9cad0; border-color: #3a3d48; }
+    .cover td, .cover th { border-color: #3a3d48; color: #f4f5f7; }
+    .cover td.hi { background: #1e3a22; color: #d4f5d0; }
+    .cover .meta {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 14px;
+      font-size: 7.8pt; color: #c9cad0; margin-top: 5mm;
+    }
+    .cover .meta b { color: #fff; display: block; font-size: 7pt; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+    .cover-foot {
+      margin-top: auto; margin-left: -14mm; margin-right: -14mm;
+      padding: 6mm 14mm; background: #12141a; border-top: 3px solid var(--red);
+      display: flex; justify-content: space-between; gap: 12px; font-size: 7.6pt; color: #9a9b9d;
+    }
+    .cover-foot strong { color: #fff; }
+    .doc { padding: 11mm 12mm 12mm; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 .5em; }
+    .card { background: #fff; border: 1px solid var(--rule); padding: 7px 9px; page-break-inside: avoid; }
+    .card h3 { margin-top: 0; }
+    .callout { background: #fff; border-left: 4px solid var(--red); padding: 6px 10px; margin: 0 0 .5em; }
+    .avoid { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    .funnel { display: grid; gap: 3px; margin: 0 0 .5em; }
+    .funnel div {
+      background: #fff; border: 1px solid var(--rule); padding: 5px 8px;
+      display: flex; justify-content: space-between; align-items: baseline; font-size: 8pt;
+    }
+    .funnel b { font-variant-numeric: tabular-nums; }
+    .funnel .a { margin-right: 18mm; margin-left: 0; }
+    .funnel .b { margin-right: 28mm; margin-left: 10mm; }
+    .funnel .c { margin-right: 38mm; margin-left: 20mm; background: #fff6e8; }
+    .funnel .d { margin-right: 48mm; margin-left: 30mm; }
+    .funnel .e { margin-right: 58mm; margin-left: 40mm; background: #eaf6ea; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="brand-row">
+    <div class="logo"><span class="stripes"></span>TVI BOX</div>
+    <div class="kicker">Documento interno · Produto / Comercial · v1.0</div>
+  </div>
+  <h1>Visualizações em Portugal<br/>pessimista · normal · otimista</h1>
+  <p class="sub">Mercado = só Portugal. Produção = <b style="color:#f8a53d">1 série completa por dia</b>
+    (~${MEAN_EPISODES.toFixed(2).replace(".", ",")} episódios × ${EPISODE_SECONDS}&nbsp;s). Horizonte = <b style="color:#fff">mês 3</b>
+    (catálogo a 90 séries). View = início de episódio. Pico simultâneo = 10% das views/dia.</p>
+
+  <div class="vol">
+    <article>
+      <div class="lbl">Pessimista · dia</div>
+      <div class="n">${formatPtVolume(m3.pessimista.viewsDay)}</div>
+      <div class="m">${formatPtVolume(m3.pessimista.viewsMonth)} / mês</div>
+      <div class="d">MAU <b>${formatPtInt(m3.pessimista.mau)}</b> · DAU <b>${formatPtInt(m3.pessimista.dau)}</b><br/>pico <b>${formatPtInt(m3.pessimista.peakCcu)}</b> · ${watch("pessimista")} min/DAU</div>
+    </article>
+    <article class="xl">
+      <div class="lbl">Normal · dia · caso de planeamento</div>
+      <div class="n">${formatPtVolume(m3.normal.viewsDay)}</div>
+      <div class="m">${formatPtVolume(m3.normal.viewsMonth)} / mês</div>
+      <div class="d">MAU <b>${formatPtInt(m3.normal.mau)}</b> · DAU <b>${formatPtInt(m3.normal.dau)}</b><br/>pico <b>${formatPtInt(m3.normal.peakCcu)}</b> · ${watch("normal")} min/DAU</div>
+    </article>
+    <article>
+      <div class="lbl">Otimista · dia</div>
+      <div class="n">${formatPtVolume(m3.otimista.viewsDay)}</div>
+      <div class="m">${formatPtVolume(m3.otimista.viewsMonth)} / mês</div>
+      <div class="d">MAU <b>${formatPtInt(m3.otimista.mau)}</b> · DAU <b>${formatPtInt(m3.otimista.dau)}</b><br/>pico <b>${formatPtInt(m3.otimista.peakCcu)}</b> · ${watch("otimista")} min/DAU</div>
+    </article>
+  </div>
+
+  <p class="small" style="color:#a8a9ad;margin:0 0 6px">Mês 3. Números redondos na capa; exactos na tabela. O caso normal cai em cima do patamar 0,5&nbsp;M do business case.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Cenário</th>
+        <th class="num">MAU</th>
+        <th class="num">DAU</th>
+        <th class="num">Views / dia</th>
+        <th class="num">Capa</th>
+        <th class="num">Views / mês</th>
+        <th class="num">Capa</th>
+        <th class="num">Pico 10%</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${row(m3.pessimista)}
+      ${row(m3.normal, true)}
+      ${row(m3.otimista)}
+    </tbody>
+  </table>
+
+  <p class="small" style="color:#a8a9ad;margin:5mm 0 4px">Parâmetros do funil (mês 3) e arrancada (mês 1, catálogo a 30 séries):</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Parâmetro</th>
+        <th class="num">Pessimista</th>
+        <th class="num">Normal</th>
+        <th class="num">Otimista</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Penetração do SAM</td>
+        <td class="num">${Math.round(SCENARIOS.pessimista.penetration * 100)} %</td>
+        <td class="num hi">${Math.round(SCENARIOS.normal.penetration * 100)} %</td>
+        <td class="num">${Math.round(SCENARIOS.otimista.penetration * 100)} %</td>
+      </tr>
+      <tr>
+        <td>DAU / MAU</td>
+        <td class="num">${Math.round(SCENARIOS.pessimista.dauMau * 100)} %</td>
+        <td class="num hi">${Math.round(SCENARIOS.normal.dauMau * 100)} %</td>
+        <td class="num">${Math.round(SCENARIOS.otimista.dauMau * 100)} %</td>
+      </tr>
+      <tr>
+        <td>Views / DAU / dia</td>
+        <td class="num">${SCENARIOS.pessimista.viewsPerDau}</td>
+        <td class="num hi">${SCENARIOS.normal.viewsPerDau}</td>
+        <td class="num">${SCENARIOS.otimista.viewsPerDau}</td>
+      </tr>
+      <tr>
+        <td>Mês 1 · views / dia</td>
+        <td class="num">${formatPtVolume(m1.pessimista.viewsDay)}</td>
+        <td class="num hi">${formatPtVolume(m1.normal.viewsDay)}</td>
+        <td class="num">${formatPtVolume(m1.otimista.viewsDay)}</td>
+      </tr>
+      <tr>
+        <td>Mês 1 · views / mês</td>
+        <td class="num">${formatPtVolume(m1.pessimista.viewsMonth)}</td>
+        <td class="num hi">${formatPtVolume(m1.normal.viewsMonth)}</td>
+        <td class="num">${formatPtVolume(m1.otimista.viewsMonth)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="meta">
+    <div><b>Mercado</b>Portugal apenas · pop. ${formatPtInt(PT_POPULATION)}</div>
+    <div><b>Internet</b>${formatPtInt(PT_INTERNET_USERS)} (DataReportal 2026)</div>
+    <div><b>TVI digital</b>${formatPtInt(TVI_DIGITAL_JUL_2026)} · jul 2026</div>
+    <div><b>SAM</b>${formatPtInt(SAM)} (entre Player e mobile)</div>
+    <div><b>Cadência</b>${SERIES_PER_DAY} série / dia · ~${Math.round(MEAN_EPISODES * EPISODE_SECONDS / 60)} min novos</div>
+    <div><b>Data</b>21 Set 2026 · v1.0</div>
+  </div>
+  <div class="cover-foot">
+    <div>5 / 10 / 20 M views/dia <strong>não cabem</strong> só em Portugal — o tecto otimista é ${formatPtVolume(m3.otimista.viewsDay)}/dia.</div>
+    <div>Fórmula: <strong>views/dia = SAM × penetração × DAU/MAU × views/DAU</strong></div>
+  </div>
+</section>
+
+<div class="doc">
+
+<h2>1. Funil Portugal</h2>
+<p>A TVI já chega a ${formatPtInt(TVI_DIGITAL_JUL_2026)} pessoas no digital (36,6&nbsp;% dos 15+ continente, Marktest jul&nbsp;2026) e a ${formatPtInt(TVI_MOBILE_JUN_2026)} no telemóvel (jun&nbsp;2026). O TVI Player fez 1&nbsp;M unique users/mês em 2024. O SAM da TVI&nbsp;BOX (${formatPtInt(SAM)}) fica no meio: quem no telemóvel da TVI veria drama curto, não só notícias.</p>
+
+<div class="funnel avoid">
+  <div class="a"><span>Internet em Portugal</span><b>${formatPtInt(PT_INTERNET_USERS)}</b></div>
+  <div class="b"><span>TVI digital (jul 2026)</span><b>${formatPtInt(TVI_DIGITAL_JUL_2026)}</b></div>
+  <div class="c"><span>SAM TVI BOX (mobile + entretenimento)</span><b>${formatPtInt(SAM)}</b></div>
+  <div class="d"><span>MAU mês 3 · pess / normal / otim.</span><b>${formatPtInt(m3.pessimista.mau)} · ${formatPtInt(m3.normal.mau)} · ${formatPtInt(m3.otimista.mau)}</b></div>
+  <div class="e"><span>Views / dia</span><b>${formatPtVolume(m3.pessimista.viewsDay)} · ${formatPtVolume(m3.normal.viewsDay)} · ${formatPtVolume(m3.otimista.viewsDay)}</b></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h3>O que muda em cada cenário</h3>
+    <p><b>Pessimista</b> — 6&nbsp;% do SAM (90 mil MAU, 9&nbsp;% do TVI Player). DAU/MAU 18&nbsp;% e 3 episódios/dia: app instalada, pouco hábito, pouco binge.</p>
+    <p><b>Normal</b> — 15&nbsp;% do SAM (225 mil MAU, ~7&nbsp;% do TVI digital). DAU/MAU 32&nbsp;% (estreia diária) e 7 views/DAU (~${watch("normal")}&nbsp;min). É o número de planeamento.</p>
+    <p style="margin:0"><b>Otimista</b> — 30&nbsp;% do SAM (450 mil MAU). Exige promo na antena TVI + ASO + boca-a-boca. DAU/MAU 42&nbsp;% e 12 views (~${watch("otimista")}&nbsp;min), ainda abaixo de uma sessão TikTok.</p>
+  </div>
+  <div class="card">
+    <h3>Porque é que 1 série / dia importa</h3>
+    <p>Uma série nova todos os dias cria compromisso («hoje estreia») e backlog para binge. Ao dia 30 há 30 séries (~${formatPtInt(m1.normal.episodesInCatalog)} episódios); ao dia 90 há 90 (~${formatPtInt(m3.normal.episodesInCatalog)}). Em Portugal o travão deixa de ser o catálogo ao fim de duas semanas — passa a ser distribuição e retenção.</p>
+    <p style="margin:0">Se a cadência cair para <b>1 série / semana</b>, o DAU/MAU e o binge aproximam-se do pessimista mesmo com o mesmo MAU: cerca de metade das views do caso normal.</p>
+  </div>
+</div>
+
+<h2>2. Mês 1 vs mês 3</h2>
+<p>O mês 1 ainda está a formar hábito (retenção D1/D7/D30) e a fazer chegar a app à SAM. O otimista arranca mais depressa se houver promo em horário nobre TVI (o Player já fez 500 mil utilizadores num dia de jogo em 2022).</p>
+<table>
+  <thead>
+    <tr>
+      <th>Horizonte</th>
+      <th class="num">Pess. / dia</th>
+      <th class="num">Pess. / mês</th>
+      <th class="num">Normal / dia</th>
+      <th class="num">Normal / mês</th>
+      <th class="num">Otim. / dia</th>
+      <th class="num">Otim. / mês</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Mês 1 · 30 séries</td>
+      <td class="num">${formatPtVolume(m1.pessimista.viewsDay)}</td>
+      <td class="num">${formatPtVolume(m1.pessimista.viewsMonth)}</td>
+      <td class="num">${formatPtVolume(m1.normal.viewsDay)}</td>
+      <td class="num">${formatPtVolume(m1.normal.viewsMonth)}</td>
+      <td class="num">${formatPtVolume(m1.otimista.viewsDay)}</td>
+      <td class="num">${formatPtVolume(m1.otimista.viewsMonth)}</td>
+    </tr>
+    <tr>
+      <td><b>Mês 3 · 90 séries</b></td>
+      <td class="num">${formatPtVolume(m3.pessimista.viewsDay)}</td>
+      <td class="num">${formatPtVolume(m3.pessimista.viewsMonth)}</td>
+      <td class="num hi">${formatPtVolume(m3.normal.viewsDay)}</td>
+      <td class="num hi">${formatPtVolume(m3.normal.viewsMonth)}</td>
+      <td class="num">${formatPtVolume(m3.otimista.viewsDay)}</td>
+      <td class="num">${formatPtVolume(m3.otimista.viewsMonth)}</td>
+    </tr>
+  </tbody>
+</table>
+<p class="footnote">Mês 1 = 40&nbsp;% / 50&nbsp;% / 62&nbsp;% do MAU de mês 3 (pess / normal / otim.). Mesma fórmula, ${DAYS_PER_MONTH} dias. Pico = 10&nbsp;% das views/dia.</p>
+
+<h2>3. O que isto não é</h2>
+<div class="callout">
+  <p style="margin:0"><b>5 / 10 / 20 M views/dia</b> no business case de proveitos são volumes de plataforma (CPLP, diáspora, Espanha). Em Portugal o tecto otimista é <b>${formatPtVolume(m3.otimista.viewsDay)}/dia</b> (${formatPtInt(m3.otimista.dau)} DAU). 5&nbsp;M/dia pediria ~625 mil DAU a 8 views — 6&nbsp;% da população a abrir a app todos os dias. Não cabe.</p>
+</div>
+<ul>
+  <li>Não é 1 episódio por dia à novela clássica: isso daria 1–3 views/DAU e um tecto perto do pessimista.</li>
+  <li>Não altera a economia da app (15 moedas / episódio, packs, Plus).</li>
+  <li>TikTok tem 4,11&nbsp;M contas 18+ em Portugal: o caso normal é ~5&nbsp;% disso em MAU, como complemento de 10&nbsp;min, não como substituto.</li>
+</ul>
+
+<h2>4. Tradução para o business case</h2>
+<p>RPM de 5,5&nbsp;€ / 1&nbsp;000 views (mesmo do PDF de proveitos). Ordem de grandeza de líquido / mês, sem CAC:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Cenário M3</th>
+      <th class="num">Views / dia</th>
+      <th class="num">≈ patamar PDF</th>
+      <th class="num">Líquido / mês</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Pessimista</td>
+      <td class="num">${formatPtInt(m3.pessimista.viewsDay)}</td>
+      <td class="num">abaixo de 0,5 M</td>
+      <td class="num">${formatEurK(m3.pessimista.revenueMonthEur)}</td>
+    </tr>
+    <tr>
+      <td><b>Normal</b></td>
+      <td class="num hi">${formatPtInt(m3.normal.viewsDay)}</td>
+      <td class="num hi">0,5 M</td>
+      <td class="num hi">${formatEurK(m3.normal.revenueMonthEur)}</td>
+    </tr>
+    <tr>
+      <td>Otimista</td>
+      <td class="num">${formatPtInt(m3.otimista.viewsDay)}</td>
+      <td class="num">≈ 2 M</td>
+      <td class="num">${formatEurK(m3.otimista.revenueMonthEur)}</td>
+    </tr>
+  </tbody>
+</table>
+<p class="footnote">Fontes: DataReportal Digital 2026 Portugal; Marktest/Gemius netAudience jun–jul 2026; Relatório e Contas Media Capital 2024 (TVI Player ${formatPtInt(TVI_PLAYER_MAU_2024)} UU/mês); PR Media Capital 2025 (marcas TVI &gt; 3&nbsp;M UU). Modelo em <code>lib/tvibox/market-pt.ts</code>. Regenerar: <code>npm run tvibox:mercado-pdf</code>.</p>
+
+</div>
+</body>
+</html>
+`;
+
+async function main() {
+  mkdirSync(dirname(htmlPath), { recursive: true });
+  mkdirSync(dirname(outArt), { recursive: true });
+  writeFileSync(htmlPath, html);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "networkidle" });
+  const opts = {
+    printBackground: true,
+    preferCSSPageSize: true,
+    displayHeaderFooter: false,
+  };
+  await page.pdf({ path: outDocs, ...opts });
+  await page.pdf({ path: outArt, ...opts });
+  await browser.close();
+  console.log("wrote", htmlPath);
+  console.log("wrote", outDocs);
+  console.log("wrote", outArt);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
