@@ -25,6 +25,7 @@ export const CHANNELS: ChannelDef[] = [
     color: "#ca234d",
     sortOrder: 1,
     videoIds: ["554a58200cf203057812d86b"],
+    videoHost: "tviplayer.iol.pt",
   },
   {
     slug: "cnn",
@@ -32,6 +33,7 @@ export const CHANNELS: ChannelDef[] = [
     color: "#7f1d1d",
     sortOrder: 2,
     videoIds: ["618427ce0cf2648aa1626c36"],
+    videoHost: "cnnportugal.iol.pt",
   },
   {
     slug: "tvi-reality",
@@ -39,6 +41,7 @@ export const CHANNELS: ChannelDef[] = [
     color: "#7c3aed",
     sortOrder: 3,
     videoIds: ["555dc2af0cf250949d24a2fa"],
+    videoHost: "tviplayer.iol.pt",
   },
   {
     slug: "tvi-ficcao",

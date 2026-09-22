@@ -1,8 +1,10 @@
-import { CHARTBEAT_HOSTS } from "./channels";
-import type { ChartbeatHost, ChartbeatPage, ChartbeatVideo } from "./types";
+import { CHANNELS, CHARTBEAT_HOSTS } from "./channels";
+import { playbackFromEnum } from "./mix";
+import type { ChartbeatHost, ChartbeatPage, ChartbeatVideo, VideoPlayback } from "./types";
 
 const TOPPAGES = "https://api.chartbeat.com/live/toppages/v3/";
 const VIDEOS = "https://api.chartbeat.com/live/video/videos/v1/";
+const METRICS = "https://api.chartbeat.com/live/metrics/";
 
 export function getChartbeatApiKey(): string | undefined {
   return process.env.CHARTBEAT_API_KEY?.trim() || undefined;
@@ -31,12 +33,31 @@ function asPages(payload: unknown, fallbackHost: string): ChartbeatPage[] {
     const stats = (p.stats && typeof p.stats === "object" ? p.stats : {}) as Record<string, unknown>;
     const people = Number(stats.people ?? 0);
     const platform = stats.platform && typeof stats.platform === "object" ? (stats.platform as ChartbeatPage["platform"]) : undefined;
+    const loyaltyRaw = stats.loyalty && typeof stats.loyalty === "object" ? (stats.loyalty as Record<string, unknown>) : undefined;
+    const engagedRaw = stats.engaged_time && typeof stats.engaged_time === "object" ? Number((stats.engaged_time as { avg?: unknown }).avg) : undefined;
+    const count = (key: string) => {
+      const n = Number(stats[key] ?? 0);
+      return Number.isFinite(n) ? n : 0;
+    };
     out.push({
       host: String(p.host || fallbackHost),
       path: String(p.path || ""),
       title: String(p.title || ""),
       people: Number.isFinite(people) ? people : 0,
       platform,
+      direct: count("direct"),
+      search: count("search"),
+      social: count("social"),
+      internal: count("internal"),
+      links: count("links"),
+      engagedAvg: engagedRaw != null && Number.isFinite(engagedRaw) ? engagedRaw : null,
+      loyalty: loyaltyRaw
+        ? {
+            new: Number(loyaltyRaw.new ?? 0) || 0,
+            returning: Number(loyaltyRaw.returning ?? 0) || 0,
+            loyal: Number(loyaltyRaw.loyal ?? 0) || 0,
+          }
+        : undefined,
     });
   }
   return out;
@@ -63,8 +84,20 @@ function asVideos(payload: unknown): ChartbeatVideo[] {
 }
 
 export async function fetchTopPages(host: ChartbeatHost, apiKey: string, limit = 100): Promise<ChartbeatPage[]> {
-  const url = `${TOPPAGES}?host=${encodeURIComponent(host)}&limit=${limit}&all_platforms=1`;
+  const url = `${TOPPAGES}?host=${encodeURIComponent(host)}&limit=${limit}&all_platforms=1&loyalty=1`;
   return asPages(await chartbeatGet(url, apiKey), host);
+}
+
+/** Player do linear: a reproduzir / em pausa / por começar. Falha isolada não derruba o ingest. */
+export async function fetchVideoPlayback(host: ChartbeatHost, videoId: string, apiKey: string): Promise<VideoPlayback | null> {
+  const url = `${METRICS}?host=${encodeURIComponent(`video@${host}`)}&path=${encodeURIComponent(videoId)}&names=video_state`;
+  try {
+    const payload = await chartbeatGet(url, apiKey);
+    const metrics = payload && typeof payload === "object" ? (payload as { metrics?: { video_state?: { enum?: unknown } } }).metrics : undefined;
+    return playbackFromEnum(metrics?.video_state?.enum);
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchTopVideos(host: ChartbeatHost, apiKey: string, limit = 20): Promise<ChartbeatVideo[]> {
@@ -80,11 +113,23 @@ export async function fetchTopVideos(host: ChartbeatHost, apiKey: string, limit 
 export async function fetchLiveInventory(apiKey: string): Promise<{
   pages: ChartbeatPage[];
   videos: ChartbeatVideo[];
+  playback: Record<string, VideoPlayback>;
 }> {
   const pageResults = await Promise.all(CHARTBEAT_HOSTS.map((h) => fetchTopPages(h.host, apiKey)));
   const videoResults = await Promise.all(CHARTBEAT_HOSTS.map((h) => fetchTopVideos(h.host, apiKey)));
+  const playbackEntries = await Promise.all(
+    CHANNELS.filter((c) => c.videoHost && c.videoIds[0]).map(async (c) => {
+      const state = await fetchVideoPlayback(c.videoHost!, c.videoIds[0], apiKey);
+      return [c.slug, state] as const;
+    })
+  );
+  const playback: Record<string, VideoPlayback> = {};
+  for (const [slug, state] of playbackEntries) {
+    if (state) playback[slug] = state;
+  }
   return {
     pages: pageResults.flat(),
     videos: videoResults.flat(),
+    playback,
   };
 }

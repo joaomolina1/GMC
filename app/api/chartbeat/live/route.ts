@@ -3,6 +3,7 @@ import { CHANNELS } from "@lib/chartbeat/channels";
 import { buildSnapshot } from "@lib/chartbeat/aggregate";
 import { fetchLiveInventory, getChartbeatApiKey } from "@lib/chartbeat/client";
 import { persistSnapshot } from "@lib/chartbeat/ingest";
+import { mixFromDb } from "@lib/chartbeat/mix";
 import { toLivePayload } from "@lib/chartbeat/payload";
 import type { ChannelMinute, Snapshot, UnmatchedLive } from "@lib/chartbeat/types";
 import { createClient, tryCreateServiceClient } from "@lib/supabase/server";
@@ -20,6 +21,7 @@ type MinuteRow = {
   sources: ChannelMinute["sources"];
   program_title: string | null;
   video_watching: number | null;
+  mix?: unknown;
 };
 
 async function lastIngest() {
@@ -55,6 +57,7 @@ function snapshotFromRows(capturedAt: string, rows: MinuteRow[], unmatched: Unma
         sources: Array.isArray(r?.sources) ? r.sources : [],
         programTitle: r?.program_title ?? null,
         videoWatching: r?.video_watching ?? null,
+        mix: mixFromDb(r?.mix),
       };
     }),
   };
@@ -72,7 +75,7 @@ async function lastSnapshotFromDb(): Promise<Snapshot | null> {
   if (!run) return null;
   const { data: rows } = await sb
     .from("chartbeat_channel_minutes")
-    .select("captured_at, channel_slug, people, people_web, people_app, sources, program_title, video_watching")
+    .select("captured_at, channel_slug, people, people_web, people_app, sources, program_title, video_watching, mix")
     .eq("captured_at", run.captured_at);
   if (!rows?.length) return null;
   const unmatched = Array.isArray(run.unmatched) ? (run.unmatched as UnmatchedLive[]) : [];
@@ -86,8 +89,8 @@ export async function GET() {
 
   if (apiKey) {
     try {
-      const { pages, videos } = await fetchLiveInventory(apiKey);
-      const snapshot = buildSnapshot(pages, videos);
+      const { pages, videos, playback } = await fetchLiveInventory(apiKey);
+      const snapshot = buildSnapshot(pages, videos, new Date(), playback);
       const service = await tryCreateServiceClient();
       if (service) {
         const lastMinute = ingest?.capturedAt ? new Date(ingest.capturedAt).getTime() : 0;

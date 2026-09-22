@@ -15,6 +15,19 @@ export interface ChartbeatPage {
     t?: number;
     a?: number;
   };
+  /** Concorrentes por origem (já vêm no toppages; não são um segundo contador). */
+  direct?: number;
+  search?: number;
+  social?: number;
+  internal?: number;
+  links?: number;
+  /** Média de engaged time desta página, em segundos. */
+  engagedAvg?: number | null;
+  loyalty?: {
+    new?: number;
+    returning?: number;
+    loyal?: number;
+  };
 }
 
 export interface ChartbeatVideo {
@@ -32,6 +45,35 @@ export interface ChannelDef {
   sortOrder: number;
   /** IDs Chartbeat Video Engagement do linear (título = programa no ar). */
   videoIds: string[];
+  /** Host do player cujo `video_state` representa este linear. */
+  videoHost?: ChartbeatHost;
+}
+
+/** Composição de um canal num minuto. Contagens somam-se entre paths; o engagement é média pesada. */
+export interface ChannelMix {
+  direct: number;
+  search: number;
+  social: number;
+  internal: number;
+  links: number;
+  new: number;
+  returning: number;
+  loyal: number;
+  mobile: number;
+  desktop: number;
+  tablet: number;
+  engagedSec: number | null;
+  playing: number | null;
+  paused: number | null;
+  unplayed: number | null;
+}
+
+/** Estado do player: [por começar, a reproduzir, em pausa, concluído]. */
+export interface VideoPlayback {
+  unplayed: number;
+  playing: number;
+  paused: number;
+  completed: number;
 }
 
 export interface MatchedSource {
@@ -60,6 +102,8 @@ export interface ChannelMinute {
   sources: MatchedSource[];
   programTitle: string | null;
   videoWatching: number | null;
+  /** null em minutos gravados antes da composição existir. */
+  mix: ChannelMix | null;
 }
 
 export interface Snapshot {
@@ -78,6 +122,7 @@ export type HistoryGrain = "minute" | "hour" | "day";
 export interface HistoryPoint {
   bucket: string;
   people: Record<string, number>;
+  mix?: Record<string, ChannelMix>;
 }
 
 export interface HistoryPayload {
