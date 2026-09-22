@@ -41,6 +41,7 @@ export function AppShellClient({
   const isFlowEditor = /^\/flows\/[^/]+$/.test(pathname);
   const isAgentEditor = /^\/agents\/[^/]+$/.test(pathname);
   const isChartbeat = pathname === "/chartbeat" || pathname.startsWith("/chartbeat/");
+  const isWide = isChartbeat || pathname === "/escalas" || pathname.startsWith("/escalas/");
 
   useEffect(() => {
     const stored = localStorage.getItem("gmc-sidebar-collapsed");
@@ -85,7 +86,7 @@ export function AppShellClient({
             {isFlowEditor || isAgentEditor ? (
               children
             ) : (
-              <div className={isChartbeat ? "mx-auto max-w-[92rem]" : "mx-auto max-w-7xl"}>{children}</div>
+              <div className={isWide ? "mx-auto max-w-[92rem]" : "mx-auto max-w-7xl"}>{children}</div>
             )}
           </main>
         </div>

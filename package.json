@@ -28,7 +28,8 @@
     "test:e2e": "playwright test",
     "pt26:samples": "tsx scripts/pt26/make-samples.ts",
     "tvibox:import": "tsx scripts/tvibox/import.ts",
-    "chartbeat:live": "tsx scripts/chartbeat-live-check.ts"
+    "chartbeat:live": "tsx scripts/chartbeat-live-check.ts",
+    "escalas:seed": "tsx scripts/escalas/seed-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
