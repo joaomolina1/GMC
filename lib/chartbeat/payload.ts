@@ -1,4 +1,5 @@
 import { CHANNELS } from "./channels";
+import { mixMapFromDb } from "./mix";
 import type { HistoryGrain, HistoryPayload, HistoryPoint, HistoryRange, Snapshot } from "./types";
 
 export interface LivePayload {
@@ -23,15 +24,20 @@ export function toLivePayload(
 }
 
 export function parseHistoryRows(
-  rows: { bucket: string | Date; people: Record<string, number> | string | null }[]
+  rows: { bucket: string | Date; people: Record<string, number> | string | null; mix?: unknown }[]
 ): HistoryPoint[] {
-  return rows.map((r) => ({
-    bucket: new Date(r.bucket).toISOString(),
-    people:
-      typeof r.people === "string"
-        ? (JSON.parse(r.people) as Record<string, number>)
-        : (r.people ?? {}),
-  }));
+  return rows.map((r) => {
+    const point: HistoryPoint = {
+      bucket: new Date(r.bucket).toISOString(),
+      people:
+        typeof r.people === "string"
+          ? (JSON.parse(r.people) as Record<string, number>)
+          : (r.people ?? {}),
+    };
+    const mix = mixMapFromDb(typeof r.mix === "string" ? JSON.parse(r.mix) : r.mix);
+    if (mix) point.mix = mix;
+    return point;
+  });
 }
 
 /** Aceita o jsonb da RPC `chartbeat_history_bundle` (array, string, ou `{points}`). */

@@ -17,6 +17,7 @@ import {
 import type { HistoryGrain, HistoryPayload, HistoryRange, Snapshot, SourceKind } from "@lib/chartbeat/types";
 import type { LivePayload } from "@lib/chartbeat/payload";
 import { AudienceChart } from "./AudienceChart";
+import { ChannelComposition } from "./ChannelComposition";
 
 export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   const [live, setLive] = useState<LivePayload | null>(null);
@@ -222,6 +223,11 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
                     {ch.programTitle}
                   </p>
                 )}
+                {ch?.mix?.playing != null && (
+                  <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">
+                    {formatPeople(ch.mix.playing)} a reproduzir
+                  </p>
+                )}
               </button>
             );
           })}
@@ -309,6 +315,23 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
           </p>
         </div>
       </div>
+
+      {openSlug && CHANNEL_BY_SLUG[openSlug] && (
+        <ChannelComposition
+          name={CHANNEL_BY_SLUG[openSlug].name}
+          color={CHANNEL_BY_SLUG[openSlug].color}
+          mix={
+            (hoverIndex != null ? history?.points[hoverIndex]?.mix?.[openSlug] : undefined) ??
+            snapshot?.channels.find((c) => c.slug === openSlug)?.mix ??
+            null
+          }
+          at={
+            hoverIndex != null && history?.points[hoverIndex]?.mix?.[openSlug]
+              ? history.points[hoverIndex].bucket
+              : captured
+          }
+        />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aggregatePages, attachPrograms, buildSnapshot, isoMinute } from "@lib/chartbeat/aggregate";
+import { aggregatePages, attachPlayback, attachPrograms, buildSnapshot, isoMinute } from "@lib/chartbeat/aggregate";
+import { mixFromDb, mixToDb, playbackFromEnum } from "@lib/chartbeat/mix";
 import type { ChartbeatPage, ChartbeatVideo } from "@lib/chartbeat/types";
 
 const P = (host: string, path: string, title: string, people: number): ChartbeatPage => ({
@@ -67,6 +68,56 @@ describe("attachPrograms", () => {
     expect(withProg.find((c) => c.slug === "tvi")?.programTitle).toBe("Dois às 10");
     expect(withProg.find((c) => c.slug === "cnn")?.programTitle).toBe("CNN Meio Dia");
     expect(withProg.find((c) => c.slug === "cnn")?.videoWatching).toBe(606);
+  });
+});
+
+describe("composição do canal", () => {
+  it("soma origem e ecrã e pesa o engagement pelo número de pessoas", () => {
+    const pages: ChartbeatPage[] = [
+      {
+        ...P("tviplayer.iol.pt", "tviplayer.iol.pt/direto", "Direto", 100),
+        search: 40,
+        social: 60,
+        platform: { m: 80, d: 20 },
+        loyalty: { new: 10, returning: 20, loyal: 70 },
+        engagedAvg: 10,
+      },
+      {
+        ...P("tviplayer.iol.pt", "tviplayer.iol.pt/direto/tvi", "Direto", 300),
+        search: 10,
+        internal: 290,
+        platform: { d: 300 },
+        loyalty: { new: 30, returning: 70, loyal: 200 },
+        engagedAvg: 50,
+      },
+    ];
+    const tvi = aggregatePages(pages).channels.find((c) => c.slug === "tvi")!;
+    expect(tvi.mix).toMatchObject({
+      search: 50,
+      social: 60,
+      internal: 290,
+      mobile: 80,
+      desktop: 320,
+      new: 40,
+      returning: 90,
+      loyal: 270,
+      engagedSec: 40,
+      playing: null,
+    });
+  });
+
+  it("grava o estado do player sem o misturar com as pessoas da página", () => {
+    const { channels } = aggregatePages([]);
+    const withPlayer = attachPlayback(channels, {
+      tvi: { unplayed: 9, playing: 80, paused: 4, completed: 0 },
+    });
+    expect(withPlayer.find((c) => c.slug === "tvi")?.mix?.playing).toBe(80);
+    expect(withPlayer.find((c) => c.slug === "tvi")?.people).toBe(0);
+    expect(playbackFromEnum([9, 80, 4, 0])?.paused).toBe(4);
+    expect(playbackFromEnum([1, 2])).toBeNull();
+    const stored = mixToDb(withPlayer.find((c) => c.slug === "tvi")!.mix!);
+    expect(mixFromDb(stored)?.playing).toBe(80);
+    expect(mixFromDb({})).toBeNull();
   });
 });
 

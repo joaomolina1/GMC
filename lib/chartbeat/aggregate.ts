@@ -1,6 +1,7 @@
 import { CHANNELS } from "./channels";
 import { looksLikeLive, matchPage } from "./match";
-import type { ChannelMinute, ChartbeatPage, ChartbeatVideo, Snapshot, UnmatchedLive } from "./types";
+import { accumulatePage, applyPlayback, emptyMix, finishEngaged, type EngagedWeight } from "./mix";
+import type { ChannelMinute, ChartbeatPage, ChartbeatVideo, Snapshot, UnmatchedLive, VideoPlayback } from "./types";
 
 export function truncateToMinute(date: Date): Date {
   return new Date(Math.floor(date.getTime() / 60_000) * 60_000);
@@ -19,6 +20,7 @@ function emptyMinute(slug: string): ChannelMinute {
     sources: [],
     programTitle: null,
     videoWatching: null,
+    mix: emptyMix(),
   };
 }
 
@@ -29,6 +31,7 @@ export function aggregatePages(pages: ChartbeatPage[]): {
   matchedCount: number;
 } {
   const bySlug = new Map<string, ChannelMinute>(CHANNELS.map((c) => [c.slug, emptyMinute(c.slug)]));
+  const engaged = new Map<string, EngagedWeight>(CHANNELS.map((c) => [c.slug, { sum: 0, people: 0 }]));
   const unmatched: UnmatchedLive[] = [];
   let matchedCount = 0;
 
@@ -37,11 +40,12 @@ export function aggregatePages(pages: ChartbeatPage[]): {
     if (matched) {
       matchedCount += 1;
       const bucket = bySlug.get(matched.channelSlug);
-      if (!bucket) continue;
+      if (!bucket?.mix) continue;
       bucket.people += matched.people;
       if (matched.kind === "app") bucket.app += matched.people;
       else bucket.web += matched.people;
       bucket.sources.push(matched);
+      accumulatePage(bucket.mix, page, engaged.get(matched.channelSlug)!);
       continue;
     }
     if (looksLikeLive(page) && page.people > 0) {
@@ -56,6 +60,7 @@ export function aggregatePages(pages: ChartbeatPage[]): {
 
   for (const ch of bySlug.values()) {
     ch.sources.sort((a, b) => b.people - a.people);
+    if (ch.mix) finishEngaged(ch.mix, engaged.get(ch.slug)!);
   }
 
   unmatched.sort((a, b) => b.people - a.people);
@@ -92,15 +97,27 @@ export function attachPrograms(channels: ChannelMinute[], videos: ChartbeatVideo
   });
 }
 
+export function attachPlayback(
+  channels: ChannelMinute[],
+  playback: Record<string, VideoPlayback>
+): ChannelMinute[] {
+  return channels.map((ch) => {
+    const state = playback[ch.slug];
+    if (!state || !ch.mix) return ch;
+    return { ...ch, mix: applyPlayback(ch.mix, state) };
+  });
+}
+
 export function buildSnapshot(
   pages: ChartbeatPage[],
   videos: ChartbeatVideo[],
-  capturedAt = new Date()
+  capturedAt = new Date(),
+  playback: Record<string, VideoPlayback> = {}
 ): Snapshot {
   const { channels, unmatched, matchedCount } = aggregatePages(pages);
   return {
     capturedAt: isoMinute(capturedAt),
-    channels: attachPrograms(channels, videos),
+    channels: attachPlayback(attachPrograms(channels, videos), playback),
     unmatched,
     pageCount: pages.length,
     matchedCount,

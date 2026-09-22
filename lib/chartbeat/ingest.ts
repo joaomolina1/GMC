@@ -1,13 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildSnapshot } from "./aggregate";
 import { fetchLiveInventory } from "./client";
+import { mixToDb } from "./mix";
 import type { Snapshot } from "./types";
 
 type Db = SupabaseClient;
 
 export async function collectSnapshot(apiKey: string, at = new Date()): Promise<Snapshot> {
-  const { pages, videos } = await fetchLiveInventory(apiKey);
-  return buildSnapshot(pages, videos, at);
+  const { pages, videos, playback } = await fetchLiveInventory(apiKey);
+  return buildSnapshot(pages, videos, at, playback);
 }
 
 export async function persistSnapshot(sb: Db, snapshot: Snapshot, extra?: { error?: string | null }): Promise<void> {
@@ -33,6 +34,7 @@ export async function persistSnapshot(sb: Db, snapshot: Snapshot, extra?: { erro
     sources: ch.sources,
     program_title: ch.programTitle,
     video_watching: ch.videoWatching,
+    mix: ch.mix ? mixToDb(ch.mix) : {},
   }));
 
   const { error: minErr } = await sb.from("chartbeat_channel_minutes").upsert(rows, {

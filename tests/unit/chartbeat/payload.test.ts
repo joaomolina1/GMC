@@ -21,6 +21,12 @@ describe("parseHistoryBundle", () => {
     expect(parseHistoryBundle([row])[0].people.tvi).toBe(10);
     expect(parseHistoryBundle(JSON.stringify([row]))[0].people.tvi).toBe(10);
     expect(parseHistoryBundle({ points: [row] })[0].people.tvi).toBe(10);
+    const withMix = parseHistoryBundle([
+      { ...row, mix: { tvi: { search: 12, engaged_sec: 40, playing: 9 } } },
+    ]);
+    expect(withMix[0].mix?.tvi.search).toBe(12);
+    expect(withMix[0].mix?.tvi.engagedSec).toBe(40);
+    expect(withMix[0].mix?.tvi.playing).toBe(9);
     expect(parseHistoryBundle(null)).toEqual([]);
   });
 });
@@ -87,7 +93,10 @@ describe("historyToCsv", () => {
     expect(lines[0]).toContain("datetime_lisboa");
     expect(lines[0]).toContain("TVI");
     expect(lines[0]).toContain("CNN Portugal");
-    expect(lines[0].split(";")).toHaveLength(9);
+    expect(lines[0]).toContain("TVI pesquisa");
+    expect(lines[0]).toContain("TVI a reproduzir");
+    expect(lines[0].split(";")).toHaveLength(2 + 6 + 1 + 6 * 15);
+    expect(lines[1].split(";")[2]).toBe("1630");
     expect(lines[1].startsWith("21/09/2026")).toBe(true);
     expect(lines[1]).toContain("1630");
     expect(lines[1]).toContain("2720");

@@ -187,8 +187,11 @@ app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por
 A zona soma essas linhas no canal correspondente — não as trata como programas diferentes.
 
 - **Rota** — `/chartbeat` (utilizadores autenticados). Gráfico de linhas (não empilhado) com
-  granularidade ao minuto (ideal), por hora ou por dia (média, fuso de Lisboa). «Exportar CSV»
-  descarrega a série visível (separador `;`, BOM, Excel pt-PT). Admins podem forçar «Gravar este minuto».
+  granularidade ao minuto (ideal), por hora ou por dia (média, fuso de Lisboa). Por baixo, a
+  composição do canal escolhido no mesmo minuto: origem (pesquisa, social, interno, direto, links),
+  ecrã, fidelidade, engagement médio e estado do player (a reproduzir / pausa). «Exportar CSV»
+  descarrega a série visível, com essas colunas por canal (separador `;`, BOM, Excel pt-PT).
+  Admins podem forçar «Gravar este minuto».
 - **Hosts** — `tviplayer.iol.pt`, `cnnportugal.iol.pt` (`CHARTBEAT_API_KEY`, header `X-CB-AK`).
 - **Testes** — `npm test` (matching de aliases, agregação, rollup hora/dia, CSV).
 
