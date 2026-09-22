@@ -6,6 +6,7 @@ import {
   Activity,
   BarChart3,
   Clapperboard,
+  CalendarDays,
   LayoutDashboard,
   Workflow,
   Scissors,
@@ -35,6 +36,7 @@ const navGroups: (
     items: [
       { href: "/tvibox", icon: Clapperboard, label: "TVI Box" },
       { href: "/chartbeat", icon: Activity, label: "Chartbeat · Diretos" },
+      { href: "/escalas", icon: CalendarDays, label: "Escalas" },
       // Ecrã do pivot: só admins o abrem sem chave; a produção gere-o em /admin/pt26.
       ...(showAdmin ? [{ href: "/pt26/live", icon: BarChart3, label: "PT26 Tracking poll" }] : []),
     ],

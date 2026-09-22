@@ -192,6 +192,36 @@ A zona soma essas linhas no canal correspondente — não as trata como programa
 - **Hosts** — `tviplayer.iol.pt`, `cnnportugal.iol.pt` (`CHARTBEAT_API_KEY`, header `X-CB-AK`).
 - **Testes** — `npm test` (matching de aliases, agregação, rollup hora/dia, CSV).
 
+## Zona Escalas ✅
+
+Escala semanal da redação. As regras de descanso são o funcionamento normal — não são
+bloqueios absolutos. A app respeita-as por omissão, avisa quando são violadas e deixa o
+coordenador gravar a exceção com justificação.
+
+Decisões fechadas:
+
+- O **S6** (17:00–02:00) conta como **um dia de trabalho**, o dia em que começa. O turno do
+  dia 10 que acaba às 02:00 do dia 11 não ocupa o dia 11. As horas a mais não entram no
+  limite semanal: todos os turnos contam `duracaoPadraoTurnoHoras`.
+- **Férias e folgas são distintas.** Folga é um dia sem turno e sem férias ou ausência
+  aprovada. Férias aprovadas bloqueiam o turno (regra absoluta) e não contam para as 4
+  folgas da janela.
+
+- **Rotas** — `/escalas` (grelha semanal; jornalistas consultam, coordenadores atribuem),
+  `/api/escalas` (quadro), `/api/escalas/atribuicoes`, `/api/escalas/lote`,
+  `/api/escalas/sugerir`, `/api/escalas/settings`, `/api/escalas/ausencias`
+- **Regras absolutas** — turno fora do perfil, férias/ausência aprovada, segundo turno no
+  mesmo dia. Nunca são gravadas.
+- **Regras flexíveis** — dias consecutivos, folgas na janela deslizante de 14 dias,
+  descanso entre turnos, horas semanais. O aviso aparece no painel antes de confirmar; o
+  botão passa a «Atribuir mesmo assim» e exige justificação, gravada na atribuição e no
+  `audit_logs`.
+- **Sugestão** — não propõe violações flexíveis se houver outro candidato. Com escassez,
+  propõe a exceção em vez de deixar o lugar vazio, e nunca viola uma regra absoluta. A
+  pré-visualização separa bloqueios (saltados) e avisos (incluídos, com opção de os excluir).
+  `preferirFolgasAgrupadas` inverte a preferência de folgas espaçadas para blocos.
+- **Contas de exemplo** — `npm run escalas:seed` (palavra-passe `gmc123`)
+
 ## Fase 7 — Clips (Fase 1: arquivo/VOD) 🚧
 
 Sugestão automática de clips a partir de vídeo de arquivo. O módulo **sugere** — nunca
@@ -271,6 +301,7 @@ npm run db:types
 | `/api/clips/renders/[id]/download` | Signed URL curta do MP4, só se `done` (GET) |
 | `/api/cron/clips-watchdog` | Requeue de leases expirados (Bearer `CRON_SECRET`) |
 | `/chartbeat` | Audiência ao minuto dos diretos Chartbeat (TVI Player + CNN Portugal) |
+| `/escalas` | Escala semanal da redação (folgas, descanso, exceções) |
 | `/api/chartbeat/live` | Snapshot actual (toppages Chartbeat, canais agregados) |
 | `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d&grain=minute\|hour\|day`) |
 | `/api/chartbeat/export` | CSV da série (`?range=&grain=`, `;` + BOM) |
