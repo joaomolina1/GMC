@@ -13,9 +13,18 @@ import {
   defaultGrain,
   formatLisbonDateTime,
   formatPeople,
+  historySpec,
 } from "@lib/chartbeat/format";
-import type { HistoryGrain, HistoryPayload, HistoryRange, Snapshot, SourceKind } from "@lib/chartbeat/types";
+import type { HistoryGrain, HistoryPayload, HistoryPoint, HistoryRange, Snapshot, SourceKind } from "@lib/chartbeat/types";
 import type { LivePayload } from "@lib/chartbeat/payload";
+import {
+  finestReadableGrain,
+  grainFits,
+  grainLimitLabel,
+  lisbonFields,
+  parseLisbonFields,
+} from "@lib/chartbeat/window";
+import { CHART_POINT_BUDGET } from "@lib/chartbeat/decimate";
 import { AudienceChart } from "./AudienceChart";
 import { ChannelComposition } from "./ChannelComposition";
 
@@ -24,8 +33,15 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [range, setRange] = useState<HistoryRange>("24h");
   const [grain, setGrain] = useState<HistoryGrain>("minute");
+  const [customFrom, setCustomFrom] = useState<string | null>(null);
+  const [customTo, setCustomTo] = useState<string | null>(null);
+  const [fromDate, setFromDate] = useState("");
+  const [fromTime, setFromTime] = useState("00:00");
+  const [toDate, setToDate] = useState("");
+  const [toTime, setToTime] = useState("00:00");
+  const [datesDirty, setDatesDirty] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [hoverPoint, setHoverPoint] = useState<HistoryPoint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -40,8 +56,13 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     setLive(data as LivePayload);
   }, []);
 
-  const loadHistory = useCallback(async (r: HistoryRange, g: HistoryGrain) => {
-    const res = await fetch(`/api/chartbeat/history?range=${r}&grain=${g}`, { cache: "no-store" });
+  const loadHistory = useCallback(async (r: HistoryRange, g: HistoryGrain, fromIso?: string | null, toIso?: string | null) => {
+    const q = new URLSearchParams({ range: r, grain: g });
+    if (r === "custom" && fromIso && toIso) {
+      q.set("from", fromIso);
+      q.set("to", toIso);
+    }
+    const res = await fetch(`/api/chartbeat/history?${q}`, { cache: "no-store" });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error ?? "Falha a ler o histórico");
     setHistory(data as HistoryPayload);
@@ -51,13 +72,13 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadLive(), loadHistory(range, grain)]);
+      await Promise.all([loadLive(), loadHistory(range, grain, customFrom, customTo)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro");
     } finally {
       setLoading(false);
     }
-  }, [loadLive, loadHistory, range, grain]);
+  }, [loadLive, loadHistory, range, grain, customFrom, customTo]);
 
   useEffect(() => {
     void loadLive().catch((e) => setError(e instanceof Error ? e.message : "Erro"));
@@ -72,9 +93,9 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     let cancelled = false;
-    setHoverIndex(null);
+    setHoverPoint(null);
     setHistoryLoading(true);
-    loadHistory(range, grain)
+    loadHistory(range, grain, customFrom, customTo)
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Falha a ler o histórico");
       })
@@ -87,7 +108,17 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [range, grain, loadHistory]);
+  }, [range, grain, customFrom, customTo, loadHistory]);
+
+  useEffect(() => {
+    if (!history || fromDate) return;
+    const from = lisbonFields(new Date(history.from));
+    const to = lisbonFields(new Date(history.to));
+    setFromDate(from.date);
+    setFromTime(from.time);
+    setToDate(to.date);
+    setToTime(to.time);
+  }, [history, fromDate]);
 
   async function ingest() {
     setIngesting(true);
@@ -103,10 +134,45 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  function pickRange(next: HistoryRange) {
+  function pickRange(next: Exclude<HistoryRange, "custom">) {
+    const spec = historySpec(next);
+    const to = new Date();
+    const from = new Date(to.getTime() - spec.ms);
+    const a = lisbonFields(from);
+    const b = lisbonFields(to);
+    setFromDate(a.date);
+    setFromTime(a.time);
+    setToDate(b.date);
+    setToTime(b.time);
     setRange(next);
+    setCustomFrom(null);
+    setCustomTo(null);
     setGrain(defaultGrain(next));
-    setHoverIndex(null);
+    setDatesDirty(false);
+    setHoverPoint(null);
+    setError(null);
+  }
+
+  function applyDates() {
+    const from = parseLisbonFields(fromDate, fromTime);
+    const to = parseLisbonFields(toDate, toTime);
+    if (!from || !to) {
+      setError("Datas inválidas.");
+      return;
+    }
+    if (to.getTime() <= from.getTime()) {
+      setError("A data de fim tem de ser depois da de início.");
+      return;
+    }
+    const span = to.getTime() - from.getTime();
+    const nextGrain = finestReadableGrain(span, grain);
+    setError(null);
+    setDatesDirty(false);
+    setHoverPoint(null);
+    setGrain(nextGrain);
+    setCustomFrom(from.toISOString());
+    setCustomTo(to.toISOString());
+    setRange("custom");
   }
 
   function downloadCsv() {
@@ -132,6 +198,10 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
   const captured = snapshot?.capturedAt;
   const grainMeta = HISTORY_GRAINS.find((g) => g.id === grain)!;
   const pointCount = history?.points.length ?? 0;
+  const spanMs =
+    range === "custom" && customFrom && customTo
+      ? new Date(customTo).getTime() - new Date(customFrom).getTime()
+      : historySpec(range).ms;
 
   const sources = useMemo(() => {
     if (!snapshot) return [];
@@ -239,21 +309,33 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 className="text-base font-semibold text-white">Pessoas ao longo do tempo</h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              Gráfico de linhas independentes · {grainMeta.hint}
+              {history && history.points.length > CHART_POINT_BUDGET
+                ? "Linha com picos e vales, para se ler de uma vez. O CSV traz cada ponto."
+                : grainMeta.hint}
+              {history
+                ? ` · ${formatLisbonDateTime(history.from)} – ${formatLisbonDateTime(history.to)}`
+                : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Segmented
               items={HISTORY_RANGES.map((r) => ({ id: r.id, label: r.label }))}
               value={range}
-              onChange={(id) => pickRange(id as HistoryRange)}
+              onChange={(id) => pickRange(id as Exclude<HistoryRange, "custom">)}
             />
             <Segmented
-              items={HISTORY_GRAINS.map((g) => ({ id: g.id, label: g.short }))}
+              items={HISTORY_GRAINS.map((g) => ({
+                id: g.id,
+                label: g.short,
+                disabled: !grainFits(spanMs, g.id),
+                title: grainFits(spanMs, g.id) ? undefined : `Só até ${grainLimitLabel(g.id)}`,
+              }))}
               value={grain}
               onChange={(id) => {
-                setGrain(id as HistoryGrain);
-                setHoverIndex(null);
+                const next = id as HistoryGrain;
+                if (!grainFits(spanMs, next)) return;
+                setGrain(next);
+                setHoverPoint(null);
               }}
             />
             <button
@@ -266,6 +348,51 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
               Exportar CSV
             </button>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2 border-b border-white/10 px-5 py-3">
+          <DateField
+            label="De"
+            date={fromDate}
+            time={fromTime}
+            onDate={(value) => {
+              setFromDate(value);
+              setDatesDirty(true);
+            }}
+            onTime={(value) => {
+              setFromTime(value);
+              setDatesDirty(true);
+            }}
+          />
+          <DateField
+            label="Até"
+            date={toDate}
+            time={toTime}
+            onDate={(value) => {
+              setToDate(value);
+              setDatesDirty(true);
+            }}
+            onTime={(value) => {
+              setToTime(value);
+              setDatesDirty(true);
+            }}
+          />
+          <button
+            type="button"
+            onClick={applyDates}
+            className={`inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium ring-1 ring-inset ${
+              datesDirty
+                ? "bg-white text-slate-900 ring-white"
+                : "bg-white/10 text-white ring-white/15 hover:bg-white/15"
+            }`}
+          >
+            Aplicar datas
+          </button>
+          {!grainFits(spanMs, "minute") && (
+            <p className="text-[11px] text-slate-400">
+              Ao minuto só até 36 horas. Encurta as datas para ver cada ponto.
+            </p>
+          )}
         </div>
 
         <div className="px-2 pt-2 sm:px-4">
@@ -294,7 +421,7 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
               );
             })}
           </div>
-          <AudienceChart history={history} hidden={hidden} hoverIndex={hoverIndex} onHover={setHoverIndex} />
+          <AudienceChart history={history} hidden={hidden} onHoverPoint={setHoverPoint} />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-5 py-3 text-[11px] text-slate-500">
@@ -321,15 +448,11 @@ export function ChartbeatDashboard({ isAdmin }: { isAdmin: boolean }) {
           name={CHANNEL_BY_SLUG[openSlug].name}
           color={CHANNEL_BY_SLUG[openSlug].color}
           mix={
-            (hoverIndex != null ? history?.points[hoverIndex]?.mix?.[openSlug] : undefined) ??
+            hoverPoint?.mix?.[openSlug] ??
             snapshot?.channels.find((c) => c.slug === openSlug)?.mix ??
             null
           }
-          at={
-            hoverIndex != null && history?.points[hoverIndex]?.mix?.[openSlug]
-              ? history.points[hoverIndex].bucket
-              : captured
-          }
+          at={hoverPoint?.mix?.[openSlug] ? hoverPoint.bucket : captured}
         />
       )}
 
@@ -424,7 +547,7 @@ function Segmented({
   value,
   onChange,
 }: {
-  items: { id: string; label: string }[];
+  items: { id: string; label: string; disabled?: boolean; title?: string }[];
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -436,8 +559,10 @@ function Segmented({
           <button
             key={item.id}
             type="button"
+            title={item.title}
+            disabled={item.disabled}
             onClick={() => onChange(item.id)}
-            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
               on ? "bg-white text-slate-900 shadow-sm" : "text-slate-300 hover:text-white"
             }`}
           >
@@ -446,6 +571,30 @@ function Segmented({
         );
       })}
     </div>
+  );
+}
+
+function DateField({
+  label,
+  date,
+  time,
+  onDate,
+  onTime,
+}: {
+  label: string;
+  date: string;
+  time: string;
+  onDate: (value: string) => void;
+  onTime: (value: string) => void;
+}) {
+  const field =
+    "h-8 rounded-md border-0 bg-white/10 px-2 text-xs text-white ring-1 ring-inset ring-white/15 [color-scheme:dark] focus:outline-none focus:ring-white/40";
+  return (
+    <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+      {label}
+      <input type="date" value={date} onChange={(e) => onDate(e.target.value)} className={field} />
+      <input type="time" value={time} onChange={(e) => onTime(e.target.value)} className={field} />
+    </label>
   );
 }
 

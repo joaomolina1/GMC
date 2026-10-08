@@ -114,7 +114,7 @@ export interface Snapshot {
   matchedCount: number;
 }
 
-export type HistoryRange = "6h" | "24h" | "7d" | "30d";
+export type HistoryRange = "6h" | "24h" | "7d" | "30d" | "custom";
 
 /** Granularidade da série: minuto (ideal) ou médias em hora/dia de Lisboa. */
 export type HistoryGrain = "minute" | "hour" | "day";
@@ -129,5 +129,6 @@ export interface HistoryPayload {
   range: HistoryRange;
   grain: HistoryGrain;
   from: string;
+  to: string;
   points: HistoryPoint[];
 }
