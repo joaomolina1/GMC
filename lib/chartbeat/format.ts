@@ -38,7 +38,7 @@ export function formatLisbonCsv(iso: string, grain: HistoryGrain): string {
   });
 }
 
-export const HISTORY_RANGES: { id: HistoryRange; label: string; ms: number }[] = [
+export const HISTORY_RANGES: { id: Exclude<HistoryRange, "custom">; label: string; ms: number }[] = [
   { id: "6h", label: "6 horas", ms: 6 * 3600_000 },
   { id: "24h", label: "24 horas", ms: 24 * 3600_000 },
   { id: "7d", label: "7 dias", ms: 7 * 86400_000 },
@@ -72,7 +72,7 @@ export function historySpec(range: HistoryRange) {
 
 export function defaultGrain(range: HistoryRange): HistoryGrain {
   if (range === "6h" || range === "24h") return "minute";
-  if (range === "7d") return "hour";
+  if (range === "7d" || range === "custom") return "hour";
   return "day";
 }
 

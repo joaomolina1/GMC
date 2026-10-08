@@ -62,6 +62,11 @@ export function parseHistoryBundle(data: unknown): HistoryPoint[] {
   return [];
 }
 
-export function emptyHistory(range: HistoryRange, grain: HistoryGrain, from: Date): HistoryPayload {
-  return { range, grain, from: from.toISOString(), points: [] };
+export function emptyHistory(
+  range: HistoryRange,
+  grain: HistoryGrain,
+  from: Date,
+  to: Date
+): HistoryPayload {
+  return { range, grain, from: from.toISOString(), to: to.toISOString(), points: [] };
 }

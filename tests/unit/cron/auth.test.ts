@@ -32,6 +32,23 @@ describe("cronUnauthorized", () => {
     }
   });
 
+  it("aceita o Bearer do scheduler do Supabase", () => {
+    const prevSecret = process.env.CRON_SECRET;
+    const prevScheduler = process.env.CRON_SCHEDULER_SECRET;
+    process.env.CRON_SECRET = "test-secret";
+    process.env.CRON_SCHEDULER_SECRET = "scheduler-secret";
+    try {
+      expect(cronUnauthorized(req({ authorization: "Bearer scheduler-secret" }))).toBeNull();
+      expect(cronUnauthorized(req({ authorization: "Bearer test-secret" }))).toBeNull();
+      expect(cronUnauthorized(req({ authorization: "Bearer nope" }))?.status).toBe(401);
+    } finally {
+      if (prevSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prevSecret;
+      if (prevScheduler === undefined) delete process.env.CRON_SCHEDULER_SECRET;
+      else process.env.CRON_SCHEDULER_SECRET = prevScheduler;
+    }
+  });
+
   it("exige Bearer igual ao CRON_SECRET quando está definido", () => {
     const prev = process.env.CRON_SECRET;
     process.env.CRON_SECRET = "test-secret";
