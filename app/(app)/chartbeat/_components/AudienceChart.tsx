@@ -147,11 +147,15 @@ const ChartGeometry = memo(function ChartGeometry({
             />
           );
         })}
-      {timeLabels.map(({ i, label }) => (
-        <text key={i} x={x(i)} y={h - 10} textAnchor="middle" fill="#8b9cb3" fontSize="11">
-          {label}
-        </text>
-      ))}
+      {timeLabels.map(({ i, label }, idx) => {
+        const edge = idx === 0 ? "start" : idx === timeLabels.length - 1 ? "end" : "middle";
+        const xPos = edge === "start" ? pad.l : edge === "end" ? w - pad.r : x(i);
+        return (
+          <text key={i} x={xPos} y={h - 10} textAnchor={edge} fill="#8b9cb3" fontSize="11">
+            {label}
+          </text>
+        );
+      })}
     </g>
   );
 });
