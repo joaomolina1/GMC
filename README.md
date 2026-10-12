@@ -76,7 +76,8 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   EP1 → EP2 → EP3 por scroll, sem texto sobre o vídeo, paywall no episódio bloqueado), `/tvibox/series`,
   `/tvibox/series/[slug]`, `/tvibox/carteira`, `/tvibox/perfil`, `/tvibox/lista`, `/tvibox/entrar` (login com marca própria)
 - **Estúdio (backoffice)** — `/admin/tvibox` (admins): criar/editar séries e episódios, upload direto de vídeo 9:16,
-  poster e legendas WebVTT para o Storage (URL assinado), estados Rascunho / Em breve (cliffhanger) / Publicado
+  poster e legendas WebVTT para o Storage (URL assinado), estados Rascunho / Em breve (cliffhanger) / Publicado.
+  Apagar um episódio ou uma série remove também o vídeo, o poster e as legendas no bucket `tvibox`.
 - **Importar novela** (Estúdio) — zip ou MP4s de uma novela já produzida → bucket privado `tvibox-imports` (TUS,
   retomável) → job em `tvibox_import_jobs` → worker `npm run tvibox:import -- --job <id>`: deteta a ordem pelo nome
   dos ficheiros, converte para H.264 faststart (AV1 não toca em iPhone), transcreve (faster-whisper), pede a Claude a
