@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { audit, episodeSchema, readJson, withAdmin } from "@lib/tvibox/admin";
+import { episodeMediaPaths, removeStoragePaths } from "@lib/tvibox/media-purge";
+import { TVIBOX_BUCKET } from "@lib/tvibox/media";
+import { createServiceClient } from "@lib/supabase/server";
 
 export async function POST(req: Request) {
   return withAdmin(async (ctx) => {
@@ -39,9 +42,37 @@ export async function DELETE(req: Request) {
   return withAdmin(async (ctx) => {
     const id = new URL(req.url).searchParams.get("id");
     if (!id) return NextResponse.json({ ok: false, error: "id em falta" }, { status: 422 });
+
+    const { data, error: readError } = await ctx.supabase
+      .from("tvibox_episodes")
+      .select("id, number, video_url, poster_url, subtitles_url, tvibox_series(slug)")
+      .eq("id", id)
+      .maybeSingle();
+    if (readError) return NextResponse.json({ ok: false, error: readError.message }, { status: 400 });
+    if (!data) return NextResponse.json({ ok: false, error: "Episódio não encontrado" }, { status: 404 });
+
+    const row = data as {
+      number: number;
+      video_url: string | null;
+      poster_url: string | null;
+      subtitles_url: string | null;
+      tvibox_series: { slug: string } | { slug: string }[] | null;
+    };
+    const series = Array.isArray(row.tvibox_series) ? row.tvibox_series[0] : row.tvibox_series;
+    if (!series?.slug) return NextResponse.json({ ok: false, error: "Série do episódio não encontrada" }, { status: 400 });
+
+    const service = await createServiceClient();
+    const paths = await episodeMediaPaths(service.storage, series.slug, row.number, [row.video_url, row.poster_url, row.subtitles_url]);
+    const removed = await removeStoragePaths(service.storage, TVIBOX_BUCKET, paths);
+
     const { error } = await ctx.supabase.from("tvibox_episodes").delete().eq("id", id);
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-    await audit(ctx, "tvibox.episode.delete", "tvibox_episodes", id);
-    return NextResponse.json({ ok: true });
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: `Os ficheiros saíram do Storage (${removed}), mas a linha ficou: ${error.message}` },
+        { status: 400 }
+      );
+    }
+    await audit(ctx, "tvibox.episode.delete", "tvibox_episodes", id, { storage_removed: removed });
+    return NextResponse.json({ ok: true, removed });
   });
 }
