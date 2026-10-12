@@ -201,7 +201,7 @@ export default function TviBoxStudioPage() {
 
   async function deleteSeries(s: SeriesRow) {
     const eps = episodes.filter((e) => e.series_id === s.id).length;
-    if (!window.confirm(`Apagar a série «${s.title}» e os seus ${eps} episódios? Esta ação é irreversível.`)) return;
+    if (!window.confirm(`Apagar a série «${s.title}», os ${eps} episódios e os ficheiros no Storage (vídeos, posters e legendas)? Esta ação é irreversível.`)) return;
     setBusy("series-del");
     try {
       await api(`/api/tvibox/admin/series?id=${s.id}&confirm=1`, { method: "DELETE" });
@@ -328,7 +328,7 @@ export default function TviBoxStudioPage() {
   }
 
   async function deleteEpisode(e: EpisodeRow) {
-    if (!window.confirm(`Apagar o EP ${e.number} «${e.title}»? Os desbloqueios e o progresso dos utilizadores neste episódio são perdidos.`)) return;
+    if (!window.confirm(`Apagar o EP ${e.number} «${e.title}»? O vídeo, o poster e as legendas saem do Storage. Os desbloqueios e o progresso neste episódio também são perdidos.`)) return;
     setBusy(`del-${e.id}`);
     try {
       await api(`/api/tvibox/admin/episodes?id=${e.id}`, { method: "DELETE" });
@@ -724,6 +724,7 @@ export default function TviBoxStudioPage() {
                   <li><b>Rascunho</b> — invisível para os utilizadores.</li>
                   <li>O EP 1 deve ser grátis; a partir do EP 2 o custo padrão é 15 moedas. A série só entra no feed «Para Ti» quando tem pelo menos um episódio com vídeo.</li>
                   <li>Os renders do pipeline Veo (<code>npm run tvibox:produce</code>) publicam-se aqui automaticamente e podem ser substituídos por upload manual.</li>
+                  <li>Apagar um episódio ou uma série remove também o vídeo, o poster e as legendas no Storage.</li>
                   <li><b>Importar novela</b> (topo da página): zip ou MP4s de uma novela já produzida → o worker <code>npm run tvibox:import</code> converte, transcreve e propõe títulos, sinopses, ganchos, posters e legendas; a série fica em rascunho até publicares.</li>
                 </ul>
               </div>
