@@ -138,13 +138,19 @@ export async function POST(request: Request) {
     .limit(50);
 
   const messages = await buildChatMessages(history ?? [], supabase);
-  const runtimeConfig = await buildAgentRuntimeConfig({
-    supabase,
-    agentId,
-    version,
-    userMessage: message,
-    userId: user.id,
-  });
+  let runtimeConfig;
+  try {
+    runtimeConfig = await buildAgentRuntimeConfig({
+      supabase,
+      agentId,
+      version,
+      userMessage: message,
+      userId: user.id,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro de configuração do agente";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 
   const encoder = new TextEncoder();
   let fullContent = "";

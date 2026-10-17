@@ -58,16 +58,41 @@ function resolveAuthToken(ref: string | null): string | null {
   return process.env[key]?.trim() || null;
 }
 
+export function mcpAuthEnvName(ref: string | null | undefined): string | null {
+  if (!ref?.startsWith("env:")) return null;
+  const key = ref.slice(4).trim();
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : null;
+}
+
+/** Thrown when an agent MCP connector references an env var that is unset on the server. */
+export class McpAuthConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpAuthConfigError";
+  }
+}
+
 export function buildAnthropicMcpServers(
   connections: AgentMcpConnection[]
 ): BetaRequestMCPServerURLDefinition[] {
   // mcp-client-2025-11-20: connection details only — tool allowlists live on mcp_toolset.
-  return connections.map((conn) => ({
-    type: "url" as const,
-    name: conn.name,
-    url: conn.server_url,
-    authorization_token: resolveAuthToken(conn.auth_secret_ref),
-  }));
+  return connections.map((conn) => {
+    const authorization_token = resolveAuthToken(conn.auth_secret_ref);
+    if (conn.auth_secret_ref && !authorization_token) {
+      const envName = mcpAuthEnvName(conn.auth_secret_ref) ?? conn.auth_secret_ref;
+      throw new McpAuthConfigError(
+        `O conector MCP "${conn.name}" usa a variável ${envName}, mas ela não está definida no servidor (Vercel). ` +
+          `Em Vercel → Settings → Environment Variables, crie ${envName} com o valor da chave MCP (mcp_...) ` +
+          `e faça redeploy. Sem isto a Anthropic não consegue autenticar no /mcp.`
+      );
+    }
+    return {
+      type: "url" as const,
+      name: conn.name,
+      url: conn.server_url,
+      authorization_token,
+    };
+  });
 }
 
 /**
