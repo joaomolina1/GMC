@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
-  BarChart3,
   Clapperboard,
   Users,
   Euro,
@@ -472,13 +471,6 @@ export default function AdminPage() {
         >
           <Clapperboard size={16} />
           Estúdio TVI Box
-        </Link>
-        <Link
-          href="/admin/pt26"
-          className="flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50"
-        >
-          <BarChart3 size={16} />
-          PT26 Tracking poll
         </Link>
         <Link
           href="/chartbeat"

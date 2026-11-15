@@ -4,12 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
-  BarChart3,
   Clapperboard,
   CalendarDays,
   LayoutDashboard,
   Workflow,
-  Scissors,
   Shield,
   Sparkles,
   PanelLeftClose,
@@ -28,7 +26,6 @@ const navGroups: (
     items: [
       { href: "/", icon: LayoutDashboard, label: "Agentes" },
       { href: "/flows", icon: Workflow, label: "Flows" },
-      { href: "/clips", icon: Scissors, label: "Clips" },
     ],
   },
   {
@@ -37,8 +34,6 @@ const navGroups: (
       { href: "/tvibox", icon: Clapperboard, label: "TVI Box" },
       { href: "/chartbeat", icon: Activity, label: "Chartbeat · Diretos" },
       { href: "/escalas", icon: CalendarDays, label: "Escalas" },
-      // Ecrã do pivot: só admins o abrem sem chave; a produção gere-o em /admin/pt26.
-      ...(showAdmin ? [{ href: "/pt26/live", icon: BarChart3, label: "PT26 Tracking poll" }] : []),
     ],
   },
   ...(showAdmin
