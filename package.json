@@ -22,6 +22,7 @@
     "tvibox:plan": "tsx scripts/tvibox/produce.ts --dry-run",
     "tvibox:align": "tsx scripts/tvibox/align-subtitles.ts",
     "tvibox:import": "tsx scripts/tvibox/import.ts",
+    "tvibox:purge-orphans": "tsx scripts/tvibox/purge-orphan-media.ts",
     "chartbeat:live": "tsx scripts/chartbeat-live-check.ts",
     "escalas:seed": "tsx scripts/escalas/seed-demo.ts"
   },
