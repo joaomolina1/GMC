@@ -136,10 +136,11 @@ Audiência em direto (concurrents Chartbeat) dos lineares **TVI**, **CNN Portuga
 
 A Real-Time API da Chartbeat só devolve o *agora* (toppages, actualizado a ~3 s; limite 200 req/min/host).
 O Advanced Queries (histórico) serve totais diários/semanais (pageviews, engaged time) — **não** concurrents ao minuto.
-O histórico ao minuto é nosso: um cron Vercel (`* * * * *` → `/api/cron/chartbeat-diretos`) grava um snapshot
-em `chartbeat_channel_minutes` em produção, mesmo com a página fechada. Sem `CRON_SECRET` na Vercel o handler
-responde 401 e o histórico só avança se alguém tiver `/chartbeat` aberto (persistência no live). Autenticação
-Chartbeat: header `X-CB-AK` (o `?apikey=` da doc antiga está deprecated).
+O histórico ao minuto é nosso: o pg_cron do Supabase chama `/api/cron/chartbeat-diretos` a cada minuto
+e grava um snapshot em `chartbeat_channel_minutes`, mesmo com a página fechada. A conta Hobby da Vercel
+só aceita crons diários, por isso o minuto não está no `vercel.json`.
+Sem `CRON_SECRET` ou `CRON_SCHEDULER_SECRET` o handler responde 401 e o histórico só avança se alguém
+tiver `/chartbeat` aberto. Autenticação Chartbeat: header `X-CB-AK` (o `?apikey=` da doc antiga está deprecated).
 
 No TVI Player o mesmo linear aparece em vários paths (ex.: `/direto`, `/direto/tvi`, `/direto/TVI`,
 app «Direto - TVI»). A CNN também entra pelo TVI Player (`/direto/cnn`) e por `cnnportugal.iol.pt/direto`.
@@ -233,7 +234,7 @@ npm run db:types
 | `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d&grain=minute\|hour\|day`) |
 | `/api/chartbeat/export` | CSV da série (`?range=&grain=`, `;` + BOM) |
 | `/api/chartbeat/ingest` | Gravar este minuto (POST, admin) |
-| `/api/cron/chartbeat-diretos` | Cron ao minuto (Bearer `CRON_SECRET`) |
+| `/api/cron/chartbeat-diretos` | Snapshot ao minuto (pg_cron, Bearer) |
 
 ## Arquitetura
 
