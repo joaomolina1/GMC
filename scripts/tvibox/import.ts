@@ -2,7 +2,7 @@
  * Importa uma novela pronta (zip com episódios ou MP4s soltos) para o TVI BOX e
  * preenche tudo o que falta com IA: títulos, sinopses, ganchos, posters e legendas.
  *
- *   npx tsx scripts/tvibox/import.ts --job <id> [--publish]            # job criado no Estúdio (ficheiros no bucket tvibox-imports)
+ *   npx tsx scripts/tvibox/import.ts --job <id> [--zip novela.zip] [--publish]  # job do Estúdio; --zip se o bucket estiver vazio
  *   npx tsx scripts/tvibox/import.ts --zip novela.zip [--slug x] [--title "..."] [--publish] [--sort 1]
  *   npx tsx scripts/tvibox/import.ts --dir pasta/ ...
  *
@@ -25,7 +25,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import {
   episodeProposalSchema,
@@ -117,9 +117,14 @@ async function resolveSources(sb: Sb, work: string, jobId: string | null): Promi
     hints = (job.hints ?? {}) as Record<string, string>;
     const files = (job.files ?? []) as { name: string; path: string }[];
     if (!files.length) throw new Error("job sem ficheiros");
+    const zipArg = arg("zip");
     for (const f of files) {
       const local = join(srcDir, basename(f.path));
-      if (existsSync(local)) continue;
+      if (existsSync(local) && statSync(local).size > 0) continue;
+      if (zipArg && existsSync(zipArg) && /\.zip$/i.test(f.name + f.path)) {
+        copyFileSync(resolve(zipArg), local);
+        continue;
+      }
       const { data, error: dErr } = await sb.storage.from(IMPORTS_BUCKET).download(f.path);
       if (dErr || !data) throw new Error(`download ${f.path}: ${dErr?.message}`);
       writeFileSync(local, Buffer.from(await data.arrayBuffer()));

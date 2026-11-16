@@ -82,7 +82,9 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
   dos ficheiros, converte para H.264 faststart (AV1 não toca em iPhone), transcreve (faster-whisper), pede a Claude a
   ficha de cada episódio (título, sinopse, gancho, poster, resumo) e da série (título, género, sinopse, paleta,
   elenco), gera legendas WebVTT com nomes corrigidos e cria a série em rascunho; o admin revê e carrega em
-  «Publicar todos os episódios». Também corre localmente: `npm run tvibox:import -- --zip novela.zip --publish`
+  «Publicar todos os episódios». Também corre localmente: `npm run tvibox:import -- --zip novela.zip --publish`.
+  Zips grandes (~700 MB) precisam do limite global do Storage acima do tamanho do ficheiro (o TUS devolve 413 se o
+  «Global file size limit» do projeto for mais baixo, p.ex. 50 MB no plano Free); nesse caso usa `--zip` no worker.
 - **Economia** — moedas (bónus de boas-vindas, check-in diário com sequência, anúncios recompensados, pacotes
   simulados, TVI Box+), desbloqueio atómico via funções SQL `tvibox_*`
 - **Social** — gostos, comentários, A Minha Lista, partilha, progresso/retomar, controlo parental

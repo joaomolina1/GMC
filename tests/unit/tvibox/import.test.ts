@@ -11,10 +11,12 @@ import {
 import { cuesToVtt } from "@lib/tvibox/subtitles";
 
 const TVI = (n: number, extra = "") => `Barcelos/PG26000415${String(n).padStart(3, "0")}FH01_QUEM MATOU O GALO DE BARCELOS  9 16 TVIPLAYER_T1_E${String(n).padStart(3, "0")}.leve${extra}.mp4`;
+const AMOR = (n: number) => `Amor Seguro/PG26000418${String(n).padStart(3, "0")}FH01_AMOR SEGURO 9 16 TVIPLAYER_T1_E${String(n).padStart(3, "0")}.leve.mp4`;
 
 describe("detectEpisodeNumber", () => {
   it("lê os formatos habituais de nomes de ficheiro", () => {
     expect(detectEpisodeNumber(TVI(7))).toBe(7);
+    expect(detectEpisodeNumber(AMOR(46))).toBe(46);
     expect(detectEpisodeNumber(TVI(31, ".2"))).toBe(31);
     expect(detectEpisodeNumber("EP12 - A chamada.mp4")).toBe(12);
     expect(detectEpisodeNumber("novela_ep-3.mov")).toBe(3);
@@ -55,7 +57,9 @@ describe("pickEpisodeFiles", () => {
 describe("seriesTitleFromFilenames / slugify", () => {
   it("extrai o título comum limpo dos códigos técnicos", () => {
     expect(seriesTitleFromFilenames([TVI(1), TVI(2), TVI(55)])).toBe("Quem Matou o Galo de Barcelos");
+    expect(seriesTitleFromFilenames([AMOR(1), AMOR(2), AMOR(46)])).toBe("Amor Seguro");
     expect(slugify("Quem Matou o Galo de Barcelos")).toBe("quem-matou-o-galo-de-barcelos");
+    expect(slugify("Amor Seguro")).toBe("amor-seguro");
   });
   it("devolve null quando não há texto comum", () => {
     expect(seriesTitleFromFilenames(["01.mp4", "02.mp4"])).toBeNull();

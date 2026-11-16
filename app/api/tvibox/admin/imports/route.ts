@@ -21,7 +21,8 @@ const createSchema = z.object({
 
 const patchSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(["uploaded", "publish", "cancel", "retry"]),
+  action: z.enum(["uploaded", "publish", "cancel", "retry", "fail"]),
+  error: z.string().trim().max(500).optional(),
 });
 
 const safeName = (name: string) => name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
@@ -76,6 +77,7 @@ export async function POST(req: Request) {
 
 /**
  * uploaded → fica em fila para o worker (`npm run tvibox:import -- --job <id>`);
+ * fail     → o TUS no browser falhou (p.ex. 413); o job deixa de ficar preso em «A carregar»;
  * publish  → publica todos os episódios da série criada (EP1 grátis, restantes 15 moedas);
  * cancel   → cancela; retry → volta à fila depois de uma falha.
  */
@@ -89,6 +91,13 @@ export async function PATCH(req: Request) {
     if (body.action === "uploaded") {
       if (job.status !== "uploading") return NextResponse.json({ ok: false, error: `Job em estado ${job.status}` }, { status: 409 });
       await ctx.supabase.from("tvibox_import_jobs").update({ status: "queued", log: [...(job.log ?? []), "Ficheiros carregados. À espera do worker."] }).eq("id", job.id);
+    } else if (body.action === "fail") {
+      if (job.status !== "uploading") return NextResponse.json({ ok: false, error: `Job em estado ${job.status}` }, { status: 409 });
+      const msg = body.error || "Falha no upload";
+      await ctx.supabase
+        .from("tvibox_import_jobs")
+        .update({ status: "failed", error: msg, log: [...(job.log ?? []), msg] })
+        .eq("id", job.id);
     } else if (body.action === "cancel") {
       if (!["uploading", "queued", "failed"].includes(job.status)) return NextResponse.json({ ok: false, error: "Só se cancela antes de correr" }, { status: 409 });
       await ctx.supabase.from("tvibox_import_jobs").update({ status: "cancelled" }).eq("id", job.id);
