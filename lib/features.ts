@@ -8,7 +8,7 @@
  * para o middleware decidir sem consultar tabelas.
  */
 
-export type FeatureKey = "agentes" | "flows" | "clips" | "tvibox" | "chartbeat" | "escalas";
+export type FeatureKey = "agentes" | "flows" | "tvibox" | "chartbeat" | "escalas";
 
 export interface FeatureDef {
   key: FeatureKey;
@@ -42,7 +42,6 @@ export const FEATURES: FeatureDef[] = [
     ],
   },
   { key: "flows", label: "Flows", descricao: "Editor e execução de flows", home: "/flows", paths: ["/flows", "/api/flows"] },
-  { key: "clips", label: "Clips", descricao: "Cortes de vídeo assistidos", home: "/clips", paths: ["/clips", "/api/clips"] },
   { key: "tvibox", label: "TVI Box", descricao: "Feed vertical de séries", home: "/tvibox", paths: ["/tvibox", "/api/tvibox"] },
   {
     key: "chartbeat",

@@ -242,8 +242,8 @@ describe("acesso por funcionalidade", () => {
   });
 
   it("sem restrições ou admin vê tudo", () => {
-    expect(podeUsar(acessoDeMetadata({}), "clips")).toBe(true);
-    expect(podeUsar(acessoDeMetadata({ features: [], gmc_role: "admin" }), "clips")).toBe(true);
+    expect(podeUsar(acessoDeMetadata({}), "flows")).toBe(true);
+    expect(podeUsar(acessoDeMetadata({ features: [], gmc_role: "admin" }), "flows")).toBe(true);
     expect(homeDoUtilizador(acessoDeMetadata({ features: [] }))).toBe("/conta/sem-acesso");
   });
 });
