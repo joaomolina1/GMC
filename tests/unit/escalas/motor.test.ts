@@ -212,6 +212,18 @@ describe("sugestão", () => {
   });
 });
 
+describe("alerta de pessoas sem turnos", () => {
+  const semana = dRange(WS, addDays(WS, 6));
+  it("assinala quem fica sem turnos numa semana planeada", () => {
+    const m = new Motor(base({ pessoas: [pessoa("ana", "RED", ["M"]), pessoa("rui", "RED", ["M"]), pessoa("eva", "RED", ["M"])], turnos: [turno("ana", WS, "S1")], ausencias: [ausencia("eva", WS, addDays(WS, 6))] }));
+    expect(m.semTurnosNaSemana("RED", semana).map((p) => p.id)).toEqual(["rui"]);
+    expect(m.alertasSemana("RED", semana).some((a) => /1 pessoa fica sem turnos esta semana: RUI/.test(a.texto))).toBe(true);
+  });
+  it("não alerta numa semana ainda por planear", () => {
+    expect(new Motor(base()).semTurnosNaSemana("RED", semana)).toEqual([]);
+  });
+});
+
 describe("mínimo por período", () => {
   it("conta quem integra o grupo à semana e não se aplica ao fim de semana", () => {
     const ds = base({

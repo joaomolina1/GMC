@@ -1,23 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { FileDown } from "lucide-react";
 import { addDays, DIAS, dow, fmt, fmtDMY, fmtFull, lastDayOfMonth, mondayOf, todayISO } from "@lib/escalas/datas";
 import type { Motor } from "@lib/escalas/motor";
 import type { Pessoa } from "@lib/escalas/tipos";
 import { cn } from "@lib/utils";
 import { useMotor } from "../_lib/contexto";
 import { FormAusencia } from "./Ausencias";
-import { exportarExcel } from "./excel";
-import { Button, Card, inputSm, Loading, Modal, Note, Table, Tag, useDialogo } from "./ui";
+import { Button, Card, inputSm, Loading, Modal, Note, Table, Tag } from "./ui";
 
-function useIntervalo() {
+export function useIntervalo() {
   const ws = mondayOf(todayISO());
   const [r, setR] = useState<[string, string]>([addDays(ws, -21), addDays(ws, 6)]);
   return [r, setR] as const;
 }
 
-function BarraIntervalo({ r, setR }: { r: [string, string]; setR: (v: [string, string]) => void }) {
+export function BarraIntervalo({ r, setR }: { r: [string, string]; setR: (v: [string, string]) => void }) {
   const ws = mondayOf(todayISO());
   const t = todayISO();
   const presets: [string, () => [string, string]][] = [
@@ -214,82 +212,5 @@ function ModalSaldo({ motor, p, from, to, onClose }: { motor: Motor; p: Pessoa; 
         <Note>Sem fins de semana nem blocos de piquete no período.</Note>
       )}
     </Modal>
-  );
-}
-
-// ---------------------------------------------------------------- relatórios
-export function Relatorios() {
-  const [r, setR] = useIntervalo();
-  const [from, to] = r;
-  const { motor, loading, error } = useMotor(addDays(from, -70), addDays(to, 21));
-  const { toast } = useDialogo();
-  if (error) return <Note kind="bad">{error}</Note>;
-  if (loading || !motor) return <Loading />;
-  const cols = ["t", "h", "M", "T", "N", "piq", "fds", "abs", "exc"] as const;
-  return (
-    <Card
-      title="Horas e turnos por pessoa"
-      actions={
-        <>
-          <BarraIntervalo r={r} setR={setR} />
-          <Button size="sm" onClick={() => exportarExcel(motor, from, to).catch((e) => toast(e.message, "bad"))}>
-            <FileDown size={14} /> Exportar para Excel
-          </Button>
-        </>
-      }
-      bodyClass="p-0"
-    >
-      <Table>
-        <thead>
-          <tr>
-            <th>Pessoa</th>
-            <th>Grupo</th>
-            <th className="text-right">Turnos</th>
-            <th className="text-right">Horas</th>
-            <th className="text-right">{motor.periodos.M}</th>
-            <th className="text-right">{motor.periodos.T}</th>
-            <th className="text-right">{motor.periodos.N}</th>
-            <th className="text-right">Piquetes</th>
-            <th className="text-right">FDS</th>
-            <th className="text-right">Dias ausente</th>
-            <th className="text-right">Exceções</th>
-          </tr>
-        </thead>
-        <tbody>
-          {motor.grupos.map((g) => {
-            const m = motor.membros(g.id);
-            if (!m.length) return null;
-            const acc = { t: 0, h: 0, M: 0, T: 0, N: 0, piq: 0, fds: 0, abs: 0, exc: 0 };
-            const rows = m.map((p) => {
-              const s = motor.estatPessoa(p.id, from, to);
-              for (const k of cols) acc[k] += s[k];
-              return (
-                <tr key={p.id}>
-                  <td className="whitespace-nowrap">{p.nome}</td>
-                  <td className="whitespace-nowrap">{g.nome}</td>
-                  {cols.map((k) => (
-                    <td key={k} className="text-right tabular-nums">
-                      {s[k]}
-                    </td>
-                  ))}
-                </tr>
-              );
-            });
-            acc.h = Math.round(acc.h * 10) / 10;
-            return [
-              ...rows,
-              <tr key={`${g.id}-total`} className="bg-slate-50 font-semibold">
-                <td colSpan={2}>Total {g.nome}</td>
-                {cols.map((k) => (
-                  <td key={k} className="text-right tabular-nums">
-                    {acc[k]}
-                  </td>
-                ))}
-              </tr>,
-            ];
-          })}
-        </tbody>
-      </Table>
-    </Card>
   );
 }
