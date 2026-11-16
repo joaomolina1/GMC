@@ -545,6 +545,20 @@ export class Motor {
     return out;
   }
 
+  /**
+   * Pessoas do grupo sem nenhum turno na semana, quando o grupo já tem a semana planeada.
+   * Não conta quem tem ausência aprovada em todos os dias em que poderia trabalhar.
+   */
+  semTurnosNaSemana(g: string, days: string[]): Pessoa[] {
+    const mem = this.membros(g);
+    if (!days.some((d) => mem.some((p) => this.turnoDe(p.id, d)))) return [];
+    return mem.filter((p) => {
+      if (days.some((d) => this.turnoDe(p.id, d))) return false;
+      const possiveis = days.filter((d) => (p.soFds ? isWE(d) : p.fazFds ? true : !isWE(d)));
+      return !possiveis.every((d) => this.ausenciaEm(p.id, d, "APROVADA"));
+    });
+  }
+
   alertasSemana(g: string, days: string[]): Alerta[] {
     const out: Alerta[] = [];
     for (const d of days)
@@ -571,6 +585,12 @@ export class Motor {
         texto: `${fmtFull(v.d)} — ${this.pessoaMap.get(v.a)!.nome} e ${this.pessoaMap.get(v.b)!.nome} (alternância) estão ambas sem turno.`,
       });
     }
+    const fora = this.semTurnosNaSemana(g, days);
+    if (fora.length)
+      out.push({
+        k: "warn",
+        texto: `${fora.length === 1 ? "1 pessoa fica" : `${fora.length} pessoas ficam`} sem turnos esta semana: ${fora.map((p) => p.nome).join(", ")}. Confirme se é intencional.`,
+      });
     for (const p of this.membros(g)) {
       const e = days.filter((d) => this.entradaDe(p.id, d)?.excecao);
       if (e.length) out.push({ k: "warn", texto: `${p.nome} — ${e.length} turno(s) com exceção autorizada (${e.map(fmt).join(", ")}).` });

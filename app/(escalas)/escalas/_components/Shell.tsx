@@ -25,6 +25,7 @@ import {
 import { cn } from "@lib/utils";
 import { PAPEL_LABEL, podeCoordenar } from "@lib/escalas/tipos";
 import { sb, useSessao, useTempoReal } from "../_lib/contexto";
+import { useGuarda } from "../_lib/guarda";
 import { initials } from "./ui";
 
 type Item = { href: string; label: string; icon: typeof Inbox; badge?: number };
@@ -51,6 +52,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const coord = podeCoordenar(sessao.papel);
+  const guarda = useGuarda();
   useTempoReal();
 
   const { data: pendentes = 0 } = useQuery({
@@ -107,10 +109,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     document.title = `${titulo} · Escalas`;
   }, [titulo]);
 
-  async function sair() {
-    await sb().auth.signOut();
-    router.replace("/escalas/entrar");
-    router.refresh();
+  function sair() {
+    setMenu(false);
+    guarda.sair(async () => {
+      await sb().auth.signOut();
+      router.replace("/escalas/entrar");
+      router.refresh();
+    });
   }
 
   return (

@@ -7,6 +7,7 @@ import type { Motor } from "@lib/escalas/motor";
 import { PERIODOS, type Dataset, type Grupo, type Necessidade, type Periodo, type Regras, type Slot } from "@lib/escalas/tipos";
 import { cn } from "@lib/utils";
 import { ok, sb, useAcoes, useMotor } from "../_lib/contexto";
+import { useGuardaSaida } from "../_lib/guarda";
 import { DEFINICOES } from "./excel";
 import { Button, Card, inputSm, Loading, Note, Table, useDialogo } from "./ui";
 
@@ -32,22 +33,15 @@ export function Configuracao() {
   useEffect(() => {
     if (base && !D) setD(base);
   }, [base, D]);
+  const sujo = !!(D && base && JSON.stringify(D) !== JSON.stringify(base));
 
-  if (error) return <Note kind="bad">{error}</Note>;
-  if (loading || !motor || !D || !base) return <Loading />;
-  const sujo = JSON.stringify(D) !== JSON.stringify(base);
-  const upd = (f: (d: Rascunho) => void) =>
-    setD((o) => {
-      const n = JSON.parse(JSON.stringify(o)) as Rascunho;
-      f(n);
-      return n;
-    });
-  const G = gNec && D.grupos.some((g) => g.id === gNec) ? gNec : D.grupos[0]?.id;
-
-  async function guardar() {
-    if (!D) return;
+  async function guardar(): Promise<boolean> {
+    if (!D) return false;
     const mal = D.slots.find((s) => !s.etiqueta.trim() || s.fimMin <= s.inicioMin);
-    if (mal) return toast(`Slot ${mal.id}: verifique a etiqueta e as horas.`, "bad");
+    if (mal) {
+      toast(`Slot ${mal.id}: verifique a etiqueta e as horas.`, "bad");
+      return false;
+    }
     setAGravar(true);
     try {
       ok(
@@ -65,12 +59,25 @@ export function Configuracao() {
       await refrescar();
       setD(null);
       toast("Configuração guardada.", "ok");
+      return true;
     } catch (e) {
       toast(e instanceof Error ? e.message : "Erro", "bad");
+      return false;
     } finally {
       setAGravar(false);
     }
   }
+  useGuardaSaida(sujo, guardar, () => setD(null));
+
+  if (error) return <Note kind="bad">{error}</Note>;
+  if (loading || !motor || !D || !base) return <Loading />;
+  const upd = (f: (d: Rascunho) => void) =>
+    setD((o) => {
+      const n = JSON.parse(JSON.stringify(o)) as Rascunho;
+      f(n);
+      return n;
+    });
+  const G = gNec && D.grupos.some((g) => g.id === gNec) ? gNec : D.grupos[0]?.id;
 
   async function novoGrupo() {
     const nome = await pedirTexto({ titulo: "Novo grupo", label: "Nome do grupo", ok: "Criar" });

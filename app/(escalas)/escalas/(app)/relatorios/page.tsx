@@ -1,5 +1,5 @@
 import { exigirPagina } from "../../_lib/guard";
-import { Relatorios } from "../../_components/Analise";
+import { Relatorios } from "../../_components/Relatorios";
 
 export default async function Page() {
   await exigirPagina("coord");
