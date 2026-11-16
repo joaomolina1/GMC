@@ -3,6 +3,7 @@ import { requireAdmin } from "@lib/enterprise/auth";
 import { logAudit } from "@lib/audit";
 import { tryCreateServiceClient } from "@lib/supabase/server";
 import { DEFAULT_AGENT_MODEL } from "@lib/agents/constants";
+import { FEATURE_KEYS, type FeatureKey } from "@lib/features";
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -41,13 +42,15 @@ export async function PATCH(request: Request) {
   const { supabase, user } = auth;
 
   const body = await request.json();
-  const { userId, role, allowed_model_ids } = body as {
+  const { userId, role, allowed_model_ids, allowed_features } = body as {
     userId?: string;
     role?: string;
     allowed_model_ids?: string[];
+    /** null = todas as funcionalidades; lista = só essas. */
+    allowed_features?: string[] | null;
   };
 
-  if (!userId || (role === undefined && allowed_model_ids === undefined)) {
+  if (!userId || (role === undefined && allowed_model_ids === undefined && allowed_features === undefined)) {
     return NextResponse.json(
       { error: "userId e pelo menos uma alteração são obrigatórios" },
       { status: 400 }
@@ -92,6 +95,25 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Utilizador não encontrado" }, { status: 404 });
     }
     profileData = data;
+  }
+
+  let normalizedFeatures: FeatureKey[] | null | undefined;
+  if (allowed_features !== undefined) {
+    if (allowed_features !== null && !Array.isArray(allowed_features)) {
+      return NextResponse.json({ error: "allowed_features inválido" }, { status: 400 });
+    }
+    normalizedFeatures =
+      allowed_features === null
+        ? null
+        : (Array.from(new Set(allowed_features)).filter((f) => FEATURE_KEYS.includes(f as FeatureKey)) as FeatureKey[]);
+    const { data, error } = await db
+      .from("profiles")
+      .update({ allowed_features: normalizedFeatures })
+      .eq("id", userId)
+      .select("id, email, full_name, role, auth_provider, allowed_features")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    profileData = { ...(profileData ?? {}), ...data };
   }
 
   let normalizedModelIds: string[] | undefined;
@@ -141,10 +163,15 @@ export async function PATCH(request: Request) {
 
   await logAudit(supabase, {
     actorId: user.id,
-    action: allowed_model_ids !== undefined ? "enterprise.user.models_update" : "enterprise.user.role_update",
+    action:
+      allowed_features !== undefined
+        ? "enterprise.user.features_update"
+        : allowed_model_ids !== undefined
+          ? "enterprise.user.models_update"
+          : "enterprise.user.role_update",
     entityType: "profile",
     entityId: userId,
-    metadata: { role, allowed_model_ids: normalizedModelIds },
+    metadata: { role, allowed_model_ids: normalizedModelIds, allowed_features: normalizedFeatures },
   });
 
   return NextResponse.json({

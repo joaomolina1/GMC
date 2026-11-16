@@ -27,10 +27,13 @@ export function useSidebar() {
 export function AppShellClient({
   user,
   showAdmin,
+  features = null,
   children,
 }: {
   user?: ShellUser;
   showAdmin: boolean;
+  /** null = todas as funcionalidades. */
+  features?: string[] | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -41,7 +44,7 @@ export function AppShellClient({
   const isFlowEditor = /^\/flows\/[^/]+$/.test(pathname);
   const isAgentEditor = /^\/agents\/[^/]+$/.test(pathname);
   const isChartbeat = pathname === "/chartbeat" || pathname.startsWith("/chartbeat/");
-  const isWide = isChartbeat || pathname === "/escalas" || pathname.startsWith("/escalas/");
+  const isWide = isChartbeat;
 
   useEffect(() => {
     const stored = localStorage.getItem("gmc-sidebar-collapsed");
@@ -69,6 +72,7 @@ export function AppShellClient({
         )}
         <Sidebar
           showAdmin={showAdmin}
+          features={features}
           collapsed={mobileNavigationOpen ? false : collapsed}
           onToggle={toggle}
           mobileOpen={mobileNavigationOpen}

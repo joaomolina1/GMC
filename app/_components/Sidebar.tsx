@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@lib/utils";
 import { Logo } from "@/_components/Logo";
+import { featureDoCaminho } from "@lib/features";
 
 const navGroups: (
   showAdmin: boolean
@@ -48,12 +49,15 @@ const navGroups: (
 
 export function Sidebar({
   showAdmin = false,
+  features = null,
   collapsed = false,
   onToggle,
   mobileOpen = false,
   onNavigate,
 }: {
   showAdmin?: boolean;
+  /** null = todas as funcionalidades. */
+  features?: string[] | null;
   collapsed?: boolean;
   onToggle?: () => void;
   mobileOpen?: boolean;
@@ -108,7 +112,16 @@ export function Sidebar({
       )}
 
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
-        {navGroups(showAdmin).map((group, gi) => (
+        {navGroups(showAdmin)
+          .map((group) => ({
+            ...group,
+            items: group.items.filter(({ href }) => {
+              const f = featureDoCaminho(href);
+              return !f || features === null || features.includes(f);
+            }),
+          }))
+          .filter((group) => group.items.length > 0)
+          .map((group, gi) => (
           <div key={gi} className="flex flex-col gap-1">
             {group.title && !collapsed && (
               <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">

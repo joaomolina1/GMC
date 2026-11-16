@@ -32,6 +32,7 @@ import {
   isUnrestrictedRole,
 } from "@lib/enterprise/role-policies";
 
+import { FEATURES } from "@lib/features";
 import {
   AdminConversationDetail,
   type ConversationListItem,
@@ -76,6 +77,7 @@ interface UserRow {
   role: string;
   auth_provider?: string;
   allowed_model_ids?: string[];
+  allowed_features?: string[] | null;
 }
 
 interface ModelOption {
@@ -250,6 +252,29 @@ export default function AdminPage() {
     }
     await loadRoles();
     setSavingRole(false);
+  }
+
+  const [editingFeatures, setEditingFeatures] = useState<{ user: UserRow; todas: boolean; sel: Set<string> } | null>(null);
+  const [savingFeatures, setSavingFeatures] = useState(false);
+
+  async function saveUserFeatures() {
+    if (!editingFeatures) return;
+    setSavingFeatures(true);
+    setRoleUpdateError(null);
+    const allowed = editingFeatures.todas ? null : Array.from(editingFeatures.sel);
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: editingFeatures.user.id, allowed_features: allowed }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSavingFeatures(false);
+    if (!res.ok) {
+      setRoleUpdateError(typeof body.error === "string" ? body.error : "Não foi possível guardar os acessos");
+      return;
+    }
+    setUsers((prev) => prev.map((u) => (u.id === editingFeatures.user.id ? { ...u, allowed_features: allowed } : u)));
+    setEditingFeatures(null);
   }
 
   function beginEditUserModels(user: UserRow) {
@@ -570,6 +595,7 @@ export default function AdminPage() {
                   <th className="px-6 py-3 font-medium">Auth</th>
                   <th className="px-6 py-3 font-medium">Role</th>
                   <th className="px-6 py-3 font-medium">Modelos</th>
+                  <th className="px-6 py-3 font-medium">Acessos</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -605,12 +631,93 @@ export default function AdminPage() {
                           : "Herdar do role"}
                       </Button>
                     </td>
+                    <td className="px-6 py-3">
+                      {u.role === "admin" || u.role === "super_admin" ? (
+                        <span className="text-xs text-slate-400">tudo (admin)</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setEditingFeatures({
+                              user: u,
+                              todas: u.allowed_features == null,
+                              sel: new Set(u.allowed_features ?? FEATURES.map((f) => f.key)),
+                            })
+                          }
+                        >
+                          {u.allowed_features == null
+                            ? "Tudo"
+                            : u.allowed_features.length
+                              ? FEATURES.filter((f) => u.allowed_features!.includes(f.key)).map((f) => f.label).join(", ")
+                              : "Nenhum"}
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Card>
+      )}
+
+      {editingFeatures && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEditingFeatures(null);
+          }}
+        >
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+              <CardTitle>Acessos · {editingFeatures.user.full_name || editingFeatures.user.email}</CardTitle>
+            </CardHeader>
+            <p className="mt-1 text-sm text-slate-500">
+              Escolha o que esta pessoa vê na plataforma. Com uma só funcionalidade, entra diretamente nela.
+            </p>
+            <label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-800">
+              <input
+                type="checkbox"
+                checked={editingFeatures.todas}
+                onChange={(e) => setEditingFeatures({ ...editingFeatures, todas: e.target.checked })}
+              />
+              Todas as funcionalidades (sem restrições)
+            </label>
+            <div className="mt-3 space-y-2">
+              {FEATURES.map((f) => (
+                <label key={f.key} className={`flex items-start gap-2 text-sm ${editingFeatures.todas ? "opacity-50" : ""}`}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    disabled={editingFeatures.todas}
+                    checked={editingFeatures.todas || editingFeatures.sel.has(f.key)}
+                    onChange={(e) => {
+                      const sel = new Set(editingFeatures.sel);
+                      if (e.target.checked) sel.add(f.key);
+                      else sel.delete(f.key);
+                      setEditingFeatures({ ...editingFeatures, sel });
+                    }}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-800">{f.label}</span>
+                    <span className="block text-xs text-slate-500">{f.descricao}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditingFeatures(null)}>
+                Cancelar
+              </Button>
+              <Button size="sm" disabled={savingFeatures} onClick={saveUserFeatures}>
+                {savingFeatures ? "A guardar…" : "Guardar"}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
       {editingModelsUserId && (
