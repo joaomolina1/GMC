@@ -9,6 +9,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShellClient
       showAdmin={showAdmin}
+      features={showAdmin ? null : ((profile?.allowed_features as string[] | null | undefined) ?? null)}
       user={
         profile
           ? {

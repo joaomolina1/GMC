@@ -195,35 +195,37 @@ A zona soma essas linhas no canal correspondente — não as trata como programa
 - **Hosts** — `tviplayer.iol.pt`, `cnnportugal.iol.pt` (`CHARTBEAT_API_KEY`, header `X-CB-AK`).
 - **Testes** — `npm test` (matching de aliases, agregação, rollup hora/dia, CSV).
 
-## Zona Escalas ✅
+## Escalas ✅ (app autónoma)
 
-Escala semanal da redação. As regras de descanso são o funcionamento normal — não são
-bloqueios absolutos. A app respeita-as por omissão, avisa quando são violadas e deixa o
-coordenador gravar a exceção com justificação.
+App de escalas com marca própria dentro da plataforma, sobre a mesma base de utilizadores
+(`/escalas`, entrada em `/escalas/entrar`). Refeita a partir do protótipo HTML com tabelas
+normalizadas no Supabase.
 
-Decisões fechadas:
-
-- O **S6** (17:00–02:00) conta como **um dia de trabalho**, o dia em que começa. O turno do
-  dia 10 que acaba às 02:00 do dia 11 não ocupa o dia 11. As horas a mais não entram no
-  limite semanal: todos os turnos contam `duracaoPadraoTurnoHoras`.
-- **Férias e folgas são distintas.** Folga é um dia sem turno e sem férias ou ausência
-  aprovada. Férias aprovadas bloqueiam o turno (regra absoluta) e não contam para as 4
-  folgas da janela.
-
-- **Rotas** — `/escalas` (grelha semanal; jornalistas consultam, coordenadores atribuem),
-  `/api/escalas` (quadro), `/api/escalas/atribuicoes`, `/api/escalas/lote`,
-  `/api/escalas/sugerir`, `/api/escalas/settings`, `/api/escalas/ausencias`
-- **Regras absolutas** — turno fora do perfil, férias/ausência aprovada, segundo turno no
-  mesmo dia. Nunca são gravadas.
-- **Regras flexíveis** — dias consecutivos, folgas na janela deslizante de 14 dias,
-  descanso entre turnos, horas semanais. O aviso aparece no painel antes de confirmar; o
-  botão passa a «Atribuir mesmo assim» e exige justificação, gravada na atribuição e no
-  `audit_logs`.
-- **Sugestão** — não propõe violações flexíveis se houver outro candidato. Com escassez,
-  propõe a exceção em vez de deixar o lugar vazio, e nunca viola uma regra absoluta. A
-  pré-visualização separa bloqueios (saltados) e avisos (incluídos, com opção de os excluir).
-  `preferirFolgasAgrupadas` inverte a preferência de folgas espaçadas para blocos.
-- **Contas de exemplo** — `npm run escalas:seed` (palavra-passe `gmc123`)
+- **Acessos** — email + palavra-passe (Supabase Auth). Papéis da escala: Trabalhador (vê só a sua
+  escala e os seus pedidos), Coordenação (grelha, pedidos, pessoas, conformidade, relatórios,
+  configuração, registo, Excel) e Administração (também papéis, emails, contas da coordenação,
+  importação). Admins da plataforma são Administração.
+- **Contas** — criadas na ficha da pessoa com palavra-passe temporária; mudança obrigatória no
+  primeiro acesso (`/conta/password`). Contas novas só veem as Escalas.
+- **Acesso por funcionalidade** — `profiles.allowed_features` (NULL = tudo). Espelhado em
+  `app_metadata` e aplicado no middleware (páginas e APIs) e no menu. Gerido no backoffice
+  (`PATCH /api/admin/users` com `allowed_features`). Catálogo em `lib/features.ts`.
+- **Modelo** — `escala_regras`, `escala_periodos`, `escala_grupos`, `escala_grupo_minimos`,
+  `escala_slots`, `escala_necessidades`, `escala_necessidades_dia`, `escala_feriados`,
+  `escala_pessoas`, `escala_pessoa_periodos`, `escala_alternancias`, `escala_ferias_saldo`,
+  `escala_turnos`, `escala_ausencias`, `escala_ausencia_anexos` (bucket privado
+  `escalas-comprovativos`), `escala_registo`.
+- **Regras rígidas** (na base de dados): pessoa ativa, período no perfil, sem ausência aprovada,
+  um turno por dia, ausências aprovadas sem sobreposição, exceção exige justificação. Aprovar uma
+  ausência retira os turnos em conflito na mesma transação.
+- **Regras flexíveis** (motor em `lib/escalas/motor.ts`, revalidadas no servidor em
+  `/api/escalas/turnos`): descanso, dias seguidos, folgas na janela, horas semanais, fds,
+  pedido pendente, piquete prolongado. Forçar exige justificação e fica registado.
+- **Sugestão, compensações, conformidade, relatórios** — adaptados do protótipo; feriados
+  nacionais 2026–2027 carregados e excluídos dos dias úteis.
+- **Excel** — exportação/importação com as folhas do protótipo (Pessoas, Grupos, Slots,
+  Necessidades, Necessidades por dia, Ausências, Turnos, Feriados, Definições).
+- **Testes** — `npx vitest run tests/unit/escalas`.
 
 ## Fase 7 — Clips (Fase 1: arquivo/VOD) 🚧
 
@@ -304,7 +306,7 @@ npm run db:types
 | `/api/clips/renders/[id]/download` | Signed URL curta do MP4, só se `done` (GET) |
 | `/api/cron/clips-watchdog` | Requeue de leases expirados (Bearer `CRON_SECRET`) |
 | `/chartbeat` | Audiência ao minuto dos diretos Chartbeat (TVI Player + CNN Portugal) |
-| `/escalas` | Escala semanal da redação (folgas, descanso, exceções) |
+| `/escalas` | App de escalas (grelha, pedidos, conformidade, área do trabalhador) |
 | `/api/chartbeat/live` | Snapshot actual (toppages Chartbeat, canais agregados) |
 | `/api/chartbeat/history` | Série histórica (`?range=6h\|24h\|7d\|30d&grain=minute\|hour\|day`) |
 | `/api/chartbeat/export` | CSV da série (`?range=&grain=`, `;` + BOM) |
