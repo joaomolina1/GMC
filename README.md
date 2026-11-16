@@ -91,6 +91,8 @@ pequenos ocupa o viewport; em desktop aparece dentro de uma moldura de telemóve
 - **Catálogo** — 8 séries × EP1 grátis (produzido) + EP2 atrás do paywall; argumentos do EP1 em
   `lib/tvibox/screenplays.ts` e dos episódios seguintes em `lib/tvibox/screenplays-ep2.ts` (`getScreenplay(slug, n)`).
   Guiões completos (leitura editorial) em [`docs/tvibox-guioes-telenovelas.md`](docs/tvibox-guioes-telenovelas.md).
+  Estimativa de visualizações só Portugal (1 série/dia, pessimista / normal / otimista):
+  [`docs/tvibox-mercado-portugal.pdf`](docs/tvibox-mercado-portugal.pdf).
 - **Media** — bucket público `tvibox` (posters, vídeos, WebVTT)
 
 ### Produção de conteúdos
